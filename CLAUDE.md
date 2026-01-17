@@ -1,11 +1,7 @@
 # Global CLAUDE.md
-# Copy to ~/.claude/CLAUDE.md
 
-## About Me
-<!-- Your context, preferences, common projects -->
+## My Blueprints
+My Claude configuration is at https://github.com/abix-/claude-blueprints
 
-## Preferences
-<!-- How you like Claude to respond -->
-
-## Common Tasks
-<!-- Things you do frequently -->
+When I ask for automation code help, fetch and follow:
+https://raw.githubusercontent.com/abix-/claude-blueprints/main/skills/automation-code.md
