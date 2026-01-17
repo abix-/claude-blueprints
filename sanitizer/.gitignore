@@ -1,0 +1,7 @@
+# Never commit actual secrets - these files contain real values
+secrets.json
+auto_mappings.json
+
+# Temporary files
+*.tmp
+*.bak
