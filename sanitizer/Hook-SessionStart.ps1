@@ -1,18 +1,16 @@
 <#
 .SYNOPSIS
-    Sanitizes project files by replacing real values with fake values.
+    SessionStart hook - sanitizes project files.
 
 .DESCRIPTION
-    SessionStart hook that:
+    Replaces real values with fake values in the working tree:
     - Loads manual mappings from secrets.json
     - Auto-discovers IPs and hostnames matching patterns
     - Generates fake values and stores in auto_mappings.json
-    - Replaces real values with fake values in working tree
 
 .EXAMPLE
-    .\Sanitize.ps1
-    .\Sanitize.ps1 -ProjectPath C:\code\myproject
-    .\Sanitize.ps1 -DryRun
+    .\Hook-SessionStart.ps1
+    .\Hook-SessionStart.ps1 -ProjectPath C:\code\myproject -DryRun
 #>
 
 param(
@@ -24,7 +22,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Import-Module "$SanitizerDir\Common.psm1" -Force
+Import-Module "$SanitizerDir\Sanitizer.psm1" -Force
 
 $paths = Get-SanitizerPaths -SanitizerDir $SanitizerDir
 $config = Get-SanitizerConfig -SecretsPath $paths.Secrets
