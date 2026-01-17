@@ -42,10 +42,10 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
     │json, etc. │               │ cat, grep │               │ python    │
     │           │               │ mkdir, rm │               │ npm, make │
     └─────┬─────┘               └─────┬─────┘               └─────┬─────┘
-          ▼                           ▼                           ▼
-       denied                   run directly               continue below
-                             (files already fake)
-
+          ▼                           ▼                           │
+       denied                   run directly                      │
+                             (files already fake)                 │
+                                                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ STEP 2: Create temp directory                                           │
 │         %TEMP%\claude-sealed-<guid>\                                    │
