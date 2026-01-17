@@ -161,3 +161,20 @@ Working tree stays fake (safe). Manually render:
 | `RunWrapper.ps1` | Hook that routes Bash to SealedExec |
 | `AutoRenderReal.ps1` | Stop hook, renders real version |
 | `RenderReal.ps1` | Manual render (crash recovery) |
+
+## Passthrough Commands
+
+These run directly without sealed execution (they don't need real values):
+- `git`, `gh` (GitHub CLI)
+- `npm`, `npx`, `node`
+- File operations: `ls`, `cd`, `pwd`, `mkdir`, `rm`, `cp`, `mv`
+- Read commands: `cat`, `head`, `tail`, `grep`, `find`
+
+## Files Blocked from Claude
+
+Blocked via `CLAUDE.md` instructions and `RunWrapper.ps1`:
+
+- `~/.claude/sanitizer/secrets.json`
+- `~/.claude/sanitizer/auto_mappings.json`
+- `~/.claude/rendered/`
+- `%TEMP%/claude-sealed-*`
