@@ -2,9 +2,8 @@
 name: ansible-powershell
 description: Ansible and PowerShell development standards
 metadata:
-  version: "2.5"
+  version: "2.6"
   updated: "2026-01-17"
-  content_sha256: "824d9bcbe312372431daa0f0f626dbb8519e27f7b6c0d3fec38ae16f48c60fec"
 ---
 # Ansible & PowerShell Standards
 ## Universal Principles

@@ -2,9 +2,8 @@
 name: try-harder
 description: Response calibration for accuracy, efficiency, and honest self-assessment. Apply to every response.
 metadata:
-  version: "2.6"
-  updated: "2026-01-12"
-  content_sha256: "6e71575ae4ecc5093607d4019ad1bdecd68aedac5d9d5d2b092b47859c41f866"
+  version: "2.7"
+  updated: "2026-01-17"
 ---
 # Try Harder
 
