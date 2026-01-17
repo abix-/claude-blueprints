@@ -1,5 +1,10 @@
 # Global CLAUDE.md
 
+## Git Commits
+
+- Do NOT add `Co-Authored-By` lines to commits
+- Keep commit messages concise and lowercase
+
 ## My Blueprints
 My Claude configuration is at https://github.com/abix-/claude-blueprints
 
