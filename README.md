@@ -43,7 +43,7 @@ Before copying `CLAUDE.md` or `settings.json` to `~/.claude/`, check if the user
 
 ### Claude Web
 
-Copy skill content into project custom instructions.
+Upload skill files directly via Settings → Capabilities → Skills.
 
 ## Future Folders
 
