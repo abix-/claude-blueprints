@@ -43,11 +43,9 @@ if (-not (Test-Path $secretsPath)) {
             "example-real-server.internal.corp" = "fake-server.example.test"
         }
         autoMappings = @{}
-        excludePaths = @(".git", "node_modules", ".claude", "bin", "obj", "__pycache__", "venv", ".venv")
-        excludeExtensions = @(".exe", ".dll", ".pdb", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".zip", ".tar", ".gz")
         patterns = @{
             ipv4 = $true
-            hostnames = @("\.internal\.corp$", "\.local$", "\.private$")
+            hostnames = @("\.internal\.corp$", "\.local$")
         }
     } | ConvertTo-Json -Depth 5 | Set-Content -Path $secretsPath -Encoding UTF8
     Write-Host "Created: secrets.json (edit this with your mappings)" -ForegroundColor Green

@@ -45,7 +45,6 @@ $files = foreach ($file in Get-ChildItem -Path $ProjectPath -Recurse -File -Erro
     $relativePath = $file.FullName.Substring($ProjectPath.Length).TrimStart('\', '/')
 
     if (Test-ExcludedPath -RelativePath $relativePath -ExcludePaths $config.excludePaths) { continue }
-    if (Test-ExcludedExtension -Extension $file.Extension -ExcludeExtensions $config.excludeExtensions) { continue }
     if ($file.Length -eq 0 -or $file.Length -gt 10MB) { continue }
     if (Test-BinaryFile -Path $file.FullName) { continue }
 

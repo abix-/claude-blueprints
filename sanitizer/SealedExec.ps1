@@ -70,8 +70,7 @@ try {
             New-Item -Path $destDir -ItemType Directory -Force | Out-Null
         }
 
-        $isBinary = (Test-ExcludedExtension -Extension $file.Extension -ExcludeExtensions $config.excludeExtensions) -or
-                    (Test-BinaryFile -Path $file.FullName)
+        $isBinary = Test-BinaryFile -Path $file.FullName
 
         if ($isBinary) {
             Copy-Item -Path $file.FullName -Destination $destPath -Force
