@@ -1,13 +1,10 @@
 <#
 .SYNOPSIS
-    Stop hook - automatically renders real values to a separate directory.
+    Stop hook - renders real values when Claude exits.
 
 .DESCRIPTION
-    When Claude Code exits normally, this hook:
-    1. Copies the working tree to %USERPROFILE%\.claude\rendered\{project}\
-    2. Renders real values in that copy (fake -> real)
-    3. Optionally opens Explorer (if openExplorerOnRender is true)
-    4. Working tree stays fake (safe for next session)
+    Copies working tree to ~/.claude/rendered/{project}/ with real values restored.
+    Working tree stays fake (safe for next session).
 
 .PARAMETER SourceDir
     Source directory (the fake working tree). Defaults to current directory.
@@ -24,7 +21,7 @@ param(
 
 $ErrorActionPreference = "SilentlyContinue"
 
-Import-Module "$SanitizerDir\Common.psm1" -Force
+Import-Module "$SanitizerDir\Sanitizer.psm1" -Force
 
 $paths = Get-SanitizerPaths -SanitizerDir $SanitizerDir
 $config = Get-SanitizerConfig -SecretsPath $paths.Secrets

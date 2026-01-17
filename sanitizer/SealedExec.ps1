@@ -37,7 +37,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Import-Module "$SanitizerDir\Common.psm1" -Force
+Import-Module "$SanitizerDir\Sanitizer.psm1" -Force
 
 $paths = Get-SanitizerPaths -SanitizerDir $SanitizerDir
 $config = Get-SanitizerConfig -SecretsPath $paths.Secrets

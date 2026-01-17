@@ -1,18 +1,11 @@
 <#
 .SYNOPSIS
-    PreToolUse hook for Bash commands.
-    Routes execution through SealedExec.ps1 for isolated execution.
+    PreToolUse hook for Bash - routes commands through sealed execution.
 
 .DESCRIPTION
-    This hook intercepts Bash commands and rewrites them to execute
-    through SealedExec.ps1, which:
-    - Copies the working tree to a temp directory
-    - Renders real values in the temp copy
-    - Executes the command there
-    - Deletes the temp directory
-    - Returns sanitized output
-
-    The working tree is NEVER modified.
+    Intercepts Bash commands and either:
+    - Passes through safe commands (git, ls, etc.)
+    - Routes other commands through SealedExec.ps1 for isolated execution
 #>
 
 $sanitizerDir = "$env:USERPROFILE\.claude\sanitizer"
