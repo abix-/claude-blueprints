@@ -10,5 +10,6 @@
       "\\.internal\\.corp$",
       "\\.local$"
     ]
-  }
+  },
+  "renderPath": "~/.claude/rendered/{project}"
 }

@@ -45,7 +45,8 @@ cd $env:USERPROFILE\.claude\sanitizer
   "patterns": {
     "ipv4": true,
     "hostnames": ["\\.internal\\.corp$", "\\.local$"]
-  }
+  },
+  "renderPath": "~/.claude/rendered/{project}"
 }
 ```
 
