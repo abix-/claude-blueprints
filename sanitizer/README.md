@@ -112,6 +112,8 @@ Working tree stays fake (safe). Manually render:
 
 | File | Type | Purpose |
 |------|------|---------|
+| `secrets.json` | Config | Your manual mappings (real → fake) |
+| `auto_mappings.json` | Config | Auto-discovered IPs/hostnames |
 | `Hook-SessionStart.ps1` | Hook (SessionStart) | Replaces real values with fake in working tree |
 | `Hook-Bash.ps1` | Hook (PreToolUse) | Routes commands through sealed execution |
 | `Hook-SessionStop.ps1` | Hook (Stop) | Renders real version on exit |
