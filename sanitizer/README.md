@@ -145,7 +145,7 @@ cd $env:USERPROFILE\.claude\sanitizer
       "matcher": "",
       "hooks": [{
         "type": "command",
-        "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-Stop.ps1\""
+        "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-SessionStop.ps1\""
       }]
     }]
   }
@@ -171,7 +171,7 @@ Working tree stays fake (safe). Unsanitized directory already has real values.
 | `sanitizer.json` | Config | All mappings (manual + auto) and settings |
 | `Hook-SessionStart.ps1` | Hook (SessionStart) | Sanitizes working tree, creates unsanitized copy |
 | `Hook-Bash.ps1` | Hook (PreToolUse) | Syncs changes, routes commands to unsanitized directory |
-| `Hook-Stop.ps1` | Hook (Stop) | Final sync to unsanitized directory |
+| `Hook-SessionStop.ps1` | Hook (Stop) | Final sync to unsanitized directory |
 | `Unsanitize.ps1` | Utility | Manual unsanitize |
 | `Initialize.ps1` | Utility | One-time setup |
 | `Sanitizer.psm1` | Module | Shared functions used by all scripts |
