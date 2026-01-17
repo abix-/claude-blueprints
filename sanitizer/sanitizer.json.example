@@ -11,5 +11,5 @@
       "\\.local$"
     ]
   },
-  "renderPath": "~/.claude/rendered/{project}"
+  "unsanitizedPath": "~/.claude/unsanitized/{project}"
 }
