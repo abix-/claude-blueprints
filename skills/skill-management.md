@@ -1,10 +1,9 @@
 ---
 name: skill-management
-description: How to create, version, validate, and maintain Claude skills. Read this skill FIRST when creating or modifying any skill file.
+description: How to create, version, and maintain Claude skills. Read this skill FIRST when creating or modifying any skill file.
 metadata:
-  version: "2.0"
-  updated: "2026-01-12"
-  content_sha256: "51549ac1e91a7713b8722311a2fb576ea2ae7759a9af40d474889877c9e2e397"
+  version: "3.0"
+  updated: "2026-01-17"
 ---
 # Skill Management
 
@@ -28,7 +27,6 @@ description: When to use this skill
 metadata:
   version: "X.Y"
   updated: "YYYY-MM-DD"
-  content_sha256: "hash-of-content-only"
 ---
 ```
 
@@ -38,9 +36,9 @@ metadata:
 - `license` — optional
 - `allowed-tools` — optional
 - `compatibility` — optional
-- `metadata` — nested object for custom fields (version, checksum, etc.)
+- `metadata` — nested object for custom fields (version, date, etc.)
 
-Any key not in this list causes upload rejection. Put custom fields inside `metadata:`.
+Any key not in this list causes upload rejection on Claude web. Put custom fields inside `metadata:`.
 
 ## Versioning Rules
 
@@ -50,48 +48,33 @@ Any key not in this list causes upload rejection. Put custom fields inside `meta
    - Minor: additions, fixes, refinements
 3. **Update the date** with every version change
 
-## Checksum Validation
-
-Checksums verify content integrity after upload. Checksum the **content only** (after frontmatter), not the whole file — this allows metadata changes without invalidating the checksum.
-
-### Generate/Verify Checksum
-
-```bash
-tail -n +$(($(awk '/^---$/{n++; if(n==2){print NR; exit}}' SKILL.md) + 1)) SKILL.md | sha256sum
-```
-
-This auto-detects where frontmatter ends and hashes everything after. Use on `/home/claude/SKILL.md` during creation, then on `/mnt/skills/user/SKILL-NAME/SKILL.md` after upload to verify.
-
 ## Skill Structure
 
-Each skill is a single folder containing one file:
+Skills live in the `skills/` directory as flat files:
 ```
-skill-name/
-└── SKILL.md
+skills/
+├── skill-name.md
+└── another-skill.md
 ```
 
 ## Creating a New Skill
 
-1. Write content (without frontmatter)
-2. Add frontmatter with `content_sha256: "PENDING"`
-3. Generate checksum, update metadata
-4. Copy to outputs: `cp SKILL.md /mnt/user-data/outputs/`
-5. Upload via Claude UI: Settings > Capabilities > Skills
-6. Verify checksum in new conversation
+1. Write content with frontmatter
+2. Save to `skills/skill-name.md`
+3. Add reference to `CLAUDE.md` describing when to use it
+4. Add entry to `README.md` skills table
+5. Commit and push
 
 ## Modifying Existing Skills
 
-1. Read current skill: `view /mnt/skills/user/skill-name/SKILL.md`
+1. Read current skill from `skills/`
 2. Make changes
 3. Bump version, update date
-4. Regenerate checksum, update metadata
-5. Copy to outputs, re-upload, verify
+4. Commit and push
 
 ## Verification Checklist
 
 - Frontmatter uses only allowed keys
 - Version incremented, date updated
-- Checksum generated and added to metadata
-- Checksum verified in current conversation (before upload)
-- File copied to `/mnt/user-data/outputs/`
-- Checksum verified after upload (new conversation)
+- CLAUDE.md references the skill with usage context
+- README.md skills table updated
