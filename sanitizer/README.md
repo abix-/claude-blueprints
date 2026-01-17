@@ -6,14 +6,6 @@ Prevent sensitive identifiers (server names, IPs, domains) from being sent to An
 
 **Working tree is ALWAYS fake.** Real values never exist in the working directory during a Claude session.
 
-- IPs become `11.x.x.x`
-- Hostnames become `host-xxxxx.example.test`
-- Manual mappings use your chosen fake values
-
-Real values only exist in:
-1. **Sealed temp directories** during command execution (deleted immediately after)
-2. **Rendered output** when you exit Claude (for actual use)
-
 ```
 WORKING TREE (fake)                 SEALED EXEC (temp)                 RENDERED (on exit)
 ┌─────────────────────┐             ┌─────────────────────┐           ┌─────────────────────┐
@@ -24,6 +16,45 @@ WORKING TREE (fake)                 SEALED EXEC (temp)                 RENDERED 
         │                                     │                                │
    Claude sees                         sanitized output                  you use this
 ```
+
+### Hook Lifecycle
+
+**1. SessionStart → Sanitize working tree**
+- Scans all text files in project
+- Discovers IPs and hostnames matching configured patterns
+- Generates fake values: IPs → `11.x.x.x`, hostnames → `host-xxxxx.example.test`
+- Saves discovered mappings to `autoMappings` in sanitizer.json
+- Replaces all real values with fake values in working tree
+- Claude only ever sees the sanitized version
+
+**2. PreToolUse (Bash) → Route commands**
+
+Commands are classified into three categories:
+
+| Category | Examples | Behavior |
+|----------|----------|----------|
+| **Blocked** | Access to `sanitizer.json`, `rendered/` | Denied with error |
+| **Passthrough** | `git`, `ls`, `cat`, `grep`, `mkdir` | Run directly (files already sanitized) |
+| **Sealed** | `ansible-playbook`, `npm run`, `python` | Routed through SealedExec |
+
+**3. SealedExec → Isolated execution with real values**
+
+For commands that need real credentials/hosts to execute:
+
+1. Creates temp directory (`%TEMP%\claude-sealed-<guid>`)
+2. Copies entire working tree to temp
+3. Renders fake→real in the temp copy
+4. Executes command inside temp directory
+5. Captures stdout/stderr
+6. **Deletes temp directory** (always, even on error)
+7. Sanitizes output (real→fake) before returning to Claude
+
+Real values exist only in the ephemeral temp directory during execution.
+
+**4. SessionStop → Render for deployment**
+- Copies working tree to `renderPath` (default: `~/.claude/rendered/{project}/`)
+- Renders fake→real in the output copy
+- You deploy/run from the rendered directory
 
 ## Setup
 
