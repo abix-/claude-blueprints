@@ -12,3 +12,7 @@ Follow standards in `~/.claude/skills/try-harder.md` for every response.
 ## Automation Code
 
 Follow standards in `~/.claude/skills/automation-code.md` when writing PowerShell or Ansible.
+
+## Skill Management
+
+Follow standards in `~/.claude/skills/skill-management.md` when creating or modifying skills.

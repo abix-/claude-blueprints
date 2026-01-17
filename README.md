@@ -47,6 +47,7 @@ Prevents sensitive identifiers (server names, IPs, domains) from being sent to A
 | Skill | Description |
 |-------|-------------|
 | [automation-code](skills/automation-code.md) | Ansible and PowerShell development standards |
+| [skill-management](skills/skill-management.md) | How to create, version, validate, and maintain Claude skills |
 | [try-harder](skills/try-harder.md) | Response calibration for accuracy, efficiency, and honest self-assessment |
 
 ### claude-depester
