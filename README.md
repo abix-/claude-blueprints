@@ -47,6 +47,7 @@ Prevents sensitive identifiers (server names, IPs, domains) from being sent to A
 | Skill | Description |
 |-------|-------------|
 | [ansible-powershell](skills/ansible-powershell.md) | Ansible and PowerShell development standards |
+| [infrastructure-troubleshooting](skills/infrastructure-troubleshooting.md) | Systematic methodology for diagnosing infrastructure problems |
 | [skill-management](skills/skill-management.md) | How to create, version, validate, and maintain Claude skills |
 | [try-harder](skills/try-harder.md) | Response calibration for accuracy, efficiency, and honest self-assessment |
 

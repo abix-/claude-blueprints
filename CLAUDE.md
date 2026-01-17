@@ -16,3 +16,7 @@ Follow standards in `~/.claude/skills/ansible-powershell.md` when writing PowerS
 ## Skill Management
 
 Follow standards in `~/.claude/skills/skill-management.md` when creating or modifying skills.
+
+## Infrastructure Troubleshooting
+
+Follow methodology in `~/.claude/skills/infrastructure-troubleshooting.md` when diagnosing infrastructure problems.
