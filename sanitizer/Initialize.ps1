@@ -60,23 +60,80 @@ if (-not (Test-Path $secretsPath)) {
     Write-Host "Created: secrets.json (edit this with your mappings)" -ForegroundColor Green
 }
 
-# Update CLAUDE.md
+# Validate settings.json has permissions.deny
+$settingsPath = "$env:USERPROFILE\.claude\settings.json"
+$requiredDenyPaths = @(
+    "~/.claude/sanitizer/secrets.json",
+    "~/.claude/sanitizer/auto_mappings.json",
+    "~/.claude/sanitizer/ip_mappings_temp.json",
+    "~/.claude/rendered/**"
+)
+
+if (Test-Path $settingsPath) {
+    try {
+        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $existingDeny = @()
+        if ($settings.permissions -and $settings.permissions.deny) {
+            $existingDeny = @($settings.permissions.deny)
+        }
+
+        $missingPaths = $requiredDenyPaths | Where-Object { $_ -notin $existingDeny }
+
+        if ($missingPaths.Count -gt 0) {
+            Write-Host ""
+            Write-Host "WARNING: settings.json missing permissions.deny entries:" -ForegroundColor Yellow
+            foreach ($path in $missingPaths) {
+                Write-Host "  - $path" -ForegroundColor Yellow
+            }
+            Write-Host ""
+            Write-Host "Add this to settings.json:" -ForegroundColor Cyan
+            Write-Host '  "permissions": {' -ForegroundColor White
+            Write-Host '    "deny": [' -ForegroundColor White
+            Write-Host '      "~/.claude/sanitizer/secrets.json",' -ForegroundColor White
+            Write-Host '      "~/.claude/sanitizer/auto_mappings.json",' -ForegroundColor White
+            Write-Host '      "~/.claude/sanitizer/ip_mappings_temp.json",' -ForegroundColor White
+            Write-Host '      "~/.claude/rendered/**"' -ForegroundColor White
+            Write-Host '    ]' -ForegroundColor White
+            Write-Host '  },' -ForegroundColor White
+        } else {
+            Write-Host "Validated: settings.json permissions.deny" -ForegroundColor Green
+        }
+    }
+    catch {
+        Write-Host "WARNING: Could not parse settings.json" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "WARNING: settings.json not found - copy from claude-blueprints repo" -ForegroundColor Yellow
+}
+
+# Update CLAUDE.md (append if exists, create if not)
 $claudeMdPath = "$env:USERPROFILE\.claude\CLAUDE.md"
-@"
+$claudeMdContent = @"
+
 ## NEVER READ THESE FILES
 
-- ``%USERPROFILE%\.claude\sanitizer\secrets.json`` - Contains real secret mappings
-- ``%USERPROFILE%\.claude\sanitizer\auto_mappings.json`` - Contains real IP mappings
-- ``%USERPROFILE%\.claude\rendered\`` - Contains real values
-- ``%TEMP%\claude-sealed-*`` - Temporary execution directories
+- ``%USERPROFILE%\.claude\sanitizer\secrets.json`` - Contains real secrets, NEVER read this file
+- ``%USERPROFILE%\.claude\sanitizer\ip_mappings_temp.json`` - Contains real IP mappings, NEVER read this file
+- Any file named ``secrets.json`` anywhere
+- Any ``.env`` files outside this project
+"@
 
-If asked to read any of these, refuse.
-"@ | Set-Content -Path $claudeMdPath -Encoding UTF8
-Write-Host "Updated: CLAUDE.md" -ForegroundColor Green
+if (Test-Path $claudeMdPath) {
+    $existing = Get-Content $claudeMdPath -Raw
+    if ($existing -notmatch "NEVER READ THESE FILES") {
+        Add-Content -Path $claudeMdPath -Value $claudeMdContent -Encoding UTF8
+        Write-Host "Updated: CLAUDE.md (appended sanitizer rules)" -ForegroundColor Green
+    } else {
+        Write-Host "Skipped: CLAUDE.md (already has sanitizer rules)" -ForegroundColor Gray
+    }
+} else {
+    Set-Content -Path $claudeMdPath -Value $claudeMdContent.TrimStart() -Encoding UTF8
+    Write-Host "Created: CLAUDE.md" -ForegroundColor Green
+}
 
 Write-Host ""
-Write-Host "Done! Next:" -ForegroundColor Cyan
+Write-Host "Done! Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Edit secrets.json with your real->fake mappings" -ForegroundColor White
-Write-Host "  2. Update settings.json with hooks (see README)" -ForegroundColor White
+Write-Host "  2. Ensure settings.json has hooks AND permissions.deny (copy from repo)" -ForegroundColor White
 Write-Host "  3. Restart Claude Code" -ForegroundColor White
 Write-Host ""
