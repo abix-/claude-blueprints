@@ -196,13 +196,21 @@ Write-Host "This directory contains REAL secrets." -ForegroundColor Red
 Write-Host "The working tree remains FAKE (safe)." -ForegroundColor Green
 Write-Host ""
 
-# === OPEN EXPLORER ===
+# === OPEN EXPLORER (if enabled in config) ===
 
-if (-not $NoExplorer) {
+$openExplorer = $false
+if (-not $NoExplorer -and (Test-Path $secretsPath)) {
     try {
-        Start-Process explorer.exe -ArgumentList $outputDir -ErrorAction SilentlyContinue
+        $config = Get-Content $secretsPath -Raw | ConvertFrom-Json
+        if ($config.openExplorerOnRender -eq $true) {
+            $openExplorer = $true
+        }
     }
     catch { }
+}
+
+if ($openExplorer) {
+    Start-Process explorer.exe -ArgumentList $outputDir -ErrorAction SilentlyContinue
 }
 
 # === CREATE SHORTCUT IN SOURCE DIR ===
