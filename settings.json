@@ -1,5 +1,13 @@
 {
   "autoUpdatesChannel": "latest",
+  "permissions": {
+    "deny": [
+      "~/.claude/sanitizer/secrets.json",
+      "~/.claude/sanitizer/auto_mappings.json",
+      "~/.claude/sanitizer/ip_mappings_temp.json",
+      "~/.claude/rendered/**"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
