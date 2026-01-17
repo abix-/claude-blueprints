@@ -1,5 +1,9 @@
 # Global CLAUDE.md
 
+## Response Quality
+
+Follow standards in `~/.claude/skills/try-harder.md` for every response.
+
 ## Git Commits
 
 - Do NOT add `Co-Authored-By` lines to commits
