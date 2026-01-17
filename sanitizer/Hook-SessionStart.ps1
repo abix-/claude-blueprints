@@ -6,7 +6,7 @@
     Replaces real values with fake values in the working tree:
     - Loads manual mappings from secrets.json
     - Auto-discovers IPs and hostnames matching patterns
-    - Generates fake values and stores in auto_mappings.json
+    - Generates fake values and stores in secrets.json (autoMappings)
 
 .EXAMPLE
     .\Hook-SessionStart.ps1
@@ -27,18 +27,10 @@ Import-Module "$SanitizerDir\Sanitizer.psm1" -Force
 $paths = Get-SanitizerPaths -SanitizerDir $SanitizerDir
 $config = Get-SanitizerConfig -SecretsPath $paths.Secrets
 
-# Load existing auto mappings
+# Load existing auto mappings from config
 $autoMappings = @{}
-if (Test-Path $paths.AutoMappings) {
-    try {
-        $loaded = Get-Content $paths.AutoMappings -Raw | ConvertFrom-Json
-        if ($loaded.mappings) {
-            foreach ($prop in $loaded.mappings.PSObject.Properties) {
-                $autoMappings[$prop.Name] = $prop.Value
-            }
-        }
-    }
-    catch { Write-Verbose "Failed to load auto_mappings: $_" }
+foreach ($key in $config.autoMappings.Keys) {
+    $autoMappings[$key] = $config.autoMappings[$key]
 }
 
 if (-not $Quiet) {
@@ -109,7 +101,7 @@ foreach ($real in $discovered.Keys) {
 
 # Save new auto mappings
 if ($newMappings.Count -gt 0 -and -not $DryRun) {
-    @{ mappings = $autoMappings } | ConvertTo-Json -Depth 5 | Set-Content -Path $paths.AutoMappings -Encoding UTF8
+    Save-AutoMappings -AutoMappings $autoMappings -SecretsPath $paths.Secrets
     if (-not $Quiet) {
         Write-Host "  Saved $($newMappings.Count) new mappings" -ForegroundColor Green
     }

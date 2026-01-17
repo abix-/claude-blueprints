@@ -4,8 +4,7 @@
 
 .DESCRIPTION
     Run this once before first use. Creates:
-    - auto_mappings.json: Empty file for discovered mappings
-    - secrets.json: Template for manual mappings (if not exists)
+    - secrets.json: Template for mappings and config (if not exists)
 
 .EXAMPLE
     .\Initialize.ps1
@@ -36,13 +35,6 @@ foreach ($dir in $dirs) {
     }
 }
 
-# Create empty auto_mappings.json if not exists
-$autoMappingsPath = "$SanitizerDir\auto_mappings.json"
-if (-not (Test-Path $autoMappingsPath)) {
-    @{ mappings = @{} } | ConvertTo-Json | Set-Content -Path $autoMappingsPath -Encoding UTF8
-    Write-Host "Created: auto_mappings.json" -ForegroundColor Green
-}
-
 # Create template secrets.json if not exists
 $secretsPath = "$SanitizerDir\secrets.json"
 if (-not (Test-Path $secretsPath)) {
@@ -50,6 +42,7 @@ if (-not (Test-Path $secretsPath)) {
         mappings = @{
             "example-real-server.internal.corp" = "fake-server.example.test"
         }
+        autoMappings = @{}
         excludePaths = @(".git", "node_modules", ".claude", "bin", "obj", "__pycache__", "venv", ".venv")
         excludeExtensions = @(".exe", ".dll", ".pdb", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".zip", ".tar", ".gz")
         patterns = @{
@@ -64,8 +57,6 @@ if (-not (Test-Path $secretsPath)) {
 $settingsPath = "$env:USERPROFILE\.claude\settings.json"
 $requiredDenyPaths = @(
     "~/.claude/sanitizer/secrets.json",
-    "~/.claude/sanitizer/auto_mappings.json",
-    "~/.claude/sanitizer/ip_mappings_temp.json",
     "~/.claude/rendered/**"
 )
 
@@ -90,8 +81,6 @@ if (Test-Path $settingsPath) {
             Write-Host '  "permissions": {' -ForegroundColor White
             Write-Host '    "deny": [' -ForegroundColor White
             Write-Host '      "~/.claude/sanitizer/secrets.json",' -ForegroundColor White
-            Write-Host '      "~/.claude/sanitizer/auto_mappings.json",' -ForegroundColor White
-            Write-Host '      "~/.claude/sanitizer/ip_mappings_temp.json",' -ForegroundColor White
             Write-Host '      "~/.claude/rendered/**"' -ForegroundColor White
             Write-Host '    ]' -ForegroundColor White
             Write-Host '  },' -ForegroundColor White

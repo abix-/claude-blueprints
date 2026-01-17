@@ -49,7 +49,6 @@ function Get-SanitizerPaths {
     [PSCustomObject]@{
         SanitizerDir = $SanitizerDir
         Secrets      = "$SanitizerDir\secrets.json"
-        AutoMappings = "$SanitizerDir\auto_mappings.json"
         RenderedBase = "$env:USERPROFILE\.claude\rendered"
     }
 }
@@ -70,6 +69,7 @@ function Get-SanitizerConfig {
 
     $config = [PSCustomObject]@{
         mappings              = @{}
+        autoMappings          = @{}
         excludePaths          = $script:DefaultExcludePaths
         excludeExtensions     = $script:DefaultExcludeExtensions
         patterns              = @{ ipv4 = $true; hostnames = @() }
@@ -84,6 +84,12 @@ function Get-SanitizerConfig {
                 $config.mappings = @{}
                 foreach ($prop in $loaded.mappings.PSObject.Properties) {
                     $config.mappings[$prop.Name] = $prop.Value
+                }
+            }
+            if ($loaded.autoMappings) {
+                $config.autoMappings = @{}
+                foreach ($prop in $loaded.autoMappings.PSObject.Properties) {
+                    $config.autoMappings[$prop.Name] = $prop.Value
                 }
             }
             if ($loaded.excludePaths) { $config.excludePaths = $loaded.excludePaths }
@@ -110,36 +116,19 @@ function Get-SanitizerMappings {
     #>
     [CmdletBinding()]
     param(
-        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\secrets.json",
-        [string]$AutoMappingsPath = "$env:USERPROFILE\.claude\sanitizer\auto_mappings.json"
+        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\secrets.json"
     )
 
     $mappings = @{}
+    $config = Get-SanitizerConfig -SecretsPath $SecretsPath
 
-    if (Test-Path $SecretsPath) {
-        try {
-            $config = Get-Content $SecretsPath -Raw | ConvertFrom-Json
-            if ($config.mappings) {
-                foreach ($prop in $config.mappings.PSObject.Properties) {
-                    $mappings[$prop.Name] = $prop.Value
-                }
-            }
-        }
-        catch { Write-Verbose "Failed to parse secrets.json: $_" }
+    foreach ($key in $config.mappings.Keys) {
+        $mappings[$key] = $config.mappings[$key]
     }
-
-    if (Test-Path $AutoMappingsPath) {
-        try {
-            $auto = Get-Content $AutoMappingsPath -Raw | ConvertFrom-Json
-            if ($auto.mappings) {
-                foreach ($prop in $auto.mappings.PSObject.Properties) {
-                    if (-not $mappings.ContainsKey($prop.Name)) {
-                        $mappings[$prop.Name] = $prop.Value
-                    }
-                }
-            }
+    foreach ($key in $config.autoMappings.Keys) {
+        if (-not $mappings.ContainsKey($key)) {
+            $mappings[$key] = $config.autoMappings[$key]
         }
-        catch { Write-Verbose "Failed to parse auto_mappings.json: $_" }
     }
 
     $mappings
@@ -156,16 +145,11 @@ function Get-ReverseMappings {
     #>
     [CmdletBinding()]
     param(
-        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\secrets.json",
-        [string]$AutoMappingsPath = "$env:USERPROFILE\.claude\sanitizer\auto_mappings.json"
+        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\secrets.json"
     )
 
     $reverse = @{}
-    $params = @{
-        SecretsPath      = $SecretsPath
-        AutoMappingsPath = $AutoMappingsPath
-    }
-    $forward = Get-SanitizerMappings @params
+    $forward = Get-SanitizerMappings -SecretsPath $SecretsPath
 
     foreach ($real in $forward.Keys) {
         $fake = $forward[$real]
@@ -175,6 +159,37 @@ function Get-ReverseMappings {
     }
 
     $reverse
+}
+
+function Save-AutoMappings {
+    <#
+    .SYNOPSIS
+        Saves autoMappings back to secrets.json.
+
+    .EXAMPLE
+        Save-AutoMappings -AutoMappings $autoMappings
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$AutoMappings,
+
+        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\secrets.json"
+    )
+
+    $config = @{}
+    if (Test-Path $SecretsPath) {
+        try {
+            $loaded = Get-Content $SecretsPath -Raw | ConvertFrom-Json
+            foreach ($prop in $loaded.PSObject.Properties) {
+                $config[$prop.Name] = $prop.Value
+            }
+        }
+        catch { }
+    }
+
+    $config['autoMappings'] = $AutoMappings
+    $config | ConvertTo-Json -Depth 5 | Set-Content -Path $SecretsPath -Encoding UTF8
 }
 
 # === FILE DETECTION ===
@@ -458,6 +473,7 @@ Export-ModuleMember -Function @(
     'Get-SanitizerConfig'
     'Get-SanitizerMappings'
     'Get-ReverseMappings'
+    'Save-AutoMappings'
     'Test-BinaryFile'
     'Get-FileEncoding'
     'Test-ExcludedPath'
