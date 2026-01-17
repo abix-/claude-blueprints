@@ -16,15 +16,15 @@ claude-blueprints/
 
 ### claude-depester
 
-Replaces whimsical spinner words ("Flibbertigibbeting", "Discombobulating") with standard "Thinking" text. The `settings.json` runs this on SessionStart to re-apply after updates.
+Replaces whimsical spinner words ("Flibbertigibbeting", "Discombobulating") with standard "Thinking" text.
+
+**Run outside of Claude Code** (patches the binary, can't patch itself while running):
 
 ```powershell
-# Install auto-patching hook (survives Claude updates)
-npx claude-depester --install-hook
-
-# Or run manually
-npx claude-depester --all --silent
+npx claude-depester --all
 ```
+
+The `settings.json` SessionStart hook runs `npx claude-depester --all --silent` to re-apply after updates.
 
 See: https://github.com/ominiverdi/claude-depester
 
