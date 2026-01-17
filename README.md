@@ -12,6 +12,22 @@ claude-blueprints/
 └── settings.json     # Global settings with hooks (copy to ~/.claude/)
 ```
 
+## Dependencies
+
+### claude-depester
+
+Replaces whimsical spinner words ("Flibbertigibbeting", "Discombobulating") with standard "Thinking" text. The `settings.json` runs this on SessionStart to re-apply after updates.
+
+```powershell
+# Install auto-patching hook (survives Claude updates)
+npx claude-depester --install-hook
+
+# Or run manually
+npx claude-depester --all --silent
+```
+
+See: https://github.com/ominiverdi/claude-depester
+
 ## Skills
 
 | Skill | Description |
