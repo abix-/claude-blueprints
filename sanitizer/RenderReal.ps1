@@ -8,8 +8,8 @@
     - You want to render to a specific custom location
     - You want to create multiple real versions
 
-    This script copies the fake working tree to a separate directory
-    and applies reverse mappings (fake -> real) to get usable code.
+    Copies the fake working tree to a separate directory and applies
+    reverse mappings (fake -> real) to get usable code.
 
 .PARAMETER SourceDir
     Source directory containing fake values. Defaults to current directory.
@@ -21,14 +21,14 @@
     Overwrite output directory if it exists.
 
 .EXAMPLE
-    .\RenderReal.ps1 -SourceDir C:\code\myproject -OutputDir C:\deploy\real
-    .\RenderReal.ps1 -OutputDir C:\deploy\real -Force
+    .\RenderReal.ps1 -OutputDir C:\deploy\real
+    .\RenderReal.ps1 -SourceDir C:\code\myproject -OutputDir C:\deploy\real -Force
 #>
 
 param(
     [string]$SourceDir = (Get-Location).Path,
 
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory)]
     [string]$OutputDir,
 
     [string]$SanitizerDir = "$env:USERPROFILE\.claude\sanitizer",
@@ -38,8 +38,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$secretsPath = "$SanitizerDir\secrets.json"
-$autoMappingsPath = "$SanitizerDir\auto_mappings.json"
+Import-Module "$SanitizerDir\Common.psm1" -Force
+
+$paths = Get-SanitizerPaths -SanitizerDir $SanitizerDir
+$config = Get-SanitizerConfig -SecretsPath $paths.Secrets
+$reverseMappings = Get-ReverseMappings -SecretsPath $paths.Secrets -AutoMappingsPath $paths.AutoMappings
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
@@ -69,61 +72,10 @@ if (Test-Path $OutputDir) {
     }
 }
 
-# === LOAD REVERSE MAPPINGS (fake -> real) ===
-
-$reverseMappings = @{}
-
-if (Test-Path $secretsPath) {
-    try {
-        $config = Get-Content $secretsPath -Raw | ConvertFrom-Json
-        if ($config.mappings) {
-            foreach ($prop in $config.mappings.PSObject.Properties) {
-                $reverseMappings[$prop.Value] = $prop.Name
-            }
-        }
-    }
-    catch {
-        Write-Warning "Failed to parse secrets.json: $_"
-    }
-}
-
-if (Test-Path $autoMappingsPath) {
-    try {
-        $auto = Get-Content $autoMappingsPath -Raw | ConvertFrom-Json
-        if ($auto.mappings) {
-            foreach ($prop in $auto.mappings.PSObject.Properties) {
-                if (-not $reverseMappings.ContainsKey($prop.Value)) {
-                    $reverseMappings[$prop.Value] = $prop.Name
-                }
-            }
-        }
-    }
-    catch {
-        Write-Warning "Failed to parse auto_mappings.json: $_"
-    }
-}
-
 Write-Host "Loaded $($reverseMappings.Count) mappings" -ForegroundColor Cyan
 
 if ($reverseMappings.Count -eq 0) {
     Write-Host "WARNING: No mappings found. Output will be identical to source." -ForegroundColor Yellow
-}
-
-# Sort by fake value length descending
-$sortedFakes = @($reverseMappings.Keys | Sort-Object { $_.Length } -Descending)
-
-# === GET EXCLUSIONS ===
-
-$excludePaths = @(".git", "node_modules", ".claude", "bin", "obj", "__pycache__", "venv", ".venv")
-$excludeExtensions = @(".exe", ".dll", ".pdb", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2")
-
-if (Test-Path $secretsPath) {
-    try {
-        $config = Get-Content $secretsPath -Raw | ConvertFrom-Json
-        if ($config.excludePaths) { $excludePaths = $config.excludePaths }
-        if ($config.excludeExtensions) { $excludeExtensions = $config.excludeExtensions }
-    }
-    catch { }
 }
 
 # === CREATE OUTPUT DIR ===
@@ -139,30 +91,19 @@ $modifiedCount = 0
 $copiedCount = 0
 $skippedCount = 0
 
-Get-ChildItem -Path $SourceDir -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
-    $file = $_
+foreach ($file in Get-ChildItem -Path $SourceDir -Recurse -File -ErrorAction SilentlyContinue) {
     $relativePath = $file.FullName.Substring($SourceDir.Length).TrimStart('\', '/')
 
-    # Check path exclusions
-    $excluded = $false
-    foreach ($exclude in $excludePaths) {
-        if ($relativePath -like "$exclude\*" -or $relativePath -like "$exclude/*" -or $relativePath -like "*\$exclude\*" -or $relativePath -eq $exclude) {
-            $excluded = $true
-            break
-        }
-    }
-    if ($excluded) {
-        $script:skippedCount++
-        return
+    if (Test-ExcludedPath -RelativePath $relativePath -ExcludePaths $config.excludePaths) {
+        $skippedCount++
+        continue
     }
 
-    # Skip huge files
     if ($file.Length -gt 10MB) {
-        $script:skippedCount++
-        return
+        $skippedCount++
+        continue
     }
 
-    # Determine destination
     $destPath = Join-Path $OutputDir $relativePath
     $destDir = Split-Path $destPath -Parent
 
@@ -170,63 +111,38 @@ Get-ChildItem -Path $SourceDir -Recurse -File -ErrorAction SilentlyContinue | Fo
         New-Item -Path $destDir -ItemType Directory -Force | Out-Null
     }
 
-    # Check extension exclusions
-    $isBinary = $false
-    foreach ($ext in $excludeExtensions) {
-        if ($file.Extension -ieq $ext) {
-            $isBinary = $true
-            break
-        }
-    }
-
-    # Check if binary by content
-    if (-not $isBinary) {
-        try {
-            $stream = [System.IO.File]::OpenRead($file.FullName)
-            $buffer = [byte[]]::new([Math]::Min(8192, $stream.Length))
-            $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
-            $stream.Close()
-            $stream.Dispose()
-            for ($i = 0; $i -lt $bytesRead; $i++) {
-                if ($buffer[$i] -eq 0) { $isBinary = $true; break }
-            }
-        }
-        catch { $isBinary = $true }
-    }
+    $isBinary = (Test-ExcludedExtension -Extension $file.Extension -ExcludeExtensions $config.excludeExtensions) -or
+                (Test-BinaryFile -Path $file.FullName)
 
     if ($isBinary) {
         Copy-Item -Path $file.FullName -Destination $destPath -Force
-        $script:copiedCount++
-        return
+        $copiedCount++
+        continue
     }
 
-    # Process text file
     try {
         $content = [System.IO.File]::ReadAllText($file.FullName)
         if ([string]::IsNullOrEmpty($content)) {
             Copy-Item -Path $file.FullName -Destination $destPath -Force
-            $script:copiedCount++
-            return
+            $copiedCount++
+            continue
         }
 
         $originalContent = $content
-        foreach ($fake in $sortedFakes) {
-            $real = $reverseMappings[$fake]
-            $content = $content -replace [regex]::Escape($fake), $real
-        }
+        $content = ConvertTo-RenderedText -Text $content -ReverseMappings $reverseMappings
 
         [System.IO.File]::WriteAllText($destPath, $content)
-        $script:copiedCount++
+        $copiedCount++
 
         if ($content -ne $originalContent) {
             Write-Host "  Rendered: $relativePath" -ForegroundColor Green
-            $script:modifiedCount++
+            $modifiedCount++
         }
     }
     catch {
         Write-Warning "Failed to process $relativePath`: $_"
         Copy-Item -Path $file.FullName -Destination $destPath -Force
-        $script:copiedCount++
+        $copiedCount++
     }
 }
 
