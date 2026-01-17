@@ -20,3 +20,7 @@ Follow standards in `~/.claude/skills/skill-management.md` when creating or modi
 ## Infrastructure Troubleshooting
 
 Follow methodology in `~/.claude/skills/infrastructure-troubleshooting.md` when diagnosing infrastructure problems.
+
+## VMware ESXi Performance
+
+Follow `~/.claude/skills/vmware-esxi-performance.md` for ESXi storage/network performance issues (KAVG/DAVG, DSNRO, vmxnet3, PVSCSI).
