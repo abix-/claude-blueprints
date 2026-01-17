@@ -25,30 +25,6 @@ WORKING TREE (fake)                 SEALED EXEC (temp)                 RENDERED 
    Claude sees                         sanitized output                  you use this
 ```
 
-## Scripts
-
-### Hooks (registered in settings.json)
-
-| Script | Hook | Purpose |
-|--------|------|---------|
-| `Hook-SessionStart.ps1` | SessionStart | Replaces real values with fake in working tree |
-| `Hook-Bash.ps1` | PreToolUse (Bash) | Routes commands through sealed execution |
-| `Hook-SessionStop.ps1` | Stop | Renders real version to ~/.claude/rendered/ on exit |
-
-### Utilities
-
-| Script | Purpose |
-|--------|---------|
-| `SealedExec.ps1` | Executes commands in isolated temp dir with real values |
-| `RenderReal.ps1` | Manual render (crash recovery) |
-| `Initialize.ps1` | One-time setup |
-
-### Module
-
-| File | Purpose |
-|------|---------|
-| `Sanitizer.psm1` | Shared functions used by all scripts |
-
 ## Setup
 
 ### 1. Run Initialize.ps1
@@ -132,13 +108,27 @@ Working tree stays fake (safe). Manually render:
 .\RenderReal.ps1 -OutputDir C:\deploy\real
 ```
 
-## Passthrough Commands
+## Files
+
+| File | Type | Purpose |
+|------|------|---------|
+| `Hook-SessionStart.ps1` | Hook (SessionStart) | Replaces real values with fake in working tree |
+| `Hook-Bash.ps1` | Hook (PreToolUse) | Routes commands through sealed execution |
+| `Hook-SessionStop.ps1` | Hook (Stop) | Renders real version on exit |
+| `SealedExec.ps1` | Utility | Executes commands in isolated temp dir |
+| `RenderReal.ps1` | Utility | Manual render (crash recovery) |
+| `Initialize.ps1` | Utility | One-time setup |
+| `Sanitizer.psm1` | Module | Shared functions used by all scripts |
+
+## Reference
+
+### Passthrough Commands
 
 These run directly without sealed execution (they don't need real values):
 - `git`, `gh`, `ls`, `cd`, `pwd`, `mkdir`, `rm`, `cp`, `mv`
 - `cat`, `head`, `tail`, `grep`, `find`
 
-## Files Blocked from Claude
+### Files Blocked from Claude
 
 - `~/.claude/sanitizer/secrets.json`
 - `~/.claude/sanitizer/auto_mappings.json`
