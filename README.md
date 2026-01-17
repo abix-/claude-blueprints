@@ -50,6 +50,7 @@ Prevents sensitive identifiers (server names, IPs, domains) from being sent to A
 | [infrastructure-troubleshooting](skills/infrastructure-troubleshooting.md) | Systematic methodology for diagnosing infrastructure problems |
 | [skill-management](skills/skill-management.md) | How to create, version, validate, and maintain Claude skills |
 | [try-harder](skills/try-harder.md) | Response calibration for accuracy, efficiency, and honest self-assessment |
+| [vmware-esxi-performance](skills/vmware-esxi-performance.md) | ESXi storage/network performance troubleshooting |
 
 ### claude-depester
 
