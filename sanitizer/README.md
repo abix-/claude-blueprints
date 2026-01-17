@@ -6,114 +6,48 @@ Prevent sensitive identifiers (server names, IPs, domains) from being sent to An
 
 **Working tree is ALWAYS fake.** Real values never exist in the working directory.
 
-### Session Lifecycle
-
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ SESSION START                                                               │
-│                                                                             │
-│   Your Files                         Working Tree                           │
-│   ┌──────────────────┐    scan &    ┌──────────────────┐                   │
-│   │ 192.168.1.100    │───sanitize──>│ 11.22.33.44      │ <── Claude sees   │
-│   │ prod.internal    │              │ host-abc.test    │                   │
-│   └──────────────────┘              └──────────────────┘                   │
-│                                                                             │
-│   Auto-discovers IPs & hostnames, generates fake values, saves mappings    │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ DURING SESSION - Command Execution                                          │
-│                                                                             │
-│   Claude runs: ansible-playbook site.yml                                    │
-│                                                                             │
-│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                  │
-│   │ Working Tree│     │ Temp Copy   │     │   Output    │                  │
-│   │   (fake)    │────>│   (real)    │────>│   (fake)    │                  │
-│   │             │copy │             │exec │             │                  │
-│   │ 11.22.33.44 │     │192.168.1.100│     │ 11.22.33.44 │ <── Claude sees  │
-│   └─────────────┘     └──────┬──────┘     └─────────────┘                  │
-│                              │                                              │
-│                         deleted immediately                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ SESSION END                                                                 │
-│                                                                             │
-│   Working Tree                       Rendered Output                        │
-│   ┌──────────────────┐    render    ┌──────────────────┐                   │
-│   │ 11.22.33.44      │─────────────>│ 192.168.1.100    │ <── You deploy    │
-│   │ host-abc.test    │              │ prod.internal    │                   │
-│   └──────────────────┘              └──────────────────┘                   │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+SESSION START
+─────────────────────────────────────────────────────────────────────────────
+Your files get sanitized. Claude only sees fake values.
 
-### Command Routing
-
-```
-                              ┌─────────────────────┐
-                              │   Bash Command      │
-                              └──────────┬──────────┘
-                                         │
-                    ┌────────────────────┼────────────────────┐
-                    ▼                    ▼                    ▼
-            ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
-            │   BLOCKED     │    │  PASSTHROUGH  │    │    SEALED     │
-            │               │    │               │    │               │
-            │ sanitizer.json│    │ git, ls, cat  │    │ ansible, npm  │
-            │ rendered/**   │    │ grep, mkdir   │    │ python, make  │
-            │               │    │               │    │               │
-            │   ✗ denied    │    │ run directly  │    │ temp dir exec │
-            └───────────────┘    └───────────────┘    └───────────────┘
-```
-
-### Sealed Execution Detail
-
-When a command needs real values (ansible, python, etc.), it runs in isolation:
-
-```
-Claude: "ansible-playbook -i inventory.yml site.yml"
-
-     STEP 1: CREATE                STEP 2: COPY & RENDER
-     ─────────────────────────────────────────────────────────────────
-
-     %TEMP%\claude-sealed-a1b2c3\     Working Tree
-              │                        ┌────────────────┐
-              │                        │ inventory.yml  │
-              ▼                        │ 11.22.33.44    │
-     ┌────────────────┐               │ host-abc.test  │
-     │  (empty dir)   │◄──── copy ────└────────────────┘
-     └────────────────┘      + render
-              │                  │
-              ▼                  │
-     ┌────────────────┐         │
-     │ inventory.yml  │         │    fake→real transformation:
-     │ 192.168.1.100  │◄────────┘    11.22.33.44 → 192.168.1.100
-     │ prod.internal  │              host-abc.test → prod.internal
-     └────────────────┘
+    192.168.1.100  ──►  11.22.33.44
+    prod.internal  ──►  host-abc.test
 
 
-     STEP 3: EXECUTE               STEP 4: CAPTURE OUTPUT
-     ─────────────────────────────────────────────────────────────────
+DURING SESSION (when commands need real values)
+─────────────────────────────────────────────────────────────────────────────
+Example: Claude runs "ansible-playbook site.yml"
 
-     ┌────────────────┐
-     │ ansible runs   │───────────► "PLAY [prod.internal] ***"
-     │ in temp dir    │             "ok: [192.168.1.100]"
-     │ with real IPs  │             "PLAY RECAP ***"
-     └────────────────┘
+    ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+    │ WORKING TREE │ copy │   TEMP DIR   │ run  │    OUTPUT    │
+    │    (fake)    │─────►│    (real)    │─────►│    (fake)    │
+    │              │      │              │      │              │
+    │ 11.22.33.44  │      │192.168.1.100 │      │ 11.22.33.44  │
+    │host-abc.test │      │prod.internal │      │host-abc.test │
+    └──────────────┘      └──────┬───────┘      └──────────────┘
+                                 │                     ▲
+           Claude sees this      ▼ deleted        Claude sees this
+                            immediately
 
 
-     STEP 5: DELETE TEMP           STEP 6: SANITIZE OUTPUT
-     ─────────────────────────────────────────────────────────────────
+SESSION END
+─────────────────────────────────────────────────────────────────────────────
+Real version rendered for deployment.
 
-     %TEMP%\claude-sealed-a1b2c3\   Output to Claude:
-              │
-              ▼                     "PLAY [host-abc.test] ***"
-         ✗ DELETED                  "ok: [11.22.33.44]"
-                                    "PLAY RECAP ***"
-     Real values gone.
-                                    Claude never sees real values.
+    Working Tree          Rendered Output
+    (still fake)    ──►   (real values)
+                          └─► you deploy from here
+
+
+COMMAND ROUTING
+─────────────────────────────────────────────────────────────────────────────
+    BLOCKED              PASSTHROUGH           SEALED
+    sanitizer.json       git, ls, cat          everything else
+    rendered/**          grep, mkdir           (ansible, npm, python...)
+         │                    │                       │
+         ▼                    ▼                       ▼
+      denied            run directly           temp dir execution
 ```
 
 ## Setup
