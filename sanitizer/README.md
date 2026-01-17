@@ -70,6 +70,7 @@ cd $env:USERPROFILE\.claude\sanitizer
 
 ```json
 {
+  "openExplorerOnRender": false,
   "mappings": {
     "real-server.internal.corp": "fake-server.example.test",
     "secret-api-key-12345": "FAKE_API_KEY"
@@ -82,6 +83,10 @@ cd $env:USERPROFILE\.claude\sanitizer
   }
 }
 ```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `openExplorerOnRender` | `false` | Open Explorer to rendered directory on exit |
 
 IPs are auto-discovered. Only add manual mappings for non-IP secrets.
 
