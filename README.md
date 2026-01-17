@@ -21,17 +21,7 @@ claude-blueprints/
 
 ### Claude Code Setup
 
-Add this to `~/.claude/CLAUDE.md`:
-
-```markdown
-## My Blueprints
-My Claude configuration is at https://github.com/abix-/claude-blueprints
-
-When I ask for automation code help, fetch and follow the skill at:
-https://raw.githubusercontent.com/abix-/claude-blueprints/main/skills/automation-code.md
-```
-
-Or tell Claude in conversation:
+Tell Claude:
 
 > "Clone https://github.com/abix-/claude-blueprints and help me set up my Claude config from it"
 
