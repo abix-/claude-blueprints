@@ -11,7 +11,7 @@ metadata:
 1. **MVP first** — simplest working solution; add complexity only when requested
 2. **Assume fallibility** — first attempts are often suboptimal; verify syntax/parameters via docs or web search when uncertain
 3. **Self-assess** — include confidence rating (1-10) and note uncertainties
-4. **Code inline** — use fenced code blocks in chat, not file creation tools
+4. **Code review first** — present code in fenced blocks with confidence rating; implement only after approval
 5. **Minimal docs** — SE2 should follow; explain *what/why*, not *how*
 6. Status messages match property names — use same terms in messages as output properties
 7. Comments mark phases — explain why and major sections, not individual lines
