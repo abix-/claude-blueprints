@@ -3,7 +3,7 @@
     Stop hook - renders real values when Claude exits.
 
 .DESCRIPTION
-    Copies working tree to ~/.claude/rendered/{project}/ with real values restored.
+    Copies working tree to renderPath (default ~/.claude/rendered/{project}/) with real values restored.
     Working tree stays fake (safe for next session).
 
 .PARAMETER SourceDir
@@ -35,7 +35,7 @@ if ($reverseMappings.Count -eq 0) {
 # === DETERMINE OUTPUT DIRECTORY ===
 
 $projectName = Split-Path $SourceDir -Leaf
-$outputDir = "$($paths.RenderedBase)\$projectName"
+$outputDir = $config.renderPath -replace '\{project\}', $projectName
 
 # === CLEAN AND CREATE OUTPUT DIR ===
 

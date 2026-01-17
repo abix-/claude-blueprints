@@ -64,6 +64,7 @@ function Get-SanitizerConfig {
         autoMappings          = @{}
         excludePaths          = $script:DefaultExcludePaths
         patterns              = @{ ipv4 = $true; hostnames = @() }
+        renderPath            = "$env:USERPROFILE\.claude\rendered\{project}"
         openExplorerOnRender  = $false
     }
 
@@ -85,6 +86,7 @@ function Get-SanitizerConfig {
             }
             if ($loaded.excludePaths) { $config.excludePaths = $loaded.excludePaths }
             if ($loaded.patterns) { $config.patterns = $loaded.patterns }
+            if ($loaded.renderPath) { $config.renderPath = $loaded.renderPath }
             if ($null -ne $loaded.openExplorerOnRender) { $config.openExplorerOnRender = $loaded.openExplorerOnRender }
         }
         catch {

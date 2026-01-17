@@ -52,6 +52,7 @@ cd $env:USERPROFILE\.claude\sanitizer
 - `mappings`: Your manual real → fake mappings
 - `autoMappings`: Auto-discovered IPs/hostnames (populated automatically)
 - `patterns`: What to auto-discover (IPs and hostname patterns)
+- `renderPath`: Where to render real version (default `~/.claude/rendered/{project}`)
 
 ### 3. Configure settings.json
 
