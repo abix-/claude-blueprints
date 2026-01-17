@@ -19,11 +19,25 @@ claude-blueprints/
 
 ## Usage
 
-### Claude Code
+### Claude Code Setup
 
-Clone this repo, then copy or symlink files to `~/.claude/`
+Add this to `~/.claude/CLAUDE.md`:
 
-**Important**: Before copying `CLAUDE.md` or `settings.json`, check if the user already has these files. If they do:
+```markdown
+## My Blueprints
+My Claude configuration is at https://github.com/abix-/claude-blueprints
+
+When I ask for automation code help, fetch and follow the skill at:
+https://raw.githubusercontent.com/abix-/claude-blueprints/main/skills/automation-code.md
+```
+
+Or tell Claude in conversation:
+
+> "Clone https://github.com/abix-/claude-blueprints and help me set up my Claude config from it"
+
+### Applying Config Files
+
+Before copying `CLAUDE.md` or `settings.json` to `~/.claude/`, check if the user already has these files:
 - **Already matches** — do nothing
 - **Differs** — ask whether to merge or overwrite
 
