@@ -68,6 +68,54 @@ Prevent sensitive identifiers (server names, IPs, domains) from being sent to An
             └───────────────┘    └───────────────┘    └───────────────┘
 ```
 
+### Sealed Execution Detail
+
+When a command needs real values (ansible, python, etc.), it runs in isolation:
+
+```
+Claude: "ansible-playbook -i inventory.yml site.yml"
+
+     STEP 1: CREATE                STEP 2: COPY & RENDER
+     ─────────────────────────────────────────────────────────────────
+
+     %TEMP%\claude-sealed-a1b2c3\     Working Tree
+              │                        ┌────────────────┐
+              │                        │ inventory.yml  │
+              ▼                        │ 11.22.33.44    │
+     ┌────────────────┐               │ host-abc.test  │
+     │  (empty dir)   │◄──── copy ────└────────────────┘
+     └────────────────┘      + render
+              │                  │
+              ▼                  │
+     ┌────────────────┐         │
+     │ inventory.yml  │         │    fake→real transformation:
+     │ 192.168.1.100  │◄────────┘    11.22.33.44 → 192.168.1.100
+     │ prod.internal  │              host-abc.test → prod.internal
+     └────────────────┘
+
+
+     STEP 3: EXECUTE               STEP 4: CAPTURE OUTPUT
+     ─────────────────────────────────────────────────────────────────
+
+     ┌────────────────┐
+     │ ansible runs   │───────────► "PLAY [prod.internal] ***"
+     │ in temp dir    │             "ok: [192.168.1.100]"
+     │ with real IPs  │             "PLAY RECAP ***"
+     └────────────────┘
+
+
+     STEP 5: DELETE TEMP           STEP 6: SANITIZE OUTPUT
+     ─────────────────────────────────────────────────────────────────
+
+     %TEMP%\claude-sealed-a1b2c3\   Output to Claude:
+              │
+              ▼                     "PLAY [host-abc.test] ***"
+         ✗ DELETED                  "ok: [11.22.33.44]"
+                                    "PLAY RECAP ***"
+     Real values gone.
+                                    Claude never sees real values.
+```
+
 ## Setup
 
 ### 1. Run Initialize.ps1
