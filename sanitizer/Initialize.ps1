@@ -106,34 +106,9 @@ if (Test-Path $settingsPath) {
     Write-Host "WARNING: settings.json not found - copy from claude-blueprints repo" -ForegroundColor Yellow
 }
 
-# Update CLAUDE.md (append if exists, create if not)
-$claudeMdPath = "$env:USERPROFILE\.claude\CLAUDE.md"
-$claudeMdContent = @"
-
-## NEVER READ THESE FILES
-
-- ``%USERPROFILE%\.claude\sanitizer\secrets.json`` - Contains real secrets, NEVER read this file
-- ``%USERPROFILE%\.claude\sanitizer\ip_mappings_temp.json`` - Contains real IP mappings, NEVER read this file
-- Any file named ``secrets.json`` anywhere
-- Any ``.env`` files outside this project
-"@
-
-if (Test-Path $claudeMdPath) {
-    $existing = Get-Content $claudeMdPath -Raw
-    if ($existing -notmatch "NEVER READ THESE FILES") {
-        Add-Content -Path $claudeMdPath -Value $claudeMdContent -Encoding UTF8
-        Write-Host "Updated: CLAUDE.md (appended sanitizer rules)" -ForegroundColor Green
-    } else {
-        Write-Host "Skipped: CLAUDE.md (already has sanitizer rules)" -ForegroundColor Gray
-    }
-} else {
-    Set-Content -Path $claudeMdPath -Value $claudeMdContent.TrimStart() -Encoding UTF8
-    Write-Host "Created: CLAUDE.md" -ForegroundColor Green
-}
-
 Write-Host ""
 Write-Host "Done! Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Edit secrets.json with your real->fake mappings" -ForegroundColor White
-Write-Host "  2. Ensure settings.json has hooks AND permissions.deny (copy from repo)" -ForegroundColor White
+Write-Host "  2. Copy settings.json from repo (has hooks + permissions.deny)" -ForegroundColor White
 Write-Host "  3. Restart Claude Code" -ForegroundColor White
 Write-Host ""

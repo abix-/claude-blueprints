@@ -93,6 +93,7 @@ IPs are auto-discovered. Only add manual mappings for non-IP secrets.
     "deny": [
       "~/.claude/sanitizer/secrets.json",
       "~/.claude/sanitizer/auto_mappings.json",
+      "~/.claude/sanitizer/ip_mappings_temp.json",
       "~/.claude/rendered/**"
     ]
   },
@@ -172,9 +173,9 @@ These run directly without sealed execution (they don't need real values):
 
 ## Files Blocked from Claude
 
-Blocked via `CLAUDE.md` instructions and `RunWrapper.ps1`:
+Blocked via `permissions.deny` (hard) and `RunWrapper.ps1` (bash commands):
 
 - `~/.claude/sanitizer/secrets.json`
 - `~/.claude/sanitizer/auto_mappings.json`
-- `~/.claude/rendered/`
-- `%TEMP%/claude-sealed-*`
+- `~/.claude/sanitizer/ip_mappings_temp.json`
+- `~/.claude/rendered/**`
