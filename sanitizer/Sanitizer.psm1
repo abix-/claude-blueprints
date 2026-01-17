@@ -40,7 +40,7 @@ function Get-SanitizerPaths {
 
     [PSCustomObject]@{
         SanitizerDir = $SanitizerDir
-        Secrets      = "$SanitizerDir\secrets.json"
+        Secrets      = "$SanitizerDir\sanitizer.json"
         RenderedBase = "$env:USERPROFILE\.claude\rendered"
     }
 }
@@ -48,7 +48,7 @@ function Get-SanitizerPaths {
 function Get-SanitizerConfig {
     <#
     .SYNOPSIS
-        Loads sanitizer configuration from secrets.json with defaults.
+        Loads sanitizer configuration from sanitizer.json with defaults.
 
     .EXAMPLE
         $config = Get-SanitizerConfig
@@ -56,7 +56,7 @@ function Get-SanitizerConfig {
     #>
     [CmdletBinding()]
     param(
-        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\secrets.json"
+        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\sanitizer.json"
     )
 
     $config = [PSCustomObject]@{
@@ -90,7 +90,7 @@ function Get-SanitizerConfig {
             if ($null -ne $loaded.openExplorerOnRender) { $config.openExplorerOnRender = $loaded.openExplorerOnRender }
         }
         catch {
-            Write-Verbose "Failed to parse secrets.json: $_"
+            Write-Verbose "Failed to parse sanitizer.json: $_"
         }
     }
 
@@ -108,7 +108,7 @@ function Get-SanitizerMappings {
     #>
     [CmdletBinding()]
     param(
-        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\secrets.json"
+        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\sanitizer.json"
     )
 
     $mappings = @{}
@@ -137,7 +137,7 @@ function Get-ReverseMappings {
     #>
     [CmdletBinding()]
     param(
-        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\secrets.json"
+        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\sanitizer.json"
     )
 
     $reverse = @{}
@@ -156,7 +156,7 @@ function Get-ReverseMappings {
 function Save-AutoMappings {
     <#
     .SYNOPSIS
-        Saves autoMappings back to secrets.json.
+        Saves autoMappings back to sanitizer.json.
 
     .EXAMPLE
         Save-AutoMappings -AutoMappings $autoMappings
@@ -166,7 +166,7 @@ function Save-AutoMappings {
         [Parameter(Mandatory)]
         [hashtable]$AutoMappings,
 
-        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\secrets.json"
+        [string]$SecretsPath = "$env:USERPROFILE\.claude\sanitizer\sanitizer.json"
     )
 
     $config = @{}

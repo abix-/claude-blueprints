@@ -34,7 +34,7 @@ cd $env:USERPROFILE\.claude\sanitizer
 .\Initialize.ps1
 ```
 
-### 2. Edit secrets.json
+### 2. Edit sanitizer.json
 
 ```json
 {
@@ -60,7 +60,7 @@ cd $env:USERPROFILE\.claude\sanitizer
 {
   "permissions": {
     "deny": [
-      "~/.claude/sanitizer/secrets.json",
+      "~/.claude/sanitizer/sanitizer.json",
       "~/.claude/rendered/**"
     ]
   },
@@ -111,7 +111,7 @@ Working tree stays fake (safe). Manually render:
 
 | File | Type | Purpose |
 |------|------|---------|
-| `secrets.json` | Config | All mappings (manual + auto) and settings |
+| `sanitizer.json` | Config | All mappings (manual + auto) and settings |
 | `Hook-SessionStart.ps1` | Hook (SessionStart) | Replaces real values with fake in working tree |
 | `Hook-Bash.ps1` | Hook (PreToolUse) | Routes commands through sealed execution |
 | `Hook-SessionStop.ps1` | Hook (Stop) | Renders real version on exit |
@@ -130,5 +130,5 @@ These run directly without sealed execution (they don't need real values):
 
 ### Files Blocked from Claude
 
-- `~/.claude/sanitizer/secrets.json`
+- `~/.claude/sanitizer/sanitizer.json`
 - `~/.claude/rendered/**`

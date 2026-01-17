@@ -37,7 +37,7 @@ if (-not $command) { exit 0 }
 # === BLOCK DANGEROUS COMMANDS ===
 
 $blockedPatterns = @(
-    '[\\/]secrets\.json(?![.\w])'           # exact file, not secrets.json.example
+    '[\\/]sanitizer\.json(?![.\w])'           # config file, not sanitizer.json.example
     'claude-sealed-'                        # temp sealed directories
     '\.claude[\\/]rendered'                 # rendered output directory
 )
