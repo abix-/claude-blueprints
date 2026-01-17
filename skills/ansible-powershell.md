@@ -1,12 +1,12 @@
 ---
-name: automation-code
+name: ansible-powershell
 description: Ansible and PowerShell development standards
 metadata:
-  version: "2.4"
-  updated: "2026-01-11"
+  version: "2.5"
+  updated: "2026-01-17"
   content_sha256: "824d9bcbe312372431daa0f0f626dbb8519e27f7b6c0d3fec38ae16f48c60fec"
 ---
-# Automation Code Standards
+# Ansible & PowerShell Standards
 ## Universal Principles
 1. **MVP first** — simplest working solution; add complexity only when requested
 2. **Assume fallibility** — first attempts are often suboptimal; verify syntax/parameters via docs or web search when uncertain
