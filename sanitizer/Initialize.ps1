@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Run this once before first use. Creates:
-    - secrets.json: Template for mappings and config (if not exists)
+    - sanitizer.json: Template for mappings and config (if not exists)
 
 .EXAMPLE
     .\Initialize.ps1
@@ -35,8 +35,8 @@ foreach ($dir in $dirs) {
     }
 }
 
-# Create template secrets.json if not exists
-$secretsPath = "$SanitizerDir\secrets.json"
+# Create template sanitizer.json if not exists
+$secretsPath = "$SanitizerDir\sanitizer.json"
 if (-not (Test-Path $secretsPath)) {
     @{
         mappings = @{
@@ -48,13 +48,13 @@ if (-not (Test-Path $secretsPath)) {
             hostnames = @("\.internal\.corp$", "\.local$")
         }
     } | ConvertTo-Json -Depth 5 | Set-Content -Path $secretsPath -Encoding UTF8
-    Write-Host "Created: secrets.json (edit this with your mappings)" -ForegroundColor Green
+    Write-Host "Created: sanitizer.json (edit this with your mappings)" -ForegroundColor Green
 }
 
 # Validate settings.json has permissions.deny
 $settingsPath = "$env:USERPROFILE\.claude\settings.json"
 $requiredDenyPaths = @(
-    "~/.claude/sanitizer/secrets.json",
+    "~/.claude/sanitizer/sanitizer.json",
     "~/.claude/rendered/**"
 )
 
@@ -78,7 +78,7 @@ if (Test-Path $settingsPath) {
             Write-Host "Add this to settings.json:" -ForegroundColor Cyan
             Write-Host '  "permissions": {' -ForegroundColor White
             Write-Host '    "deny": [' -ForegroundColor White
-            Write-Host '      "~/.claude/sanitizer/secrets.json",' -ForegroundColor White
+            Write-Host '      "~/.claude/sanitizer/sanitizer.json",' -ForegroundColor White
             Write-Host '      "~/.claude/rendered/**"' -ForegroundColor White
             Write-Host '    ]' -ForegroundColor White
             Write-Host '  },' -ForegroundColor White
@@ -95,7 +95,7 @@ if (Test-Path $settingsPath) {
 
 Write-Host ""
 Write-Host "Done! Next steps:" -ForegroundColor Cyan
-Write-Host "  1. Edit secrets.json with your real->fake mappings" -ForegroundColor White
+Write-Host "  1. Edit sanitizer.json with your real->fake mappings" -ForegroundColor White
 Write-Host "  2. Copy settings.json from repo (has hooks + permissions.deny)" -ForegroundColor White
 Write-Host "  3. Restart Claude Code" -ForegroundColor White
 Write-Host ""
