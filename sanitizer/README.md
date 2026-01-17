@@ -4,50 +4,121 @@ Prevent sensitive identifiers (server names, IPs, domains) from being sent to An
 
 ## How It Works
 
-**Working tree is ALWAYS fake.** Real values never exist in the working directory.
-
 ```
-SESSION START
-─────────────────────────────────────────────────────────────────────────────
-Your files get sanitized. Claude only sees fake values.
-
-    192.168.1.100  ──►  11.22.33.44
-    prod.internal  ──►  host-abc.test
-
-
-DURING SESSION (when commands need real values)
-─────────────────────────────────────────────────────────────────────────────
-Example: Claude runs "ansible-playbook site.yml"
-
-    ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-    │ WORKING TREE │ copy │   TEMP DIR   │ run  │    OUTPUT    │
-    │    (fake)    │─────►│    (real)    │─────►│    (fake)    │
-    │              │      │              │      │              │
-    │ 11.22.33.44  │      │192.168.1.100 │      │ 11.22.33.44  │
-    │host-abc.test │      │prod.internal │      │host-abc.test │
-    └──────────────┘      └──────┬───────┘      └──────────────┘
-                                 │                     ▲
-           Claude sees this      ▼ deleted        Claude sees this
-                            immediately
-
-
-SESSION END
-─────────────────────────────────────────────────────────────────────────────
-Real version rendered for deployment.
-
-    Working Tree          Rendered Output
-    (still fake)    ──►   (real values)
-                          └─► you deploy from here
-
-
-COMMAND ROUTING
-─────────────────────────────────────────────────────────────────────────────
-    BLOCKED              PASSTHROUGH           SEALED
-    sanitizer.json       git, ls, cat          everything else
-    rendered/**          grep, mkdir           (ansible, npm, python...)
-         │                    │                       │
-         ▼                    ▼                       ▼
-      denied            run directly           temp dir execution
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║  1. SESSION START - Sanitize Working Tree                                     ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║                                                                               ║
+║  When Claude Code launches, BEFORE Claude sees anything:                      ║
+║                                                                               ║
+║      Your Project Files                      Working Tree                     ║
+║      ┌─────────────────────┐                 ┌─────────────────────┐          ║
+║      │ inventory.yml       │    scan &       │ inventory.yml       │          ║
+║      │ ─────────────────── │    replace      │ ─────────────────── │          ║
+║      │ host: 192.168.1.100 │ ──────────────► │ host: 11.22.33.44   │          ║
+║      │ name: prod.internal │   (in place)    │ name: host-a1b.test │          ║
+║      └─────────────────────┘                 └─────────────────────┘          ║
+║                                                        ▲                      ║
+║      - Finds IPs matching patterns                     │                      ║
+║      - Finds hostnames matching patterns         Claude reads                 ║
+║      - Generates fake replacements               and edits this               ║
+║      - Saves mappings to sanitizer.json                                       ║
+║                                                                               ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  2. COMMAND EXECUTION - Sealed Temporary Environment                          ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║                                                                               ║
+║  When Claude runs a command like "powershell ./Deploy-App.ps1":                 ║
+║                                                                               ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
+║  │ STEP 1: Hook intercepts command                                         │  ║
+║  └─────────────────────────────────────────────────────────────────────────┘  ║
+║                                         │                                     ║
+║            ┌────────────────────────────┼────────────────────────────┐        ║
+║            ▼                            ▼                            ▼        ║
+║      ┌───────────┐               ┌───────────┐               ┌───────────┐    ║
+║      │  BLOCKED  │               │PASSTHROUGH│               │  SEALED   │    ║
+║      │           │               │           │               │           │    ║
+║      │sanitizer. │               │ git, ls   │               │powershell │    ║
+║      │json, etc. │               │ cat, grep │               │ python    │    ║
+║      │           │               │ mkdir, rm │               │ npm, make │    ║
+║      └─────┬─────┘               └─────┬─────┘               └─────┬─────┘    ║
+║            ▼                           ▼                           ▼          ║
+║         denied                   run directly               continue below    ║
+║                               (files already fake)                            ║
+║                                                                               ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
+║  │ STEP 2: Create temp directory                                           │  ║
+║  │         %TEMP%\claude-sealed-<guid>\                                    │  ║
+║  └─────────────────────────────────────────────────────────────────────────┘  ║
+║                                         │                                     ║
+║                                         ▼                                     ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
+║  │ STEP 3: Copy working tree to temp, replace fake → real                  │  ║
+║  │                                                                         │  ║
+║  │     Working Tree                         Temp Directory                 │  ║
+║  │     ┌─────────────────┐    copy &        ┌─────────────────┐            │  ║
+║  │     │ 11.22.33.44     │    render        │ 192.168.1.100   │            │  ║
+║  │     │ host-a1b.test   │ ───────────────► │ prod.internal   │            │  ║
+║  │     └─────────────────┘                  └─────────────────┘            │  ║
+║  └─────────────────────────────────────────────────────────────────────────┘  ║
+║                                         │                                     ║
+║                                         ▼                                     ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
+║  │ STEP 4: Execute command inside temp directory                           │  ║
+║  │         (command runs with REAL values)                                 │  ║
+║  └─────────────────────────────────────────────────────────────────────────┘  ║
+║                                         │                                     ║
+║                                         ▼                                     ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
+║  │ STEP 5: Capture output                                                  │  ║
+║  │         "Deploying to prod.internal..."                                 │  ║
+║  │         "Connected to 192.168.1.100"                                    │  ║
+║  └─────────────────────────────────────────────────────────────────────────┘  ║
+║                                         │                                     ║
+║                                         ▼                                     ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
+║  │ STEP 6: Delete temp directory                                           │  ║
+║  │         (real values are GONE)                                          │  ║
+║  └─────────────────────────────────────────────────────────────────────────┘  ║
+║                                         │                                     ║
+║                                         ▼                                     ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐  ║
+║  │ STEP 7: Sanitize output, replace real → fake                            │  ║
+║  │         "Deploying to host-a1b.test..."   ◄── Claude sees this          │  ║
+║  │         "Connected to 11.22.33.44"                                      │  ║
+║  └─────────────────────────────────────────────────────────────────────────┘  ║
+║                                                                               ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  3. SESSION END - Render for Deployment                                       ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║                                                                               ║
+║  When you exit Claude normally:                                               ║
+║                                                                               ║
+║      Working Tree                            Rendered Output                  ║
+║      ┌─────────────────────┐                 ┌─────────────────────┐          ║
+║      │ 11.22.33.44         │    copy &       │ 192.168.1.100       │          ║
+║      │ host-a1b.test       │    render       │ prod.internal       │          ║
+║      │                     │ ──────────────► │                     │          ║
+║      │ (stays fake)        │                 │ (ready to deploy)   │          ║
+║      └─────────────────────┘                 └─────────────────────┘          ║
+║                                                        ▲                      ║
+║                                                        │                      ║
+║                                                   you use this                ║
+║                                                                               ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  WHERE REAL VALUES EXIST                                                      ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║                                                                               ║
+║      Location                     Contains Real Values?                       ║
+║      ─────────────────────────    ─────────────────────────────────────────   ║
+║      Working tree                 ✗ NO  - always fake                         ║
+║      Claude's view                ✗ NO  - only sees fake                      ║
+║      Anthropic servers            ✗ NO  - only receives fake                  ║
+║      Temp directory               ✓ YES - deleted immediately after use      ║
+║      Rendered output              ✓ YES - for your deployment                 ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ## Setup
