@@ -18,21 +18,31 @@
 
 .PARAMETER WorkingDir
     The working directory (fake version). Defaults to current directory.
+
+.PARAMETER TimeoutSeconds
+    Command timeout in seconds. Defaults to 300 (5 minutes).
+
+.EXAMPLE
+    .\SealedExec.ps1 -Command "ansible-playbook site.yml"
 #>
 
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory)]
     [string]$Command,
 
     [string]$WorkingDir = (Get-Location).Path,
-    [string]$SanitizerDir = "$env:USERPROFILE\.claude\sanitizer"
+    [string]$SanitizerDir = "$env:USERPROFILE\.claude\sanitizer",
+    [int]$TimeoutSeconds = 300
 )
 
 $ErrorActionPreference = "Stop"
 
-$secretsPath = "$SanitizerDir\secrets.json"
-$autoMappingsPath = "$SanitizerDir\auto_mappings.json"
-$sanitizeOutputScript = "$SanitizerDir\SanitizeOutput.ps1"
+Import-Module "$SanitizerDir\Common.psm1" -Force
+
+$paths = Get-SanitizerPaths -SanitizerDir $SanitizerDir
+$config = Get-SanitizerConfig -SecretsPath $paths.Secrets
+$reverseMappings = Get-ReverseMappings -SecretsPath $paths.Secrets -AutoMappingsPath $paths.AutoMappings
+$forwardMappings = Get-SanitizerMappings -SecretsPath $paths.Secrets -AutoMappingsPath $paths.AutoMappings
 
 # === CREATE SEALED ENVIRONMENT ===
 
@@ -43,77 +53,16 @@ $output = ""
 $exitCode = 0
 
 try {
-    # Create temp directory
     New-Item -Path $sealedDir -ItemType Directory -Force | Out-Null
-
-    # === LOAD REVERSE MAPPINGS (fake -> real) ===
-
-    $reverseMappings = @{}
-
-    if (Test-Path $secretsPath) {
-        try {
-            $config = Get-Content $secretsPath -Raw | ConvertFrom-Json
-            if ($config.mappings) {
-                foreach ($prop in $config.mappings.PSObject.Properties) {
-                    # fake -> real (value -> name)
-                    $reverseMappings[$prop.Value] = $prop.Name
-                }
-            }
-        }
-        catch { }
-    }
-
-    if (Test-Path $autoMappingsPath) {
-        try {
-            $auto = Get-Content $autoMappingsPath -Raw | ConvertFrom-Json
-            if ($auto.mappings) {
-                foreach ($prop in $auto.mappings.PSObject.Properties) {
-                    if (-not $reverseMappings.ContainsKey($prop.Value)) {
-                        $reverseMappings[$prop.Value] = $prop.Name
-                    }
-                }
-            }
-        }
-        catch { }
-    }
-
-    # Sort by fake value length descending
-    $sortedFakes = @($reverseMappings.Keys | Sort-Object { $_.Length } -Descending)
-
-    # === GET EXCLUSIONS ===
-
-    $excludePaths = @(".git", "node_modules", ".claude", "bin", "obj", "__pycache__", "venv", ".venv")
-    $excludeExtensions = @(".exe", ".dll", ".pdb", ".png", ".jpg", ".jpeg", ".gif", ".ico")
-
-    if (Test-Path $secretsPath) {
-        try {
-            $config = Get-Content $secretsPath -Raw | ConvertFrom-Json
-            if ($config.excludePaths) { $excludePaths = $config.excludePaths }
-            if ($config.excludeExtensions) { $excludeExtensions = $config.excludeExtensions }
-        }
-        catch { }
-    }
 
     # === COPY AND RENDER ===
 
-    Get-ChildItem -Path $WorkingDir -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
-        $file = $_
+    foreach ($file in Get-ChildItem -Path $WorkingDir -Recurse -File -ErrorAction SilentlyContinue) {
         $relativePath = $file.FullName.Substring($WorkingDir.Length).TrimStart('\', '/')
 
-        # Check path exclusions
-        $excluded = $false
-        foreach ($exclude in $excludePaths) {
-            if ($relativePath -like "$exclude\*" -or $relativePath -like "$exclude/*" -or $relativePath -like "*\$exclude\*") {
-                $excluded = $true
-                break
-            }
-        }
-        if ($excluded) { return }
+        if (Test-ExcludedPath -RelativePath $relativePath -ExcludePaths $config.excludePaths) { continue }
+        if ($file.Length -gt 10MB) { continue }
 
-        # Skip huge files
-        if ($file.Length -gt 10MB) { return }
-
-        # Determine destination
         $destPath = Join-Path $sealedDir $relativePath
         $destDir = Split-Path $destPath -Parent
 
@@ -121,29 +70,12 @@ try {
             New-Item -Path $destDir -ItemType Directory -Force | Out-Null
         }
 
-        # Check if binary
-        $isBinary = $false
-        try {
-            $stream = [System.IO.File]::OpenRead($file.FullName)
-            $buffer = [byte[]]::new([Math]::Min(8192, $stream.Length))
-            $bytesRead = $stream.Read($buffer, 0, $buffer.Length)
-            $stream.Close()
-            $stream.Dispose()
-            for ($i = 0; $i -lt $bytesRead; $i++) {
-                if ($buffer[$i] -eq 0) { $isBinary = $true; break }
-            }
-        }
-        catch { $isBinary = $true }
-
-        # Check extension exclusions
-        foreach ($ext in $excludeExtensions) {
-            if ($file.Extension -ieq $ext) { $isBinary = $true; break }
-        }
+        $isBinary = (Test-ExcludedExtension -Extension $file.Extension -ExcludeExtensions $config.excludeExtensions) -or
+                    (Test-BinaryFile -Path $file.FullName)
 
         if ($isBinary) {
-            # Just copy binary files without modification
             Copy-Item -Path $file.FullName -Destination $destPath -Force
-            return
+            continue
         }
 
         # Process text file - render real values
@@ -151,19 +83,13 @@ try {
             $content = [System.IO.File]::ReadAllText($file.FullName)
             if ([string]::IsNullOrEmpty($content)) {
                 Copy-Item -Path $file.FullName -Destination $destPath -Force
-                return
+                continue
             }
 
-            # Apply reverse mappings (fake -> real)
-            foreach ($fake in $sortedFakes) {
-                $real = $reverseMappings[$fake]
-                $content = $content -replace [regex]::Escape($fake), $real
-            }
-
+            $content = ConvertTo-RenderedText -Text $content -ReverseMappings $reverseMappings
             [System.IO.File]::WriteAllText($destPath, $content)
         }
         catch {
-            # Fallback: just copy
             Copy-Item -Path $file.FullName -Destination $destPath -Force
         }
     }
@@ -171,7 +97,7 @@ try {
     # === EXECUTE COMMAND ===
 
     try {
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
         $psi.FileName = "cmd.exe"
         $psi.Arguments = "/c cd /d `"$sealedDir`" && $Command 2>&1"
         $psi.RedirectStandardOutput = $true
@@ -182,15 +108,14 @@ try {
 
         $process = [System.Diagnostics.Process]::Start($psi)
 
-        # Read output with timeout
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
 
-        $completed = $process.WaitForExit(300000)  # 5 minute timeout
+        $completed = $process.WaitForExit($TimeoutSeconds * 1000)
 
         if (-not $completed) {
             $process.Kill()
-            $output = "ERROR: Command timed out after 5 minutes"
+            $output = "ERROR: Command timed out after $TimeoutSeconds seconds"
             $exitCode = 124
         }
         else {
@@ -212,26 +137,23 @@ try {
 finally {
     # === ALWAYS DELETE TEMP DIRECTORY ===
     if (Test-Path $sealedDir) {
-        try {
-            Remove-Item -Path $sealedDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        catch {
-            # Try harder
+        Remove-Item -Path $sealedDir -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path $sealedDir) {
             Start-Sleep -Milliseconds 100
             Remove-Item -Path $sealedDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 }
 
-# === SANITIZE OUTPUT ===
+# === SANITIZE OUTPUT (directly, no subprocess) ===
 
 if (-not [string]::IsNullOrEmpty($output)) {
-    $output = $output | & powershell.exe -ExecutionPolicy Bypass -NoProfile -File $sanitizeOutputScript
+    $output = ConvertTo-ScrubbedText -Text $output -Mappings $forwardMappings
 }
 
 # === RETURN RESULT AS JSON ===
 
 @{
-    output = $output
+    output   = $output
     exitCode = $exitCode
 } | ConvertTo-Json -Compress
