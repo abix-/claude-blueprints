@@ -44,12 +44,11 @@ if (-not $command) { exit 0 }
 # === BLOCK DANGEROUS COMMANDS ===
 
 $blockedPatterns = @(
-    'secrets\.json'
-    'auto_mappings\.json'
-    'claude-sealed-'
-    '\\\.claude\\sanitizer\\'
-    '/\.claude/sanitizer/'
-    '\.claude[\\/]rendered'
+    '[\\/]secrets\.json(?![.\w])'           # exact file, not secrets.json.example
+    '[\\/]auto_mappings\.json(?![.\w])'     # exact file
+    '[\\/]ip_mappings_temp\.json(?![.\w])'  # exact file
+    'claude-sealed-'                        # temp sealed directories
+    '\.claude[\\/]rendered'                 # rendered output directory
 )
 
 foreach ($pattern in $blockedPatterns) {
