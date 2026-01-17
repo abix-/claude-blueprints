@@ -39,23 +39,19 @@ cd $env:USERPROFILE\.claude\sanitizer
 ```json
 {
   "mappings": {
-    "real-server.internal.corp": "fake-server.example.test",
-    "secret-api-key-12345": "FAKE_API_KEY"
+    "real-server.internal.corp": "fake-server.example.test"
   },
   "autoMappings": {},
-  "excludePaths": [".git", "node_modules", ".claude"],
-  "excludeExtensions": [".exe", ".dll", ".png", ".jpg"],
   "patterns": {
     "ipv4": true,
     "hostnames": ["\\.internal\\.corp$", "\\.local$"]
-  },
-  "openExplorerOnRender": false
+  }
 }
 ```
 
 - `mappings`: Your manual real → fake mappings
 - `autoMappings`: Auto-discovered IPs/hostnames (populated automatically)
-- IPs are auto-discovered. Only add manual mappings for non-IP secrets.
+- `patterns`: What to auto-discover (IPs and hostname patterns)
 
 ### 3. Configure settings.json
 

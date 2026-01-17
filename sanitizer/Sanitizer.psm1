@@ -13,15 +13,7 @@
 
 # === DEFAULTS ===
 
-$script:DefaultExcludePaths = @(
-    ".git", "node_modules", ".claude", "bin", "obj",
-    "__pycache__", "venv", ".venv", ".vs", ".idea"
-)
-
-$script:DefaultExcludeExtensions = @(
-    ".exe", ".dll", ".pdb", ".png", ".jpg", ".jpeg",
-    ".gif", ".ico", ".woff", ".woff2", ".zip", ".tar", ".gz"
-)
+$script:DefaultExcludePaths = @(".git", "node_modules")
 
 $script:ExcludedIpPatterns = @(
     '^127\.', '^0\.0\.0\.0$', '^255\.255\.255\.255$',
@@ -71,7 +63,6 @@ function Get-SanitizerConfig {
         mappings              = @{}
         autoMappings          = @{}
         excludePaths          = $script:DefaultExcludePaths
-        excludeExtensions     = $script:DefaultExcludeExtensions
         patterns              = @{ ipv4 = $true; hostnames = @() }
         openExplorerOnRender  = $false
     }
@@ -93,7 +84,6 @@ function Get-SanitizerConfig {
                 }
             }
             if ($loaded.excludePaths) { $config.excludePaths = $loaded.excludePaths }
-            if ($loaded.excludeExtensions) { $config.excludeExtensions = $loaded.excludeExtensions }
             if ($loaded.patterns) { $config.patterns = $loaded.patterns }
             if ($null -ne $loaded.openExplorerOnRender) { $config.openExplorerOnRender = $loaded.openExplorerOnRender }
         }
@@ -282,28 +272,6 @@ function Test-ExcludedPath {
     $false
 }
 
-function Test-ExcludedExtension {
-    <#
-    .SYNOPSIS
-        Checks if a file extension is in the exclusion list.
-
-    .EXAMPLE
-        Test-ExcludedExtension -Extension ".exe" -ExcludeExtensions @(".exe", ".dll")
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Extension,
-
-        [string[]]$ExcludeExtensions = $script:DefaultExcludeExtensions
-    )
-
-    foreach ($ext in $ExcludeExtensions) {
-        if ($Extension -ieq $ext) { return $true }
-    }
-    $false
-}
-
 function Test-ExcludedIp {
     <#
     .SYNOPSIS
@@ -477,7 +445,6 @@ Export-ModuleMember -Function @(
     'Test-BinaryFile'
     'Get-FileEncoding'
     'Test-ExcludedPath'
-    'Test-ExcludedExtension'
     'Test-ExcludedIp'
     'New-FakeIp'
     'New-FakeHostname'
@@ -489,6 +456,5 @@ Export-ModuleMember -Function @(
 
 Export-ModuleMember -Variable @(
     'DefaultExcludePaths'
-    'DefaultExcludeExtensions'
     'Ipv4Regex'
 )
