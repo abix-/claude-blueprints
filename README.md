@@ -12,116 +12,47 @@ claude-blueprints/
 └── settings.json     # Global settings with hooks (copy to ~/.claude/)
 ```
 
-## Dependencies
-
-### claude-depester
-
-Replaces whimsical spinner words ("Flibbertigibbeting", "Discombobulating") with standard "Thinking" text.
-
-**Run outside of Claude Code** (patches the binary, can't patch itself while running):
+## Quick Setup
 
 ```powershell
-npx claude-depester --all
-```
-
-The `settings.json` SessionStart hook runs `npx claude-depester --all --silent` to re-apply after updates.
-
-See: https://github.com/ominiverdi/claude-depester
-
-## Skills
-
-| Skill | Description |
-|-------|-------------|
-| [automation-code](skills/automation-code.md) | Ansible and PowerShell development standards |
-
-## Sanitizer
-
-The sanitizer system prevents Claude from seeing real credentials, IPs, and hostnames while still allowing code execution. It works by:
-
-1. **On session start** — Replaces real values with fake ones in your working directory
-2. **During execution** — Runs commands in a sealed temp environment with real values restored
-3. **On session end** — Auto-renders a copy with real values to `~/.claude/rendered/`
-
-Your working directory always contains fake values, so it's safe for Claude to read.
-
-### Sanitizer Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `Sanitize.ps1` | Replaces real→fake values on session start |
-| `SealedExec.ps1` | Executes commands in isolated temp environment with real values |
-| `RunWrapper.ps1` | Hook that routes Bash commands through SealedExec |
-| `AutoRenderReal.ps1` | Stop hook that renders real version on exit |
-| `RenderReal.ps1` | Manual render to custom location |
-| `SanitizeOutput.ps1` | Sanitizes command output |
-| `Initialize.ps1` | One-time setup, creates template files |
-
-### Passthrough Commands
-
-These commands run directly without sealed execution (they don't need real values):
-- `git`, `gh` (GitHub CLI)
-- File operations: `ls`, `cd`, `pwd`, `mkdir`, `rm`, `cp`, `mv`
-- Read commands: `cat`, `head`, `tail`, `grep`, `find`
-
-## Setup
-
-### New Machine Setup
-
-```powershell
-# 1. Clone the repo
+# 1. Clone
 git clone https://github.com/abix-/claude-blueprints.git
 
 # 2. Copy config files
 Copy-Item claude-blueprints/CLAUDE.md ~/.claude/
 Copy-Item claude-blueprints/settings.json ~/.claude/
-
-# 3. Copy sanitizer scripts
 Copy-Item -Recurse claude-blueprints/sanitizer ~/.claude/
 
-# 4. Initialize (creates secrets.json template)
+# 3. Initialize sanitizer and edit secrets
 ~/.claude/sanitizer/Initialize.ps1
-
-# 5. Edit secrets.json with your real->fake mappings
 notepad ~/.claude/sanitizer/secrets.json
 
-# 6. Restart Claude Code
+# 4. Patch spinner words (run outside Claude)
+npx claude-depester --all
+
+# 5. Start Claude Code
 ```
 
-### secrets.json Format
+Or tell Claude: *"Clone https://github.com/abix-/claude-blueprints and help me set up my Claude config from it"*
 
-```json
-{
-  "mappings": {
-    "real-server.internal.corp": "fake-server.example.test",
-    "192.168.1.100": "11.22.33.44",
-    "my-api-key": "FAKE_API_KEY"
-  },
-  "patterns": {
-    "ipv4": true,
-    "hostnames": ["\\.internal\\.corp$", "\\.local$"]
-  }
-}
-```
+## Components
 
-- **mappings** — Explicit real→fake replacements
-- **patterns.ipv4** — Auto-discover and replace private IPs
-- **patterns.hostnames** — Regex patterns for hostnames to auto-discover
+### [Sanitizer](sanitizer/README.md)
 
-### Claude Code Quick Setup
+Prevents sensitive identifiers (server names, IPs, domains) from being sent to Anthropic. Working tree stays fake; real values only exist in sealed temp directories during execution.
 
-Tell Claude:
+### Skills
 
-> "Clone https://github.com/abix-/claude-blueprints and help me set up my Claude config from it"
+| Skill | Description |
+|-------|-------------|
+| [automation-code](skills/automation-code.md) | Ansible and PowerShell development standards |
 
-### Claude Web
+### claude-depester
 
-Upload skill files directly via Settings → Capabilities → Skills.
+Replaces whimsical spinner words ("Flibbertigibbeting") with "Thinking". Must run outside Claude (patches the binary). SessionStart hook re-applies after updates.
 
-## Files Never Read by Claude
+See: https://github.com/ominiverdi/claude-depester
 
-These are blocked via `CLAUDE.md` instructions and `RunWrapper.ps1`:
+## Claude Web
 
-- `~/.claude/sanitizer/secrets.json` — Contains real mappings
-- `~/.claude/sanitizer/auto_mappings.json` — Auto-discovered mappings
-- `~/.claude/rendered/` — Contains real values
-- `%TEMP%/claude-sealed-*` — Temporary execution directories
+Upload skill files via Settings → Capabilities → Skills.
