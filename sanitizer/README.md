@@ -4,57 +4,69 @@ Prevent sensitive identifiers (server names, IPs, domains) from being sent to An
 
 ## How It Works
 
-**Working tree is ALWAYS fake.** Real values never exist in the working directory during a Claude session.
+**Working tree is ALWAYS fake.** Real values never exist in the working directory.
+
+### Session Lifecycle
 
 ```
-WORKING TREE (fake)                 SEALED EXEC (temp)                 RENDERED (on exit)
-┌─────────────────────┐             ┌─────────────────────┐           ┌─────────────────────┐
-│ server: fake.test   │──command───>│ server: real.corp   │           │ server: real.corp   │
-│ ip: 11.22.33.44     │             │ ip: 192.168.1.100   │           │ ip: 192.168.1.100   │
-└─────────────────────┘             │ (runs, then deleted)│           └─────────────────────┘
-        ^                           └─────────────────────┘                    ^
-        │                                     │                                │
-   Claude sees                         sanitized output                  you use this
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SESSION START                                                               │
+│                                                                             │
+│   Your Files                         Working Tree                           │
+│   ┌──────────────────┐    scan &    ┌──────────────────┐                   │
+│   │ 192.168.1.100    │───sanitize──>│ 11.22.33.44      │ <── Claude sees   │
+│   │ prod.internal    │              │ host-abc.test    │                   │
+│   └──────────────────┘              └──────────────────┘                   │
+│                                                                             │
+│   Auto-discovers IPs & hostnames, generates fake values, saves mappings    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DURING SESSION - Command Execution                                          │
+│                                                                             │
+│   Claude runs: ansible-playbook site.yml                                    │
+│                                                                             │
+│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                  │
+│   │ Working Tree│     │ Temp Copy   │     │   Output    │                  │
+│   │   (fake)    │────>│   (real)    │────>│   (fake)    │                  │
+│   │             │copy │             │exec │             │                  │
+│   │ 11.22.33.44 │     │192.168.1.100│     │ 11.22.33.44 │ <── Claude sees  │
+│   └─────────────┘     └──────┬──────┘     └─────────────┘                  │
+│                              │                                              │
+│                         deleted immediately                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SESSION END                                                                 │
+│                                                                             │
+│   Working Tree                       Rendered Output                        │
+│   ┌──────────────────┐    render    ┌──────────────────┐                   │
+│   │ 11.22.33.44      │─────────────>│ 192.168.1.100    │ <── You deploy    │
+│   │ host-abc.test    │              │ prod.internal    │                   │
+│   └──────────────────┘              └──────────────────┘                   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Hook Lifecycle
+### Command Routing
 
-**1. SessionStart → Sanitize working tree**
-- Scans all text files in project
-- Discovers IPs and hostnames matching configured patterns
-- Generates fake values: IPs → `11.x.x.x`, hostnames → `host-xxxxx.example.test`
-- Saves discovered mappings to `autoMappings` in sanitizer.json
-- Replaces all real values with fake values in working tree
-- Claude only ever sees the sanitized version
-
-**2. PreToolUse (Bash) → Route commands**
-
-Commands are classified into three categories:
-
-| Category | Examples | Behavior |
-|----------|----------|----------|
-| **Blocked** | Access to `sanitizer.json`, `rendered/` | Denied with error |
-| **Passthrough** | `git`, `ls`, `cat`, `grep`, `mkdir` | Run directly (files already sanitized) |
-| **Sealed** | `ansible-playbook`, `npm run`, `python` | Routed through SealedExec |
-
-**3. SealedExec → Isolated execution with real values**
-
-For commands that need real credentials/hosts to execute:
-
-1. Creates temp directory (`%TEMP%\claude-sealed-<guid>`)
-2. Copies entire working tree to temp
-3. Renders fake→real in the temp copy
-4. Executes command inside temp directory
-5. Captures stdout/stderr
-6. **Deletes temp directory** (always, even on error)
-7. Sanitizes output (real→fake) before returning to Claude
-
-Real values exist only in the ephemeral temp directory during execution.
-
-**4. SessionStop → Render for deployment**
-- Copies working tree to `renderPath` (default: `~/.claude/rendered/{project}/`)
-- Renders fake→real in the output copy
-- You deploy/run from the rendered directory
+```
+                              ┌─────────────────────┐
+                              │   Bash Command      │
+                              └──────────┬──────────┘
+                                         │
+                    ┌────────────────────┼────────────────────┐
+                    ▼                    ▼                    ▼
+            ┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+            │   BLOCKED     │    │  PASSTHROUGH  │    │    SEALED     │
+            │               │    │               │    │               │
+            │ sanitizer.json│    │ git, ls, cat  │    │ ansible, npm  │
+            │ rendered/**   │    │ grep, mkdir   │    │ python, make  │
+            │               │    │               │    │               │
+            │   ✗ denied    │    │ run directly  │    │ temp dir exec │
+            └───────────────┘    └───────────────┘    └───────────────┘
+```
 
 ## Setup
 
