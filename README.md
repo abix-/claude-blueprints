@@ -21,6 +21,7 @@ git clone https://github.com/abix-/claude-blueprints.git
 # 2. Copy config files
 Copy-Item claude-blueprints/CLAUDE.md ~/.claude/
 Copy-Item claude-blueprints/settings.json ~/.claude/
+Copy-Item -Recurse claude-blueprints/skills ~/.claude/
 Copy-Item -Recurse claude-blueprints/sanitizer ~/.claude/
 
 # 3. Initialize sanitizer and edit secrets
