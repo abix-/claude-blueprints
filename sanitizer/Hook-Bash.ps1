@@ -38,8 +38,6 @@ if (-not $command) { exit 0 }
 
 $blockedPatterns = @(
     '[\\/]secrets\.json(?![.\w])'           # exact file, not secrets.json.example
-    '[\\/]auto_mappings\.json(?![.\w])'     # exact file
-    '[\\/]ip_mappings_temp\.json(?![.\w])'  # exact file
     'claude-sealed-'                        # temp sealed directories
     '\.claude[\\/]rendered'                 # rendered output directory
 )

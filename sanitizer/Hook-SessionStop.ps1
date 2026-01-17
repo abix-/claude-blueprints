@@ -25,7 +25,7 @@ Import-Module "$SanitizerDir\Sanitizer.psm1" -Force
 
 $paths = Get-SanitizerPaths -SanitizerDir $SanitizerDir
 $config = Get-SanitizerConfig -SecretsPath $paths.Secrets
-$reverseMappings = Get-ReverseMappings -SecretsPath $paths.Secrets -AutoMappingsPath $paths.AutoMappings
+$reverseMappings = Get-ReverseMappings -SecretsPath $paths.Secrets
 
 if ($reverseMappings.Count -eq 0) {
     Write-Host "No mappings found - skipping auto-render" -ForegroundColor Yellow

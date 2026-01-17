@@ -42,7 +42,7 @@ Import-Module "$SanitizerDir\Sanitizer.psm1" -Force
 
 $paths = Get-SanitizerPaths -SanitizerDir $SanitizerDir
 $config = Get-SanitizerConfig -SecretsPath $paths.Secrets
-$reverseMappings = Get-ReverseMappings -SecretsPath $paths.Secrets -AutoMappingsPath $paths.AutoMappings
+$reverseMappings = Get-ReverseMappings -SecretsPath $paths.Secrets
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan

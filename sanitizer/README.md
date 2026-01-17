@@ -42,6 +42,7 @@ cd $env:USERPROFILE\.claude\sanitizer
     "real-server.internal.corp": "fake-server.example.test",
     "secret-api-key-12345": "FAKE_API_KEY"
   },
+  "autoMappings": {},
   "excludePaths": [".git", "node_modules", ".claude"],
   "excludeExtensions": [".exe", ".dll", ".png", ".jpg"],
   "patterns": {
@@ -52,7 +53,9 @@ cd $env:USERPROFILE\.claude\sanitizer
 }
 ```
 
-IPs are auto-discovered. Only add manual mappings for non-IP secrets.
+- `mappings`: Your manual real → fake mappings
+- `autoMappings`: Auto-discovered IPs/hostnames (populated automatically)
+- IPs are auto-discovered. Only add manual mappings for non-IP secrets.
 
 ### 3. Configure settings.json
 
@@ -61,7 +64,6 @@ IPs are auto-discovered. Only add manual mappings for non-IP secrets.
   "permissions": {
     "deny": [
       "~/.claude/sanitizer/secrets.json",
-      "~/.claude/sanitizer/auto_mappings.json",
       "~/.claude/rendered/**"
     ]
   },
@@ -112,8 +114,7 @@ Working tree stays fake (safe). Manually render:
 
 | File | Type | Purpose |
 |------|------|---------|
-| `secrets.json` | Config | Your manual mappings (real → fake) |
-| `auto_mappings.json` | Config | Auto-discovered IPs/hostnames |
+| `secrets.json` | Config | All mappings (manual + auto) and settings |
 | `Hook-SessionStart.ps1` | Hook (SessionStart) | Replaces real values with fake in working tree |
 | `Hook-Bash.ps1` | Hook (PreToolUse) | Routes commands through sealed execution |
 | `Hook-SessionStop.ps1` | Hook (Stop) | Renders real version on exit |
@@ -133,5 +134,4 @@ These run directly without sealed execution (they don't need real values):
 ### Files Blocked from Claude
 
 - `~/.claude/sanitizer/secrets.json`
-- `~/.claude/sanitizer/auto_mappings.json`
 - `~/.claude/rendered/**`
