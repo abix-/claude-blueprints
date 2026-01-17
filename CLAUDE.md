@@ -9,9 +9,9 @@ Follow standards in `~/.claude/skills/try-harder.md` for every response.
 - Do NOT add `Co-Authored-By` lines to commits
 - Keep commit messages concise and lowercase
 
-## Automation Code
+## Ansible & PowerShell
 
-Follow standards in `~/.claude/skills/automation-code.md` when writing PowerShell or Ansible.
+Follow standards in `~/.claude/skills/ansible-powershell.md` when writing PowerShell or Ansible.
 
 ## Skill Management
 
