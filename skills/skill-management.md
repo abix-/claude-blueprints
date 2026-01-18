@@ -2,8 +2,8 @@
 name: skill-management
 description: How to create, version, and maintain Claude skills. Read this skill FIRST when creating or modifying any skill file.
 metadata:
-  version: "3.0"
-  updated: "2026-01-17"
+  version: "3.1"
+  updated: "2026-01-18"
 ---
 # Skill Management
 
@@ -22,23 +22,18 @@ metadata:
 
 ```yaml
 ---
-name: skill-name
-description: When to use this skill
-metadata:
+name: skill-name           # required
+description: When to use   # required
+license: MIT               # optional
+allowed-tools: [...]       # optional
+compatibility: "1.0"       # optional
+metadata:                  # optional, for custom fields
   version: "X.Y"
   updated: "YYYY-MM-DD"
 ---
 ```
 
-### Allowed Frontmatter Keys
-- `name` — skill identifier (required)
-- `description` — when Claude should use this skill (required)
-- `license` — optional
-- `allowed-tools` — optional
-- `compatibility` — optional
-- `metadata` — nested object for custom fields (version, date, etc.)
-
-Any key not in this list causes upload rejection on Claude web. Put custom fields inside `metadata:`.
+Only these keys allowed at root level. Unknown keys cause upload rejection on Claude web.
 
 ## Versioning Rules
 

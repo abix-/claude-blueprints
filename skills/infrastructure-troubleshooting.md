@@ -2,8 +2,8 @@
 name: infrastructure-troubleshooting
 description: Systematic methodology for diagnosing infrastructure problems across compute, storage, network, and virtualization layers. Use as the starting framework for any troubleshooting scenario, then reference platform-specific skills (vmware-esxi-performance, etc.) for deep dives.
 metadata:
-  version: "1.0"
-  updated: "2026-01-10"
+  version: "1.1"
+  updated: "2026-01-18"
 ---
 # Infrastructure Troubleshooting Methodology
 
@@ -77,20 +77,12 @@ Performance problem reported
 
 ### Storage Latency
 
-**First question:** Is latency from the array or the hypervisor?
+**First question:** Is latency from the array (DAVG) or the hypervisor (KAVG)?
 
-| Metric | Source | Meaning |
-|--------|--------|---------|
-| DAVG | Array | Storage array response time |
-| KAVG | Hypervisor | Kernel/queue processing time |
-| GAVG | Combined | What guest actually experiences |
-
-**Interpretation:**
 - High DAVG, low KAVG → Array problem
 - Low DAVG, high KAVG → Hypervisor throttling or queue saturation
-- Both high → Array slow AND backing up
 
-**Deep dive:** See `vmware-esxi-performance` skill for esxtop commands and DSNRO tuning.
+**Deep dive:** See `vmware-esxi-performance` skill for metrics, thresholds, esxtop commands, and DSNRO tuning.
 
 ### Network Performance
 
@@ -119,16 +111,9 @@ Even 1-2% loss destroys TCP throughput.
 
 ### CPU Contention
 
-**First question:** Is the workload starved for CPU?
+**First question:** Is the workload starved for CPU? Check %RDY (ready time) and %CSTP (co-stop) in esxtop.
 
-| Metric | Threshold | Meaning |
-|--------|-----------|---------|
-| %RDY | > 5% | VM waiting for physical CPU |
-| %CSTP | > 3% | Multi-vCPU scheduling conflict |
-
-**Note:** %RDY is aggregate for multi-vCPU VMs. Divide by vCPU count.
-
-**Deep dive:** See `vmware-esxi-performance` skill for esxtop CPU analysis.
+**Deep dive:** See `vmware-esxi-performance` skill for thresholds and analysis.
 
 ### Firewall/Security Devices
 
