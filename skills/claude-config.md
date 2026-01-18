@@ -2,7 +2,7 @@
 name: claude-config
 description: Managing Claude configuration - skills, hooks, settings, and sync workflow. Read first when modifying any Claude config.
 metadata:
-  version: "1.2"
+  version: "1.3"
   updated: "2026-01-18"
 ---
 # Claude Config
@@ -82,9 +82,11 @@ JSON on stdin with `hook_event_name` and `tool_input`. Check `tool_input.file_pa
 Both sync: skills/, hooks/, commands/, sanitizer/, CLAUDE.md, settings.json
 
 ### Command Files
-- Embed code directly in command files — don't create separate script files
+- Embed code directly in command files — don't create temp/helper scripts
+- When a command exists, use it — don't manually recreate its embedded code
 - Code > instructions for reliability (deterministic, no interpretation variance)
 - Sync operations should remove orphan files, not just overwrite
+- Bash mangles PowerShell $ variables — use -EncodedCommand (base64) when needed
 
 ### After Changes
 1. Make changes locally in ~/.claude
