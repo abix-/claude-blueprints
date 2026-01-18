@@ -36,16 +36,25 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
           ┌────────────────────────────┼────────────────────────────┐
           ▼                            ▼                            ▼
     ┌───────────┐               ┌───────────┐               ┌───────────┐
-    │  BLOCKED  │               │PASSTHROUGH│               │UNSANITIZED│
-    │           │               │           │               │           │
-    │sanitizer. │               │ git, ls   │               │powershell │
-    │json, etc. │               │ cat, grep │               │ python    │
-    │           │               │ mkdir, rm │               │ npm, make │
+    │   DENY    │               │   FAKE    │               │   REAL    │
     └─────┬─────┘               └─────┬─────┘               └─────┬─────┘
-          ▼                           ▼                           │
-       denied                   run directly                      │
-                             (files already fake)                 │
-                                                                  ▼
+          │                           │                           │
+          ▼                           ▼                           ▼
+
+    Command tries to         Command runs in            Command runs in
+    access sanitizer.json    WORKING TREE               UNSANITIZED DIR
+    or unsanitized/**        (fake values)              (real values)
+
+    Examples:                Examples:                  Examples:
+    - cat sanitizer.json     - git status               - powershell script.ps1
+    - ls ~/.claude/uns...    - ls, cat, grep            - python deploy.py
+                             - mkdir, rm, cp            - npm run build
+
+    ✗ Blocked                Runs directly              Syncs changes, runs
+                                                        with real values,
+                                                        output sanitized
+                                                               │
+                                                               ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ STEP 2: Sync changes to unsanitized directory                           │
 │                                                                         │
