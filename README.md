@@ -42,6 +42,7 @@ Prevents sensitive identifiers (server names, IPs, domains) from being sent to A
 |-------|-------------|
 | [ansible-powershell](skills/ansible-powershell.md) | Ansible and PowerShell development standards |
 | [claude-config](skills/claude-config.md) | Skills, hooks, settings, and sync workflow |
+| [golang](skills/golang.md) | Go development standards |
 | [infrastructure-troubleshooting](skills/infrastructure-troubleshooting.md) | Diagnosing infrastructure problems |
 | [try-harder](skills/try-harder.md) | Response calibration for accuracy and efficiency |
 | [vmware-esxi-performance](skills/vmware-esxi-performance.md) | ESXi storage/network performance troubleshooting |
