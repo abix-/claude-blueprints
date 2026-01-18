@@ -40,13 +40,15 @@ foreach ($pattern in $blockedPatterns) {
     }
 }
 
-# === FAKE ===
-$fakePatterns = @('^\s*git\s', '^\s*gh\s', '^\s*cd\s', '^\s*ls\b', '^\s*dir\b', '^\s*pwd\b', '^\s*echo\s',
-    '^\s*mkdir\s', '^\s*rm\s', '^\s*cp\s', '^\s*mv\s', '^\s*cat\s', '^\s*head\s', '^\s*tail\s',
-    '^\s*wc\s', '^\s*find\s', '^\s*grep\s', '^\s*which\s', '^\s*where\s', '^\s*test\s', '^\s*\[\s')
-foreach ($pattern in $fakePatterns) { if ($command -match $pattern) { exit 0 } }
-
 # === REAL ===
+$realPatterns = @('^\s*powershell', '^\s*pwsh', '^\s*\.\\.*\.ps1', '^\s*&\s')
+$isReal = $false
+foreach ($pattern in $realPatterns) { if ($command -match $pattern) { $isReal = $true; break } }
+
+# === FAKE (default) ===
+if (-not $isReal) { exit 0 }
+
+# === Execute in unsanitized ===
 $projectPath = (Get-Location).Path
 $projectName = Split-Path $projectPath -Leaf
 $unsanitizedPath = ($config.unsanitizedPath -replace '\{project\}', $projectName) -replace '^~', $env:USERPROFILE
