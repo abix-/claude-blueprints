@@ -3,11 +3,6 @@ description: Pull claude-blueprints repo and apply to ~/.claude
 allowed-tools: Bash(cp:*), Bash(git:*)
 ---
 
-## Context
-
-- Local skills: !`ls ~/.claude/skills/`
-- Local hooks: !`ls ~/.claude/hooks/`
-
 ## Task
 
 Pull repo changes and apply to local Claude config:
