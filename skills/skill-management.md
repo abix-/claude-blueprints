@@ -2,7 +2,7 @@
 name: skill-management
 description: How to create, version, and maintain Claude skills. Read this skill FIRST when creating or modifying any skill file.
 metadata:
-  version: "3.1"
+  version: "3.2"
   updated: "2026-01-18"
 ---
 # Skill Management
@@ -56,9 +56,21 @@ skills/
 
 1. Write content with frontmatter
 2. Save to `skills/skill-name.md`
-3. Add reference to `CLAUDE.md` describing when to use it
+3. Add reference to `CLAUDE.md` (see format below)
 4. Add entry to `README.md` skills table
 5. Commit and push
+
+## CLAUDE.md Format
+
+Use explicit read instructions — "follow standards in X" doesn't trigger file reads.
+
+**Good:** `When writing PowerShell, read ~/.claude/skills/ansible-powershell.md first.`
+**Bad:** `Follow standards in ~/.claude/skills/ansible-powershell.md when writing PowerShell.`
+
+Keep CLAUDE.md lean:
+- No section headers (## waste tokens for small files)
+- One skill reference per line
+- Trigger condition + read instruction
 
 ## Modifying Existing Skills
 
@@ -71,5 +83,5 @@ skills/
 
 - Frontmatter uses only allowed keys
 - Version incremented, date updated
-- CLAUDE.md references the skill with usage context
+- CLAUDE.md has explicit read instruction (not "follow standards in")
 - README.md skills table updated
