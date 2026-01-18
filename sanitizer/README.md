@@ -26,7 +26,7 @@ When Claude Code launches, BEFORE Claude sees anything:
     ┌─────────────────────┐                 ┌─────────────────────┐
     │ inventory.yml       │    scan &       │ inventory.yml       │
     │ ─────────────────── │    replace      │ ─────────────────── │
-    │ host: 11.100.201.234 │ ──────────────► │ host: 11.22.33.44   │
+    │ host: 111.91.241.85 │ ──────────────► │ host: 111.52.117.80 │
     │ name: prod.internal │   (in place)    │ name: host-a1b.test │
     └─────────────────────┘                 └─────────────────────┘
                                                       ▲
@@ -72,7 +72,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │                                                                         │
 │     Working Tree                         Unsanitized Directory          │
 │     ┌─────────────────┐     copy &       ┌─────────────────┐            │
-│     │ 11.22.33.44     │   unsanitize     │ 11.100.201.234   │            │
+│     │ 111.52.117.80   │   unsanitize     │ 111.91.241.85   │            │
 │     │ host-a1b.test   │ ───────────────► │ prod.internal   │            │
 │     └─────────────────┘   (changed       └─────────────────┘            │
 │                            files only)                                  │
@@ -84,7 +84,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │         (command runs with REAL values)                                 │
 │                                                                         │
 │         "Deploying to prod.internal..."                                 │
-│         "Connected to 11.100.201.234"                                    │
+│         "Connected to 111.91.241.85"                                     │
 └─────────────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼
@@ -92,7 +92,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │ STEP 4: Sanitize output (real → fake)                                   │
 │                                                                         │
 │         "Deploying to host-a1b.test..."   ◄── Claude sees this          │
-│         "Connected to 11.22.33.44"                                      │
+│         "Connected to 111.52.117.80"                                     │
 └─────────────────────────────────────────────────────────────────────────┘
 
 
@@ -134,27 +134,26 @@ Create `~/.claude/sanitizer/sanitizer.json`:
 
 ```json
 {
-    "mappings": {
-        "real-server.internal.corp": "fake-server.example.test"
+    "hostnamePatterns": ["\\.domain\\.local$"],
+    "mappingsAuto": {},
+    "mappingsManual": {
+        "server.domain.local": "server.example.test",
+        "192.168.1.100": "111.50.100.1",
+        "C:\\Users\\realuser": "C:\\Users\\fakeuser",
+        "secretproject": "projectname"
     },
-    "autoMappings": {},
-    "patterns": {
-        "ipv4": true,
-        "hostnames": ["\\.internal\\.corp$", "\\.local$"]
-    },
-    "unsanitizedPath": "~/.claude/unsanitized/{project}",
-    "excludePaths": [".git", "node_modules", ".venv", "__pycache__"]
+    "skipPaths": [".git", "node_modules", ".venv", "__pycache__"],
+    "unsanitizedPath": "~/.claude/unsanitized/{project}"
 }
 ```
 
 | Field | Description |
 |-------|-------------|
-| `mappings` | Manual real → fake mappings (takes precedence) |
-| `autoMappings` | Auto-discovered IPs/hostnames (populated automatically) |
-| `patterns.ipv4` | Auto-discover IPv4 addresses |
-| `patterns.hostnames` | Regex patterns for hostname discovery |
+| `mappingsManual` | Manual real → fake mappings (takes precedence) |
+| `mappingsAuto` | Auto-discovered IPs/hostnames (populated automatically) |
+| `hostnamePatterns` | Regex patterns for hostname discovery |
+| `skipPaths` | Paths to skip during sanitization |
 | `unsanitizedPath` | Where to write unsanitized version (`{project}` expands to project folder name) |
-| `excludePaths` | Paths to skip during sanitization |
 
 ### 4. Configure settings.json
 
@@ -237,8 +236,8 @@ Commands:
 
 ```powershell
 # Sanitize text with deterministic fake IPs
-echo "Server at 11.100.201.234" | sanitizer.exe sanitize-ips
-# Output: Server at 11.145.240.80
+echo "Server at 111.91.241.85" | sanitizer.exe sanitize-ips
+# Output: Server at 111.52.117.80
 
 # Manually run session start (sanitize current directory)
 sanitizer.exe hook-session-start
@@ -281,15 +280,16 @@ Everything else: `git`, `ls`, `npm`, `python`, etc.
 - Loopback: `127.x.x.x`
 - Broadcast: `0.0.0.0`, `255.255.255.255`
 - Link-local: `169.254.x.x`
-- Multicast: `224.x.x.x`, `239.x.x.x`
-- Already fake: `11.x.x.x` (our fake range)
+- Multicast: `224.x.x.x` - `239.x.x.x`
+- Subnet masks: `255.x.x.x`
+- Already fake: `111.x.x.x` (our fake range)
 
 ### Fake IP generation
 
-- **Random**: Used for auto-discovered values (stored in `autoMappings`)
+- **Random**: Used for auto-discovered values (stored in `mappingsAuto`)
 - **Deterministic**: Used for output scrubbing (MD5 hash → consistent fake IP)
 
-All fake IPs use the `11.x.x.x` range.
+All fake IPs use the `111.x.x.x` range.
 
 ## Project Structure
 
@@ -324,8 +324,8 @@ Check `settings.json` paths point to the correct binary location.
 ### Files not sanitized
 
 1. Check `sanitizer.json` exists and is valid JSON
-2. Check `patterns.ipv4` is `true` or `patterns.hostnames` has patterns
-3. Check file isn't in `excludePaths`
+2. Check `hostnamePatterns` has patterns for hostname discovery (IPv4 is always enabled)
+3. Check file isn't in `skipPaths`
 4. Check file isn't binary or >10MB
 
 ### Command runs with fake values when it shouldn't

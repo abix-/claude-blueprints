@@ -27,21 +27,21 @@ Write-Host "Build successful`n" -ForegroundColor Green
 
 # sanitize-ips tests
 if (Test-Command "sanitize-ips: Basic IP replacement" {
-    $input = "Server at 11.100.201.234 and 11.178.40.57"
+    $input = "Server at 192.168.1.100 and 10.0.0.50"
     $result = $input | & $sanitizer sanitize-ips
     if ($result -match "192\.168\." -or $result -match "10\.0\.0\.") {
         throw "IPs not sanitized: $result"
     }
-    if ($result -notmatch "11\.\d+\.\d+\.\d+.*11\.\d+\.\d+\.\d+") {
-        throw "Expected fake IPs (11.x.x.x), got: $result"
+    if ($result -notmatch "111\.\d+\.\d+\.\d+.*111\.\d+\.\d+\.\d+") {
+        throw "Expected fake IPs (111.x.x.x), got: $result"
     }
     Write-Host "Input:  $input"
     Write-Host "Output: $result"
 }) { $passed++ } else { $failed++ }
 
 if (Test-Command "sanitize-ips: Deterministic (same input = same output)" {
-    $r1 = "11.100.201.234" | & $sanitizer sanitize-ips
-    $r2 = "11.100.201.234" | & $sanitizer sanitize-ips
+    $r1 = "192.168.1.100" | & $sanitizer sanitize-ips
+    $r2 = "192.168.1.100" | & $sanitizer sanitize-ips
     if ($r1 -ne $r2) { throw "Not deterministic: '$r1' vs '$r2'" }
     if ($r1 -match "192\.168\.") { throw "IP not sanitized: $r1" }
     Write-Host "Both runs: $r1"
@@ -142,9 +142,9 @@ if (Test-Command "hook-session-start: Sanitize test project" {
 
     $testContent = @"
 # Config file
-server = 11.240.240.35
-backup = 11.63.167.174
-gateway = 11.112.65.63
+server = 192.168.50.100
+backup = 10.0.0.50
+gateway = 172.16.1.1
 "@
     Set-Content "$testDir/config.txt" $testContent
 
@@ -157,10 +157,10 @@ gateway = 11.112.65.63
         if ($sanitized -match "192\.168\.50\.100") {
             throw "IP not sanitized: $sanitized"
         }
-        if ($sanitized -notmatch "11\.\d+\.\d+\.\d+") {
+        if ($sanitized -notmatch "111\.\d+\.\d+\.\d+") {
             throw "No fake IPs found: $sanitized"
         }
-        Write-Host "Original IPs: 11.240.240.35, 11.63.167.174, 11.112.65.63"
+        Write-Host "Original IPs: 192.168.50.100, 10.0.0.50, 172.16.1.1"
         Write-Host "Sanitized content:"
         Write-Host $sanitized
     } finally {
@@ -180,7 +180,7 @@ if (Test-Command "hook-session-stop: Sync to unsanitized" {
 
     # Start with real IP
     New-Item -ItemType Directory -Path $testDir -Force | Out-Null
-    Set-Content "$testDir/test.txt" "server = 11.133.173.80"
+    Set-Content "$testDir/test.txt" "server = 192.168.1.50"
 
     Push-Location $testDir
     try {
@@ -189,7 +189,7 @@ if (Test-Command "hook-session-stop: Sync to unsanitized" {
 
         $sanitized = Get-Content "$testDir/test.txt"
         Write-Host "After session-start: $sanitized"
-        if ($sanitized -notmatch "11\.\d+\.\d+\.\d+") {
+        if ($sanitized -notmatch "111\.\d+\.\d+\.\d+") {
             throw "IP not sanitized after session-start: $sanitized"
         }
 

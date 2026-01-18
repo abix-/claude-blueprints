@@ -22,7 +22,7 @@ func HookSessionStart(input []byte) ([]byte, error) {
 	}
 
 	autoMappings := make(map[string]string)
-	for k, v := range cfg.AutoMappings {
+	for k, v := range cfg.MappingsAuto {
 		autoMappings[k] = v
 	}
 
@@ -34,7 +34,7 @@ func HookSessionStart(input []byte) ([]byte, error) {
 		}
 
 		relPath, _ := filepath.Rel(projectPath, path)
-		if IsExcludedPath(relPath, cfg.ExcludePaths) {
+		if IsSkippedPath(relPath, cfg.SkipPaths) {
 			return nil
 		}
 		if info.Size() == 0 || info.Size() > 10*1024*1024 {
@@ -59,15 +59,13 @@ func HookSessionStart(input []byte) ([]byte, error) {
 		}
 		text := string(content)
 
-		if cfg.Patterns.IPv4 {
-			for _, ip := range ipRegex.FindAllString(text, -1) {
-				if !IsExcludedIP(ip) {
-					discovered[ip] = "ip"
-				}
+		for _, ip := range ipRegex.FindAllString(text, -1) {
+			if !IsExcludedIP(ip) {
+				discovered[ip] = "ip"
 			}
 		}
 
-		for _, pattern := range cfg.Patterns.Hostnames {
+		for _, pattern := range cfg.HostnamePatterns {
 			re, err := regexp.Compile(`(?i)[a-zA-Z0-9][-a-zA-Z0-9\.]*` + regexp.QuoteMeta(pattern))
 			if err != nil {
 				continue
@@ -80,7 +78,7 @@ func HookSessionStart(input []byte) ([]byte, error) {
 
 	// Generate mappings for new discoveries
 	for real, typ := range discovered {
-		if _, exists := cfg.Mappings[real]; exists {
+		if _, exists := cfg.MappingsManual[real]; exists {
 			continue
 		}
 		if _, exists := autoMappings[real]; exists {
@@ -93,7 +91,7 @@ func HookSessionStart(input []byte) ([]byte, error) {
 		}
 	}
 
-	if len(autoMappings) > len(cfg.AutoMappings) {
+	if len(autoMappings) > len(cfg.MappingsAuto) {
 		SaveAutoMappings(autoMappings)
 	}
 
@@ -102,7 +100,7 @@ func HookSessionStart(input []byte) ([]byte, error) {
 	for k, v := range autoMappings {
 		allMappings[k] = v
 	}
-	for k, v := range cfg.Mappings {
+	for k, v := range cfg.MappingsManual {
 		allMappings[k] = v
 	}
 
@@ -152,7 +150,7 @@ func HookSessionStop(input []byte) ([]byte, error) {
 		return UnsanitizeText(content, reverseMappings)
 	}
 
-	SyncDir(projectPath, unsanitizedPath, cfg.ExcludePaths, transform)
+	SyncDir(projectPath, unsanitizedPath, cfg.SkipPaths, transform)
 
 	return nil, nil
 }

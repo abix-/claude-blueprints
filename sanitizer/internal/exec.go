@@ -31,7 +31,7 @@ func Exec(command string) error {
 	transform := func(content string) string {
 		return UnsanitizeText(content, reverseMappings)
 	}
-	_ = SyncDir(projectPath, unsanitizedPath, cfg.ExcludePaths, transform)
+	_ = SyncDir(projectPath, unsanitizedPath, cfg.SkipPaths, transform)
 
 	// Execute command in unsanitized directory via PowerShell
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command", command)

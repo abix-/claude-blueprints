@@ -11,13 +11,12 @@ var (
 	ipv4Regex = regexp.MustCompile(`\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b`)
 
 	excludeIPPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`^127\.`),
-		regexp.MustCompile(`^0\.0\.0\.0$`),
-		regexp.MustCompile(`^255\.255\.255\.255$`),
-		regexp.MustCompile(`^169\.254\.`),
-		regexp.MustCompile(`^224\.`),
-		regexp.MustCompile(`^239\.`),
-		regexp.MustCompile(`^11\.\d+\.\d+\.\d+$`),
+		regexp.MustCompile(`^127\.`),              // loopback
+		regexp.MustCompile(`^0\.0\.0\.0$`),        // unspecified
+		regexp.MustCompile(`^255\.`),              // subnet masks
+		regexp.MustCompile(`^169\.254\.`),         // link-local
+		regexp.MustCompile(`^2(2[4-9]|3[0-9])\.`), // multicast 224-239
+		regexp.MustCompile(`^111\.`),              // fake IP range
 	}
 )
 
@@ -35,7 +34,7 @@ func deterministicFakeIP(realIP string) string {
 	b2 := int(hash[0])%254 + 1
 	b3 := int(hash[1])%254 + 1
 	b4 := int(hash[2])%254 + 1
-	return fmt.Sprintf("11.%d.%d.%d", b2, b3, b4)
+	return fmt.Sprintf("111.%d.%d.%d", b2, b3, b4)
 }
 
 func SanitizeIPs(text string) string {
@@ -51,7 +50,7 @@ func NewFakeIP() string {
 	b2 := rand.Intn(254) + 1
 	b3 := rand.Intn(254) + 1
 	b4 := rand.Intn(254) + 1
-	return fmt.Sprintf("11.%d.%d.%d", b2, b3, b4)
+	return fmt.Sprintf("111.%d.%d.%d", b2, b3, b4)
 }
 
 func NewFakeHostname() string {

@@ -6,20 +6,15 @@ import (
 	"path/filepath"
 )
 
-type Patterns struct {
-	IPv4      bool     `json:"ipv4"`
-	Hostnames []string `json:"hostnames"`
-}
-
 type Config struct {
-	Mappings        map[string]string `json:"mappings"`
-	AutoMappings    map[string]string `json:"autoMappings"`
-	ExcludePaths    []string          `json:"excludePaths"`
-	Patterns        Patterns          `json:"patterns"`
-	UnsanitizedPath string            `json:"unsanitizedPath"`
+	MappingsManual   map[string]string `json:"mappingsManual"`
+	MappingsAuto     map[string]string `json:"mappingsAuto"`
+	SkipPaths        []string          `json:"skipPaths"`
+	HostnamePatterns []string          `json:"hostnamePatterns"`
+	UnsanitizedPath  string            `json:"unsanitizedPath"`
 }
 
-var DefaultExcludePaths = []string{".git", "node_modules", ".venv", "__pycache__"}
+var DefaultSkipPaths = []string{".git", "node_modules", ".venv", "__pycache__"}
 
 func SanitizerDir() string {
 	return filepath.Join(os.Getenv("USERPROFILE"), ".claude", "sanitizer")
@@ -35,11 +30,11 @@ func LoadConfig() (*Config, error) {
 
 func LoadConfigFrom(path string) (*Config, error) {
 	cfg := &Config{
-		Mappings:        make(map[string]string),
-		AutoMappings:    make(map[string]string),
-		ExcludePaths:    DefaultExcludePaths,
-		Patterns:        Patterns{IPv4: true},
-		UnsanitizedPath: "~/.claude/unsanitized/{project}",
+		MappingsManual:   make(map[string]string),
+		MappingsAuto:     make(map[string]string),
+		SkipPaths:     DefaultSkipPaths,
+		HostnamePatterns: []string{},
+		UnsanitizedPath:  "~/.claude/unsanitized/{project}",
 	}
 
 	data, err := os.ReadFile(path)
@@ -59,11 +54,11 @@ func LoadConfigFrom(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if cfg.Mappings == nil {
-		cfg.Mappings = make(map[string]string)
+	if cfg.MappingsManual == nil {
+		cfg.MappingsManual = make(map[string]string)
 	}
-	if cfg.AutoMappings == nil {
-		cfg.AutoMappings = make(map[string]string)
+	if cfg.MappingsAuto == nil {
+		cfg.MappingsAuto = make(map[string]string)
 	}
 
 	return cfg, nil
@@ -71,10 +66,10 @@ func LoadConfigFrom(path string) (*Config, error) {
 
 func (c *Config) AllMappings() map[string]string {
 	all := make(map[string]string)
-	for k, v := range c.AutoMappings {
+	for k, v := range c.MappingsAuto {
 		all[k] = v
 	}
-	for k, v := range c.Mappings {
+	for k, v := range c.MappingsManual {
 		all[k] = v
 	}
 	return all
@@ -134,7 +129,7 @@ func SaveAutoMappingsTo(path string, autoMappings map[string]string) error {
 		raw = make(map[string]any)
 	}
 
-	raw["autoMappings"] = autoMappings
+	raw["mappingsAuto"] = autoMappings
 
 	out, err := json.MarshalIndent(raw, "", "    ")
 	if err != nil {
@@ -154,11 +149,16 @@ func InitializeConfigIfNeeded() error {
 	os.MkdirAll(filepath.Join(os.Getenv("USERPROFILE"), ".claude", "unsanitized"), 0755)
 
 	cfg := map[string]any{
-		"mappings":        map[string]string{},
-		"autoMappings":    map[string]string{},
-		"patterns":        map[string]any{"ipv4": true, "hostnames": []string{}},
-		"unsanitizedPath": "~/.claude/unsanitized/{project}",
-		"excludePaths":    DefaultExcludePaths,
+		"hostnamePatterns": []string{"\\.domain\\.local$"},
+		"mappingsAuto":     map[string]string{},
+		"mappingsManual": map[string]string{
+			"server.domain.local":    "server.example.test",
+			"192.168.1.100":          "111.50.100.1",
+			"C:\\Users\\realuser":    "C:\\Users\\fakeuser",
+			"secretproject":          "projectname",
+		},
+		"skipPaths":        DefaultSkipPaths,
+		"unsanitizedPath":  "~/.claude/unsanitized/{project}",
 	}
 
 	data, err := json.MarshalIndent(cfg, "", "    ")

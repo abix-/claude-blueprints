@@ -28,21 +28,21 @@ func IsBinary(path string) bool {
 	return false
 }
 
-func IsExcludedPath(relativePath string, excludePaths []string) bool {
+func IsSkippedPath(relativePath string, skipPaths []string) bool {
 	relativePath = strings.ReplaceAll(relativePath, "\\", "/")
 
-	for _, exclude := range excludePaths {
-		exclude = strings.ReplaceAll(exclude, "\\", "/")
-		if relativePath == exclude ||
-			strings.HasPrefix(relativePath, exclude+"/") ||
-			strings.Contains(relativePath, "/"+exclude+"/") {
+	for _, skip := range skipPaths {
+		skip = strings.ReplaceAll(skip, "\\", "/")
+		if relativePath == skip ||
+			strings.HasPrefix(relativePath, skip+"/") ||
+			strings.Contains(relativePath, "/"+skip+"/") {
 			return true
 		}
 	}
 	return false
 }
 
-func SyncDir(srcDir, dstDir string, excludePaths []string, transform func(string) string) error {
+func SyncDir(srcDir, dstDir string, skipPaths []string, transform func(string) string) error {
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
@@ -53,7 +53,7 @@ func SyncDir(srcDir, dstDir string, excludePaths []string, transform func(string
 			return nil
 		}
 
-		if IsExcludedPath(relPath, excludePaths) {
+		if IsSkippedPath(relPath, skipPaths) {
 			return nil
 		}
 
