@@ -1,22 +1,37 @@
-Import-Module C:/Users/Abix/.claude/sanitizer/Sanitizer.psm1 -Force
+# Sanitizer benchmarks (Go binary)
 
-$testData = @'
-Server 111.148.25.233 connected
-Database at 111.83.13.238 responding
-Gateway 111.42.149.75 routing to 111.54.21.207
-Backup server 111.129.88.154 online
-'@
+$sanitizer = "C:/code/claude-blueprints/sanitizer/sanitizer.exe"
 
-# Warm up
-$null = ConvertTo-ScrubbedText -Text $testData
-$null = $testData | C:/code/claude-blueprints/sanitizer/sanitizer.exe sanitize-ips
+# Cold start - basic sanitize
+$data = "Server 111.148.25.233 connected to 111.83.13.238"
+$cold = Measure-Command {
+    1..5 | ForEach-Object { $data | & $sanitizer sanitize }
+}
+Write-Host "cold start:         $([math]::Round($cold.TotalMilliseconds/5))ms/call (5 runs)"
 
-# Benchmark PowerShell (10 iterations)
-$ps = Measure-Command { 1..10 | ForEach-Object { ConvertTo-ScrubbedText -Text $testData } }
+# hook-bash (powershell command)
+$bashInput = '{"hook_event_name": "PreToolUse", "tool_input": { "command": "powershell Get-Process" }}'
+$bash = Measure-Command {
+    1..5 | ForEach-Object { $bashInput | & $sanitizer hook-bash 2>$null }
+}
+Write-Host "hook-bash:          $([math]::Round($bash.TotalMilliseconds/5))ms/call (5 runs)"
 
-# Benchmark Go (10 iterations)
-$go = Measure-Command { 1..10 | ForEach-Object { $testData | C:/code/claude-blueprints/sanitizer/sanitizer.exe sanitize-ips } }
+# hook-bash (no-op, regular command)
+$bashNoop = '{"hook_event_name": "PreToolUse", "tool_input": { "command": "ls -la" }}'
+$noop = Measure-Command {
+    1..5 | ForEach-Object { $bashNoop | & $sanitizer hook-bash 2>$null }
+}
+Write-Host "hook-bash (no-op):  $([math]::Round($noop.TotalMilliseconds/5))ms/call (5 runs)"
 
-Write-Host "PowerShell: $([math]::Round($ps.TotalMilliseconds))ms (10 runs)"
-Write-Host "Go:         $([math]::Round($go.TotalMilliseconds))ms (10 runs)"
-Write-Host "Ratio:      $([math]::Round($ps.TotalMilliseconds / $go.TotalMilliseconds, 1))x faster"
+# hook-file-access
+$fileInput = '{"hook_event_name": "PreToolUse", "tool_input": { "file_path": "C:/code/project/src/main.go" }}'
+$file = Measure-Command {
+    1..5 | ForEach-Object { $fileInput | & $sanitizer hook-file-access 2>$null }
+}
+Write-Host "hook-file-access:   $([math]::Round($file.TotalMilliseconds/5))ms/call (5 runs)"
+
+# hook-session-start (single run - modifies files)
+$session = Measure-Command {
+    & $sanitizer hook-session-start 2>$null
+}
+Write-Host "hook-session-start: $([math]::Round($session.TotalMilliseconds))ms (1 run)"
