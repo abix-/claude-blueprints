@@ -116,3 +116,70 @@ func replaceAll(s, old, new string) string {
 	}
 	return s
 }
+
+// SaveAutoMappings saves autoMappings to sanitizer.json
+func SaveAutoMappings(autoMappings map[string]string) error {
+	return SaveAutoMappingsTo(SecretsPath(), autoMappings)
+}
+
+// SaveAutoMappingsTo saves autoMappings to specified path
+func SaveAutoMappingsTo(path string, autoMappings map[string]string) error {
+	// Load existing config
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	// Strip BOM
+	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
+		data = data[3:]
+	}
+
+	var raw map[string]any
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+	} else {
+		raw = make(map[string]any)
+	}
+
+	// Update autoMappings
+	raw["autoMappings"] = autoMappings
+
+	// Write back
+	out, err := json.MarshalIndent(raw, "", "    ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, out, 0644)
+}
+
+// InitializeIfNeeded creates sanitizer.json with defaults if it doesn't exist
+func InitializeIfNeeded() error {
+	path := SecretsPath()
+	if _, err := os.Stat(path); err == nil {
+		return nil // exists
+	}
+
+	// Create directories
+	os.MkdirAll(SanitizerDir(), 0755)
+	os.MkdirAll(filepath.Join(os.Getenv("USERPROFILE"), ".claude", "unsanitized"), 0755)
+
+	// Create default config
+	cfg := map[string]any{
+		"mappings":        map[string]string{},
+		"autoMappings":    map[string]string{},
+		"patterns":        map[string]any{"ipv4": true, "hostnames": []string{}},
+		"unsanitizedPath": "~/.claude/unsanitized/{project}",
+		"excludePaths":    DefaultExcludePaths,
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "    ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, data, 0644)
+}

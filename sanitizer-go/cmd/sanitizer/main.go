@@ -12,7 +12,7 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: sanitizer <command>")
-		fmt.Fprintln(os.Stderr, "commands: sanitize-ips, hook-file-access, hook-bash")
+		fmt.Fprintln(os.Stderr, "commands: sanitize-ips, hook-file-access, hook-bash, hook-session-start, hook-session-stop")
 		os.Exit(1)
 	}
 
@@ -23,6 +23,10 @@ func main() {
 		runHook(hook.FileAccess)
 	case "hook-bash":
 		runHook(hook.Bash)
+	case "hook-session-start":
+		runSessionHook(hook.SessionStartCmd)
+	case "hook-session-stop":
+		runSessionHook(hook.SessionStopCmd)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		os.Exit(1)
@@ -55,5 +59,11 @@ func runHook(fn func([]byte) ([]byte, error)) {
 	}
 	if output != nil {
 		fmt.Print(string(output))
+	}
+}
+
+func runSessionHook(fn func() error) {
+	if err := fn(); err != nil {
+		fmt.Fprintf(os.Stderr, "session hook error: %v\n", err)
 	}
 }

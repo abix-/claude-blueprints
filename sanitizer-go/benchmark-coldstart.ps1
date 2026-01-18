@@ -1,5 +1,5 @@
 $testData = @'
-Server 192.168.1.100 connected to 10.0.0.50
+Server 11.100.201.234 connected to 11.178.40.57
 '@
 
 # Benchmark PowerShell cold start (spawn powershell + load module + run)

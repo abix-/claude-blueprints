@@ -3,6 +3,7 @@ package sanitize
 import (
 	"crypto/md5"
 	"fmt"
+	"math/rand"
 	"regexp"
 )
 
@@ -45,4 +46,46 @@ func SanitizeIPs(text string) string {
 		}
 		return deterministicFakeIP(ip)
 	})
+}
+
+// FindIPs returns all non-excluded IPs in text
+func FindIPs(text string) []string {
+	matches := ipv4Regex.FindAllString(text, -1)
+	var result []string
+	seen := make(map[string]bool)
+	for _, ip := range matches {
+		if !isExcludedIP(ip) && !seen[ip] {
+			seen[ip] = true
+			result = append(result, ip)
+		}
+	}
+	return result
+}
+
+// NewFakeIP generates a random fake IP in 11.x.x.x range
+func NewFakeIP() string {
+	b2 := rand.Intn(254) + 1
+	b3 := rand.Intn(254) + 1
+	b4 := rand.Intn(254) + 1
+	return fmt.Sprintf("11.%d.%d.%d", b2, b3, b4)
+}
+
+// NewFakeHostname generates a random fake hostname
+func NewFakeHostname() string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	suffix := make([]byte, 8)
+	for i := range suffix {
+		suffix[i] = chars[rand.Intn(len(chars))]
+	}
+	return fmt.Sprintf("host-%s.example.test", string(suffix))
+}
+
+// IsExcludedIP checks if IP should be excluded (exported for use elsewhere)
+func IsExcludedIP(ip string) bool {
+	return isExcludedIP(ip)
+}
+
+// IPv4Regex returns the compiled regex for external use
+func IPv4Regex() *regexp.Regexp {
+	return ipv4Regex
 }
