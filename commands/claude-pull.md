@@ -34,7 +34,7 @@ cp "$repo/settings.json" "$local/" 2>/dev/null
 
 ```bash
 if [ -f "/c/Program Files/Go/bin/go.exe" ]; then
-    cd "C:/code/claude-blueprints/sanitizer-go"
+    cd "C:/code/claude-blueprints/sanitizer"
     "/c/Program Files/Go/bin/go.exe" build -o sanitizer.exe ./cmd/sanitizer
     mkdir -p "$HOME/.claude/bin"
     cp sanitizer.exe "$HOME/.claude/bin/"

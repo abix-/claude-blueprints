@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/abix-/claude-blueprints/sanitizer-go/internal"
+	"github.com/abix-/claude-blueprints/sanitizer/internal"
 )
 
 func main() {

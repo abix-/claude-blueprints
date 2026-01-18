@@ -8,7 +8,7 @@ $ps = Measure-Command {
 
 # Benchmark Go
 $go = Measure-Command {
-    C:/code/claude-blueprints/sanitizer-go/sanitizer.exe hook-session-start 2>$null
+    C:/code/claude-blueprints/sanitizer/sanitizer.exe hook-session-start 2>$null
 }
 
 Write-Host "hook-session-start (single run):"

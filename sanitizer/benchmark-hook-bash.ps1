@@ -10,7 +10,7 @@ $ps = Measure-Command {
 # Benchmark Go cold start
 $go = Measure-Command {
     1..3 | ForEach-Object {
-        $testInput | C:/code/claude-blueprints/sanitizer-go/sanitizer.exe hook-bash 2>$null
+        $testInput | C:/code/claude-blueprints/sanitizer/sanitizer.exe hook-bash 2>$null
     }
 }
 

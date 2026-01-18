@@ -27,7 +27,7 @@ Write-Host "Build successful`n" -ForegroundColor Green
 
 # sanitize-ips tests
 if (Test-Command "sanitize-ips: Basic IP replacement" {
-    $input = "Server at 192.168.1.100 and 10.0.0.50"
+    $input = "Server at 11.100.201.234 and 11.178.40.57"
     $result = $input | & $sanitizer sanitize-ips
     if ($result -match "192\.168\." -or $result -match "10\.0\.0\.") {
         throw "IPs not sanitized: $result"
@@ -40,8 +40,8 @@ if (Test-Command "sanitize-ips: Basic IP replacement" {
 }) { $passed++ } else { $failed++ }
 
 if (Test-Command "sanitize-ips: Deterministic (same input = same output)" {
-    $r1 = "192.168.1.100" | & $sanitizer sanitize-ips
-    $r2 = "192.168.1.100" | & $sanitizer sanitize-ips
+    $r1 = "11.100.201.234" | & $sanitizer sanitize-ips
+    $r2 = "11.100.201.234" | & $sanitizer sanitize-ips
     if ($r1 -ne $r2) { throw "Not deterministic: '$r1' vs '$r2'" }
     if ($r1 -match "192\.168\.") { throw "IP not sanitized: $r1" }
     Write-Host "Both runs: $r1"

@@ -72,7 +72,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │                                                                         │
 │     Working Tree                         Unsanitized Directory          │
 │     ┌─────────────────┐     copy &       ┌─────────────────┐            │
-│     │ 11.22.33.44     │   unsanitize     │ 192.168.1.100   │            │
+│     │ 11.22.33.44     │   unsanitize     │ 11.100.201.234   │            │
 │     │ host-a1b.test   │ ───────────────► │ prod.internal   │            │
 │     └─────────────────┘   (changed       └─────────────────┘            │
 │                            files only)                                  │
@@ -84,7 +84,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │         (command runs with REAL values)                                 │
 │                                                                         │
 │         "Deploying to prod.internal..."                                 │
-│         "Connected to 192.168.1.100"                                    │
+│         "Connected to 11.100.201.234"                                    │
 └─────────────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼
@@ -117,7 +117,7 @@ WHERE REAL VALUES EXIST
 ### 1. Build the binary
 
 ```powershell
-cd C:/code/claude-blueprints/sanitizer-go
+cd C:/code/claude-blueprints/sanitizer
 go build -o sanitizer.exe ./cmd/sanitizer
 ```
 
@@ -294,7 +294,7 @@ All fake IPs use the `11.x.x.x` range.
 ## Project Structure
 
 ```
-sanitizer-go/
+sanitizer/
 ├── cmd/sanitizer/main.go   # CLI entry point
 ├── internal/
 │   ├── config.go           # Load/save sanitizer.json

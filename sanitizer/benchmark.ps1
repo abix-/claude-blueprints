@@ -9,13 +9,13 @@ Backup server 11.100.166.98 online
 
 # Warm up
 $null = ConvertTo-ScrubbedText -Text $testData
-$null = $testData | C:/code/claude-blueprints/sanitizer-go/sanitizer.exe sanitize-ips
+$null = $testData | C:/code/claude-blueprints/sanitizer/sanitizer.exe sanitize-ips
 
 # Benchmark PowerShell (10 iterations)
 $ps = Measure-Command { 1..10 | ForEach-Object { ConvertTo-ScrubbedText -Text $testData } }
 
 # Benchmark Go (10 iterations)
-$go = Measure-Command { 1..10 | ForEach-Object { $testData | C:/code/claude-blueprints/sanitizer-go/sanitizer.exe sanitize-ips } }
+$go = Measure-Command { 1..10 | ForEach-Object { $testData | C:/code/claude-blueprints/sanitizer/sanitizer.exe sanitize-ips } }
 
 Write-Host "PowerShell: $([math]::Round($ps.TotalMilliseconds))ms (10 runs)"
 Write-Host "Go:         $([math]::Round($go.TotalMilliseconds))ms (10 runs)"

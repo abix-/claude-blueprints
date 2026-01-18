@@ -9,7 +9,7 @@ claude-blueprints/
 ├── skills/           # Reusable prompts and standards
 ├── hooks/            # General-purpose hooks (skill injection, etc.)
 ├── commands/         # Slash commands (/claude-push, /claude-pull)
-├── sanitizer-go/     # Credential sanitization system
+├── sanitizer/        # Credential sanitization system
 ├── CLAUDE.md         # Global context (copy to ~/.claude/)
 └── settings.json     # Global settings with hooks (copy to ~/.claude/)
 ```
@@ -30,7 +30,7 @@ After bootstrap, use `/claude-pull` and `/claude-push` to sync.
 
 Prevents sensitive identifiers (server names, IPs, domains) from being sent to Anthropic. Working tree stays fake; real values only exist in sealed temp directories during execution.
 
-See [sanitizer-go](sanitizer-go/README.md) for setup and usage.
+See [sanitizer](sanitizer/README.md) for setup and usage.
 
 ### Skills
 
