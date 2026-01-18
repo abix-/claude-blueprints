@@ -12,7 +12,7 @@ $ps = Measure-Command {
 # Benchmark Go cold start (spawn binary)
 $go = Measure-Command {
     1..5 | ForEach-Object {
-        $testData | C:/code/claude-blueprints/sanitizer-go/sanitizer.exe scrub-ips
+        $testData | C:/code/claude-blueprints/sanitizer-go/sanitizer.exe sanitize-ips
     }
 }
 

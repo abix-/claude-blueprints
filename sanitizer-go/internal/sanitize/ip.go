@@ -1,4 +1,4 @@
-package scrub
+package sanitize
 
 import (
 	"crypto/md5"
@@ -37,8 +37,8 @@ func deterministicFakeIP(realIP string) string {
 	return fmt.Sprintf("11.%d.%d.%d", b2, b3, b4)
 }
 
-// ScrubIPs replaces real IPs with deterministic fake IPs in the 11.x.x.x range.
-func ScrubIPs(text string) string {
+// SanitizeIPs replaces real IPs with deterministic fake IPs in the 11.x.x.x range.
+func SanitizeIPs(text string) string {
 	return ipv4Regex.ReplaceAllStringFunc(text, func(ip string) string {
 		if isExcludedIP(ip) {
 			return ip
