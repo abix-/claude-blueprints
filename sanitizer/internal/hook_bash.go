@@ -20,8 +20,6 @@ var (
 		regexp.MustCompile(`(?i)^\s*pwsh`),
 		regexp.MustCompile(`(?i)\.ps1(\s|$|")`),
 		regexp.MustCompile(`^\s*&\s`),
-		regexp.MustCompile(`(?i)^\s*ansible\b`),
-		regexp.MustCompile(`(?i)^\s*awx\b`),
 	}
 )
 

@@ -59,8 +59,8 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 
     Examples:                Examples:                  Examples:
     - cat sanitizer.json     - git status               - powershell script.ps1
-    - ls ~/.claude/uns...    - python, npm, etc         - ansible-playbook site.yml
-                             - everything else          - awx job_templates launch
+    - ls ~/.claude/uns...    - python, npm, etc         - pwsh ./deploy.ps1
+                             - everything else          - & $command
 
     ✗ Blocked                Runs directly              Syncs changes, runs
                                                         with real values,
@@ -261,8 +261,6 @@ Commands accessing sensitive paths:
 | `powershell` / `pwsh` | `powershell ./script.ps1` |
 | `*.ps1` | `./Deploy-App.ps1` |
 | `& ...` | `& $command` |
-| `ansible*` | `ansible-playbook site.yml` |
-| `awx` | `awx job_templates launch` |
 
 Output from REAL commands is sanitized before Claude sees it.
 

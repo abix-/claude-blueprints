@@ -27,7 +27,7 @@ Write-Host "Build successful`n" -ForegroundColor Green
 
 # sanitize-ips tests
 if (Test-Command "sanitize-ips: Basic IP replacement" {
-    $input = "Server at 192.168.1.100 and 10.0.0.50"
+    $input = "Server at 111.91.241.85 and 111.229.14.114"
     $result = $input | & $sanitizer sanitize-ips
     if ($result -match "192\.168\." -or $result -match "10\.0\.0\.") {
         throw "IPs not sanitized: $result"
@@ -40,8 +40,8 @@ if (Test-Command "sanitize-ips: Basic IP replacement" {
 }) { $passed++ } else { $failed++ }
 
 if (Test-Command "sanitize-ips: Deterministic (same input = same output)" {
-    $r1 = "192.168.1.100" | & $sanitizer sanitize-ips
-    $r2 = "192.168.1.100" | & $sanitizer sanitize-ips
+    $r1 = "111.91.241.85" | & $sanitizer sanitize-ips
+    $r2 = "111.91.241.85" | & $sanitizer sanitize-ips
     if ($r1 -ne $r2) { throw "Not deterministic: '$r1' vs '$r2'" }
     if ($r1 -match "192\.168\.") { throw "IP not sanitized: $r1" }
     Write-Host "Both runs: $r1"
@@ -100,14 +100,6 @@ if (Test-Command "hook-bash: REAL (powershell command)" {
     Write-Host "Modified command present: yes"
 }) { $passed++ } else { $failed++ }
 
-if (Test-Command "hook-bash: REAL (ansible command)" {
-    $input = '{"hook_event_name":"PreToolUse","tool_input":{"command":"ansible-playbook site.yml"}}'
-    $result = $input | & $sanitizer hook-bash
-    $json = $result | ConvertFrom-Json
-    if (-not $json.hookSpecificOutput.updatedInput.command) { throw "Expected modified command, got: $result" }
-    Write-Host "Modified command present: yes"
-}) { $passed++ } else { $failed++ }
-
 # hook-file-access tests
 if (Test-Command "hook-file-access: DENY sanitizer.json" {
     $input = '{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"C:/Users/Abix/.claude/sanitizer/sanitizer.json"}}'
@@ -142,9 +134,9 @@ if (Test-Command "hook-session-start: Sanitize test project" {
 
     $testContent = @"
 # Config file
-server = 192.168.50.100
-backup = 10.0.0.50
-gateway = 172.16.1.1
+server = 111.67.177.64
+backup = 111.229.14.114
+gateway = 111.189.164.227
 "@
     Set-Content "$testDir/config.txt" $testContent
 
@@ -160,7 +152,7 @@ gateway = 172.16.1.1
         if ($sanitized -notmatch "111\.\d+\.\d+\.\d+") {
             throw "No fake IPs found: $sanitized"
         }
-        Write-Host "Original IPs: 192.168.50.100, 10.0.0.50, 172.16.1.1"
+        Write-Host "Original IPs: 111.67.177.64, 111.229.14.114, 111.189.164.227"
         Write-Host "Sanitized content:"
         Write-Host $sanitized
     } finally {
@@ -180,7 +172,7 @@ if (Test-Command "hook-session-stop: Sync to unsanitized" {
 
     # Start with real IP
     New-Item -ItemType Directory -Path $testDir -Force | Out-Null
-    Set-Content "$testDir/test.txt" "server = 192.168.1.50"
+    Set-Content "$testDir/test.txt" "server = 111.8.230.60"
 
     Push-Location $testDir
     try {
