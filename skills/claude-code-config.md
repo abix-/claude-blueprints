@@ -2,7 +2,7 @@
 name: claude-code-config
 description: How to configure Claude Code settings, hooks, and permissions correctly
 metadata:
-  version: "1.1"
+  version: "1.2"
   updated: "2026-01-18"
 ---
 # Claude Code Configuration
@@ -25,24 +25,48 @@ Use `PreToolUse` hooks that return `permissionDecision: "deny"`:
 
 ### Hook Script (PowerShell)
 ```powershell
-$inputText = @($input) -join ""
-$hookData = $inputText | ConvertFrom-Json
-$filePath = $hookData.tool_input.file_path
+<#
+.SYNOPSIS
+    PreToolUse hook - blocks access to sensitive files.
 
+.EXAMPLE
+    # Called automatically by Claude Code via PreToolUse hook
+#>
+
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = "Stop"
+
+# Parse hook input
+$inputText = @($input) -join ""
+if ([string]::IsNullOrEmpty($inputText)) { exit 0 }
+
+try { $hookData = $inputText | ConvertFrom-Json -ErrorAction Stop }
+catch { exit 0 }
+
+if (-not $hookData -or $hookData.hook_event_name -ne "PreToolUse") { exit 0 }
+
+$filePath = $hookData.tool_input.file_path
+if (-not $filePath) { exit 0 }
+
+# Normalize and check against blocked patterns
+$normalizedPath = $filePath -replace '\\', '/'
 $blockedPatterns = @('\.claude/sanitizer/sanitizer\.json$', '\.claude/unsanitized/')
 
 foreach ($pattern in $blockedPatterns) {
-    if ($filePath -match $pattern) {
+    if ($normalizedPath -match $pattern) {
         @{
             hookSpecificOutput = @{
                 hookEventName = "PreToolUse"
                 permissionDecision = "deny"
-                reason = "Access blocked"
+                reason = "Access blocked: sensitive file"
             }
         } | ConvertTo-Json -Depth 5 -Compress
         exit 0
     }
 }
+
 exit 0
 ```
 
