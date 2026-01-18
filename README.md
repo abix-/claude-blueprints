@@ -38,12 +38,12 @@ Go binary that prevents infrastructure details from reaching Anthropic's servers
 **How it works:**
 - Hooks run automatically via `settings.json` (SessionStart, PreToolUse, Stop)
 - On file read/edit: sanitizes content before Claude sees it
-- Real values stored in `~/.claude/unsanitized/{project}/` (never sent to API)
+- Unsanitized values stored in `~/.claude/unsanitized/{project}/` (never sent to API)
 - Idempotent: re-sanitizes if you modify files mid-session
 
 | Sent to Anthropic | Stays local |
 |-------------------|-------------|
-| Fake values only | Real values + mappings |
+| Sanitized values only | Unsanitized values + mappings |
 
 See [sanitizer/README.md](sanitizer/README.md) for setup.
 

@@ -55,7 +55,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 
     Command tries to         Command runs in            Command runs in
     access sanitizer.json    WORKING TREE               UNSANITIZED DIR
-    or unsanitized/**        (fake values)              (real values)
+    or unsanitized/**        (sanitized values)         (unsanitized values)
 
     Examples:                Examples:                  Examples:
     - cat sanitizer.json     - git status               - powershell script.ps1
@@ -63,7 +63,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
                              - everything else          - & $command
 
     ✗ Blocked                Runs directly              Syncs changes, runs
-                                                        with real values,
+                                                        with unsanitized values,
                                                         output sanitized
                                                                │
                                                                ▼
@@ -81,7 +81,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ STEP 3: Execute command in unsanitized directory                        │
-│         (command runs with real values)                                 │
+│         (command runs with unsanitized values)                          │
 │                                                                         │
 │         "Deploying to prod.internal..."                                 │
 │         "Connected to 111.91.241.85"                                     │
@@ -89,7 +89,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
                                        │
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ STEP 4: Sanitize output (real → fake)                                   │
+│ STEP 4: Sanitize output (unsanitized → sanitized)                       │
 │                                                                         │
 │         "Deploying to host-a1b.test..."   ◄── Claude sees this          │
 │         "Connected to 111.52.117.80"                                     │
@@ -99,11 +99,11 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 WHERE UNSANITIZED VALUES EXIST
 ═══════════════════════════════════════════════════════════════════════════
 
-    Location                     Contains Real Values?
+    Location                     Contains Unsanitized Values?
     ─────────────────────────    ─────────────────────────────────────────
-    Working tree                 ✗ NO  - always fake
-    Claude's view                ✗ NO  - only sees fake
-    Anthropic servers            ✗ NO  - only receives fake
+    Working tree                 ✗ NO  - always sanitized
+    Claude's view                ✗ NO  - only sees sanitized
+    Anthropic servers            ✗ NO  - only receives sanitized
     Unsanitized directory        ✓ YES - for command execution & deployment
 ```
 
@@ -149,7 +149,7 @@ Create `~/.claude/sanitizer/sanitizer.json`:
 
 | Field | Description |
 |-------|-------------|
-| `mappingsManual` | Manual real → fake mappings (takes precedence) |
+| `mappingsManual` | Manual unsanitized → sanitized mappings (takes precedence) |
 | `mappingsAuto` | Auto-discovered IPs/hostnames (populated automatically) |
 | `hostnamePatterns` | Regex patterns for hostname discovery |
 | `skipPaths` | Paths to skip during sanitization |
@@ -211,12 +211,12 @@ Add to `~/.claude/settings.json`:
 ## Usage
 
 1. Start Claude - files get sanitized, unsanitized copy created
-2. Work normally - Claude sees fake values, commands run with real values
+2. Work normally - Claude sees sanitized values, commands run with unsanitized values
 3. Deploy from `~/.claude/unsanitized/{project}/`
 
 ### If Claude crashes
 
-Working tree stays fake (safe). Unsanitized directory already has real values.
+Working tree stays sanitized (safe). Unsanitized directory already has unsanitized values.
 
 ## CLI Commands
 
@@ -310,8 +310,8 @@ sanitizer/
 
 | Path | Reason |
 |------|--------|
-| `~/.claude/sanitizer/sanitizer.json` | Contains real→fake mappings |
-| `~/.claude/unsanitized/**` | Contains real values |
+| `~/.claude/sanitizer/sanitizer.json` | Contains unsanitized→sanitized mappings |
+| `~/.claude/unsanitized/**` | Contains unsanitized values |
 
 ## Troubleshooting
 
@@ -326,7 +326,7 @@ Check `settings.json` paths point to the correct binary location.
 3. Check file isn't in `skipPaths`
 4. Check file isn't binary or >10MB
 
-### Command runs with fake values when it shouldn't
+### Command runs with sanitized values when it shouldn't
 
 Add the command pattern to `unsanitizedCmdPatterns` in `internal/hook_bash.go` and rebuild.
 
