@@ -7,12 +7,12 @@ Prevent sensitive identifiers (server names, IPs, domains) from being sent to An
 | Hook | PowerShell | Go | Speedup |
 |------|------------|-----|---------|
 | `hook-file-access` | 211ms | 13ms | **16x** |
-| `hook-bash` (FAKE) | 351ms | 10ms | **35x** |
-| `hook-bash` (REAL) | 357ms | 197ms | **1.8x** |
+| `hook-bash` (SANITIZED) | 351ms | 10ms | **35x** |
+| `hook-bash` (UNSANITIZED) | 357ms | 197ms | **1.8x** |
 | `hook-session-start` | 566ms | 64ms | **9x** |
 | `hook-session-stop` | ~500ms | ~60ms | **~9x** |
 
-Most Bash commands are FAKE (ls, git, npm, etc.) → **35x faster** per command.
+Most Bash commands are SANITIZED (ls, git, npm, etc.) → **35x faster** per command.
 
 ## How It Works
 
@@ -48,7 +48,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
           ┌────────────────────────────┼────────────────────────────┐
           ▼                            ▼                            ▼
     ┌───────────┐               ┌───────────┐               ┌───────────┐
-    │   DENY    │               │   FAKE    │               │   REAL    │
+    │   BLOCK   │               │ SANITIZED │               │UNSANITIZED│
     └─────┬─────┘               └─────┬─────┘               └─────┬─────┘
           │                           │                           │
           ▼                           ▼                           ▼
@@ -81,7 +81,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ STEP 3: Execute command in unsanitized directory                        │
-│         (command runs with REAL values)                                 │
+│         (command runs with real values)                                 │
 │                                                                         │
 │         "Deploying to prod.internal..."                                 │
 │         "Connected to 111.91.241.85"                                     │
@@ -96,7 +96,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 └─────────────────────────────────────────────────────────────────────────┘
 
 
-WHERE REAL VALUES EXIST
+WHERE UNSANITIZED VALUES EXIST
 ═══════════════════════════════════════════════════════════════════════════
 
     Location                     Contains Real Values?
@@ -226,7 +226,7 @@ sanitizer.exe <command>
 Commands:
   hook-session-start   Sanitize project at session start
   hook-session-stop    Sync to unsanitized directory at session end
-  hook-bash            Route Bash commands (DENY/FAKE/REAL)
+  hook-bash            Route Bash commands (BLOCK/SANITIZED/UNSANITIZED)
   hook-file-access     Block access to sensitive files
   sanitize-ips         Stdin→stdout IP sanitization (deterministic)
   exec                 Run command in unsanitized dir, sanitize output
@@ -248,13 +248,13 @@ sanitizer.exe hook-session-stop
 
 ## Command Routing
 
-### DENY - Blocked entirely
+### BLOCK - Blocked entirely
 
 Commands accessing sensitive paths:
 - `*/sanitizer.json`
 - `~/.claude/unsanitized/*`
 
-### REAL - Run in unsanitized directory with real values
+### UNSANITIZED - Run in unsanitized directory with real values
 
 | Pattern | Examples |
 |---------|----------|
@@ -262,9 +262,9 @@ Commands accessing sensitive paths:
 | `*.ps1` | `./Deploy-App.ps1` |
 | `& ...` | `& $command` |
 
-Output from REAL commands is sanitized before Claude sees it.
+Output from UNSANITIZED commands is sanitized before Claude sees it.
 
-### FAKE - Run in working tree with fake values (default)
+### SANITIZED - Run in working tree with sanitized values (default)
 
 Everything else: `git`, `ls`, `npm`, `python`, etc.
 
@@ -328,7 +328,7 @@ Check `settings.json` paths point to the correct binary location.
 
 ### Command runs with fake values when it shouldn't
 
-Add the command pattern to the REAL patterns in `internal/hook/bash.go` and rebuild.
+Add the command pattern to `unsanitizedCmdPatterns` in `internal/hook_bash.go` and rebuild.
 
 ### UTF-8 BOM issues
 

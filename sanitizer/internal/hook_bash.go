@@ -15,7 +15,7 @@ var (
 		regexp.MustCompile(`\.claude[/\\]unsanitized`),
 	}
 
-	realCmdPatterns = []*regexp.Regexp{
+	unsanitizedCmdPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^\s*powershell`),
 		regexp.MustCompile(`(?i)^\s*pwsh`),
 		regexp.MustCompile(`(?i)\.ps1(\s|$|")`),
@@ -44,28 +44,28 @@ func HookBash(input []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	// DENY
+	// BLOCK
 	for _, pattern := range blockedCmdPatterns {
 		if pattern.MatchString(command) {
 			return denyResponse("Blocked")
 		}
 	}
 
-	// Check if REAL
-	isReal := false
-	for _, pattern := range realCmdPatterns {
+	// Check if UNSANITIZED
+	isUnsanitized := false
+	for _, pattern := range unsanitizedCmdPatterns {
 		if pattern.MatchString(command) {
-			isReal = true
+			isUnsanitized = true
 			break
 		}
 	}
 
-	// FAKE (default)
-	if !isReal {
+	// SANITIZED (default)
+	if !isUnsanitized {
 		return nil, nil
 	}
 
-	// REAL - wrap with sanitizer exec
+	// UNSANITIZED - wrap with sanitizer exec
 	sanitizerExe := filepath.Join(os.Getenv("USERPROFILE"), ".claude", "bin", "sanitizer.exe")
 
 	// Escape single quotes for bash: ' → '\''

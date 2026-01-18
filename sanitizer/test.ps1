@@ -55,8 +55,8 @@ if (Test-Command "sanitize-ips: Excluded IPs unchanged" {
     Write-Host "Output: $result"
 }) { $passed++ } else { $failed++ }
 
-# hook-bash DENY tests
-if (Test-Command "hook-bash: DENY sanitizer.json access" {
+# hook-bash BLOCK tests
+if (Test-Command "hook-bash: BLOCK sanitizer.json access" {
     $input = '{"hook_event_name":"PreToolUse","tool_input":{"command":"cat ~/.claude/sanitizer/sanitizer.json"}}'
     $result = $input | & $sanitizer hook-bash
     $json = $result | ConvertFrom-Json
@@ -64,7 +64,7 @@ if (Test-Command "hook-bash: DENY sanitizer.json access" {
     Write-Host "Output: blocked"
 }) { $passed++ } else { $failed++ }
 
-if (Test-Command "hook-bash: DENY unsanitized directory access" {
+if (Test-Command "hook-bash: BLOCK unsanitized directory access" {
     $input = '{"hook_event_name":"PreToolUse","tool_input":{"command":"ls ~/.claude/unsanitized/"}}'
     $result = $input | & $sanitizer hook-bash
     $json = $result | ConvertFrom-Json
@@ -72,27 +72,27 @@ if (Test-Command "hook-bash: DENY unsanitized directory access" {
     Write-Host "Output: blocked"
 }) { $passed++ } else { $failed++ }
 
-# hook-bash FAKE tests
-if (Test-Command "hook-bash: FAKE (ls command)" {
+# hook-bash SANITIZED tests
+if (Test-Command "hook-bash: SANITIZED (ls command)" {
     $input = '{"hook_event_name":"PreToolUse","tool_input":{"command":"ls -la"}}'
     $result = $input | & $sanitizer hook-bash
     if ($result -and $result.Trim()) {
-        throw "Expected empty output for FAKE, got: $result"
+        throw "Expected empty output for SANITIZED, got: $result"
     }
     Write-Host "Output: (empty = allow as-is)"
 }) { $passed++ } else { $failed++ }
 
-if (Test-Command "hook-bash: FAKE (git command)" {
+if (Test-Command "hook-bash: SANITIZED (git command)" {
     $input = '{"hook_event_name":"PreToolUse","tool_input":{"command":"git status"}}'
     $result = $input | & $sanitizer hook-bash
     if ($result -and $result.Trim()) {
-        throw "Expected empty output for FAKE, got: $result"
+        throw "Expected empty output for SANITIZED, got: $result"
     }
     Write-Host "Output: (empty = allow as-is)"
 }) { $passed++ } else { $failed++ }
 
-# hook-bash REAL tests
-if (Test-Command "hook-bash: REAL (powershell command)" {
+# hook-bash UNSANITIZED tests
+if (Test-Command "hook-bash: UNSANITIZED (powershell command)" {
     $input = '{"hook_event_name":"PreToolUse","tool_input":{"command":"powershell.exe -Command Get-Date"}}'
     $result = $input | & $sanitizer hook-bash
     $json = $result | ConvertFrom-Json
@@ -101,7 +101,7 @@ if (Test-Command "hook-bash: REAL (powershell command)" {
 }) { $passed++ } else { $failed++ }
 
 # hook-file-access tests
-if (Test-Command "hook-file-access: DENY sanitizer.json" {
+if (Test-Command "hook-file-access: BLOCK sanitizer.json" {
     $input = '{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"C:/Users/Abix/.claude/sanitizer/sanitizer.json"}}'
     $result = $input | & $sanitizer hook-file-access
     $json = $result | ConvertFrom-Json
@@ -109,7 +109,7 @@ if (Test-Command "hook-file-access: DENY sanitizer.json" {
     Write-Host "Output: blocked"
 }) { $passed++ } else { $failed++ }
 
-if (Test-Command "hook-file-access: DENY unsanitized path" {
+if (Test-Command "hook-file-access: BLOCK unsanitized path" {
     $input = '{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"C:/Users/Abix/.claude/unsanitized/project/file.txt"}}'
     $result = $input | & $sanitizer hook-file-access
     $json = $result | ConvertFrom-Json
