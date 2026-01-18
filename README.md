@@ -28,9 +28,22 @@ After bootstrap, edit repo directly, commit, push, then `/claude-pull` to apply 
 
 ### Sanitizer
 
-Prevents sensitive identifiers (server names, IPs, domains) from being sent to Anthropic. Working tree stays fake; real values only exist in sealed temp directories during execution.
+Go binary that prevents work infrastructure details from reaching Anthropic's servers.
 
-See [sanitizer](sanitizer/README.md) for setup and usage.
+**What gets replaced:**
+- IPs → `111.x.x.x` fake range
+- Hostnames matching patterns (e.g., `*.domain.local`) → `host-xxxx.example.test`
+- Manual mappings you define (server names, paths, project names)
+
+**How it works:**
+- Hooks run automatically via `settings.json` (SessionStart, PreToolUse, Stop)
+- On file read/edit: sanitizes content before Claude sees it
+- Real values stored in `~/.claude/unsanitized/{project}/` (never sent to API)
+- Idempotent: re-sanitizes if you modify files mid-session
+
+**What Claude sees:** fake values only. What stays local: real values + mappings.
+
+See [sanitizer/README.md](sanitizer/README.md) for setup.
 
 ### Skills
 
