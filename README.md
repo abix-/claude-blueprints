@@ -16,29 +16,24 @@ claude-blueprints/
 
 ## Quick Setup
 
-```powershell
-# 1. Clone
+```bash
 git clone https://github.com/abix-/claude-blueprints.git
+```
 
-# 2. Copy config files
-Copy-Item claude-blueprints/CLAUDE.md ~/.claude/
-Copy-Item claude-blueprints/settings.json ~/.claude/
-Copy-Item -Recurse claude-blueprints/skills ~/.claude/
-Copy-Item -Recurse claude-blueprints/hooks ~/.claude/
-Copy-Item -Recurse claude-blueprints/sanitizer ~/.claude/
-Copy-Item -Recurse claude-blueprints/commands ~/.claude/
+Then tell Claude: *"Bootstrap my ~/.claude from claude-blueprints"*
 
-# 3. Initialize sanitizer and edit secrets
+After bootstrap, use `/claude-pull` and `/claude-push` to sync.
+
+### Post-Bootstrap (optional)
+
+```bash
+# Initialize sanitizer and edit secrets
 ~/.claude/sanitizer/Initialize.ps1
 notepad ~/.claude/sanitizer/secrets.json
 
-# 4. Patch spinner words (run outside Claude)
+# Patch spinner words (run outside Claude)
 npx claude-depester --all
-
-# 5. Start Claude Code
 ```
-
-Or tell Claude: *"Clone https://github.com/abix-/claude-blueprints and help me set up my Claude config from it"*
 
 ## Components
 
