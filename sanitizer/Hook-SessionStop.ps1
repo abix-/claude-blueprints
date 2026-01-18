@@ -5,8 +5,12 @@
 .DESCRIPTION
     Copies working tree to unsanitized directory with fake → real replacement.
     Ensures all edits made during the session are captured.
+
+.EXAMPLE
+    # Called automatically by Claude Code via Stop hook
 #>
 
+[CmdletBinding()]
 param(
     [string]$ProjectPath = (Get-Location).Path,
     [string]$SanitizerDir = "$env:USERPROFILE\.claude\sanitizer",

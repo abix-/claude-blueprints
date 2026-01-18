@@ -10,9 +10,12 @@
 
 .EXAMPLE
     .\Hook-SessionStart.ps1
+
+.EXAMPLE
     .\Hook-SessionStart.ps1 -ProjectPath C:\code\myproject -DryRun
 #>
 
+[CmdletBinding()]
 param(
     [string]$ProjectPath = (Get-Location).Path,
     [string]$SanitizerDir = "$env:USERPROFILE\.claude\sanitizer",

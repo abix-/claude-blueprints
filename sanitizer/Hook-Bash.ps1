@@ -1,15 +1,30 @@
 <#
 .SYNOPSIS
-    PreToolUse hook for Bash - routes commands through sealed execution.
+    PreToolUse hook for Bash - routes commands to appropriate execution path.
 
 .DESCRIPTION
-    Intercepts Bash commands and either:
-    - Passes through safe commands (git, ls, etc.)
-    - Routes other commands through SealedExec.ps1 for isolated execution
+    Intercepts Bash commands and routes them:
+    - DENY: Block access to sanitizer config and unsanitized directory
+    - FAKE: Run directly in working tree (git, ls, cat, etc.)
+    - REAL: Sync to unsanitized directory, run there, sanitize output
+
+.EXAMPLE
+    # Called automatically by Claude Code via PreToolUse hook
 #>
 
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = "Stop"
+
 $sanitizerDir = "$env:USERPROFILE\.claude\sanitizer"
-$sealedExecScript = "$sanitizerDir\SealedExec.ps1"
+
+Import-Module "$sanitizerDir\Sanitizer.psm1" -Force
+
+$paths = Get-SanitizerPaths -SanitizerDir $sanitizerDir
+$config = Get-SanitizerConfig -SecretsPath $paths.Secrets
+$forwardMappings = Get-SanitizerMappings -SecretsPath $paths.Secrets
+$reverseMappings = Get-ReverseMappings -SecretsPath $paths.Secrets
 
 # Parse hook input from stdin
 $inputText = @($input) -join ""
@@ -30,16 +45,14 @@ if (-not $hookData) { exit 0 }
 $hookEvent = $hookData.hook_event_name
 $command = $hookData.tool_input.command
 
-# Only handle PreToolUse for Bash
 if ($hookEvent -ne "PreToolUse") { exit 0 }
 if (-not $command) { exit 0 }
 
-# === BLOCK DANGEROUS COMMANDS ===
+# === DENY - Block dangerous commands ===
 
 $blockedPatterns = @(
-    '[\\/]sanitizer\.json(?![.\w])'           # config file, not sanitizer.json.example
-    'claude-sealed-'                        # temp sealed directories
-    '\.claude[\\/]rendered'                 # rendered output directory
+    '[\\/]sanitizer\.json(?![.\w])'
+    '\.claude[\\/]unsanitized'
 )
 
 foreach ($pattern in $blockedPatterns) {
@@ -48,72 +61,103 @@ foreach ($pattern in $blockedPatterns) {
             hookSpecificOutput = @{
                 hookEventName = "PreToolUse"
                 permissionDecision = "deny"
-                reason = "Access to sanitizer files is blocked for security"
+                reason = "Access to sanitizer files is blocked"
             }
         } | ConvertTo-Json -Depth 5 -Compress
         exit 0
     }
 }
 
-# === PASSTHROUGH COMMANDS (run directly, sanitize output only) ===
-# These commands don't need real values and must run in actual working directory
+# === FAKE - Passthrough commands (run in working tree with fake values) ===
 
 $passthroughPatterns = @(
-    '^\s*git\s'           # git commands
-    '^\s*gh\s'            # GitHub CLI
-    '^\s*cd\s'            # directory changes
-    '^\s*ls\b'            # list files
-    '^\s*dir\b'           # list files (Windows)
-    '^\s*pwd\b'           # print working directory
-    '^\s*echo\s'          # echo (often used for simple output)
-    '^\s*mkdir\s'         # create directories
-    '^\s*rm\s'            # remove files
-    '^\s*cp\s'            # copy files
-    '^\s*mv\s'            # move files
-    '^\s*cat\s'           # cat (reading already-sanitized files is fine)
-    '^\s*head\s'          # head
-    '^\s*tail\s'          # tail
-    '^\s*wc\s'            # word count
-    '^\s*find\s'          # find files
-    '^\s*grep\s'          # grep (searching sanitized content)
-    '^\s*which\s'         # which command
-    '^\s*where\s'         # where command (Windows)
-    '^\s*test\s'          # test conditions
-    '^\s*\[\s'            # test conditions [ ]
+    '^\s*git\s'
+    '^\s*gh\s'
+    '^\s*cd\s'
+    '^\s*ls\b'
+    '^\s*dir\b'
+    '^\s*pwd\b'
+    '^\s*echo\s'
+    '^\s*mkdir\s'
+    '^\s*rm\s'
+    '^\s*cp\s'
+    '^\s*mv\s'
+    '^\s*cat\s'
+    '^\s*head\s'
+    '^\s*tail\s'
+    '^\s*wc\s'
+    '^\s*find\s'
+    '^\s*grep\s'
+    '^\s*which\s'
+    '^\s*where\s'
+    '^\s*test\s'
+    '^\s*\[\s'
 )
 
-$isPassthrough = $false
 foreach ($pattern in $passthroughPatterns) {
     if ($command -match $pattern) {
-        $isPassthrough = $true
-        break
+        exit 0
     }
 }
 
-if ($isPassthrough) {
-    # Allow command to run directly - output will be sanitized by PostToolUse if needed
-    # No modification needed, just allow it
-    exit 0
+# === REAL - Run in unsanitized directory ===
+
+$projectPath = (Get-Location).Path
+$projectName = Split-Path $projectPath -Leaf
+$unsanitizedPath = $config.unsanitizedPath -replace '\{project\}', $projectName
+$unsanitizedPath = $unsanitizedPath -replace '^~', $env:USERPROFILE
+
+# Ensure unsanitized directory exists
+if (-not (Test-Path $unsanitizedPath)) {
+    New-Item -Path $unsanitizedPath -ItemType Directory -Force | Out-Null
 }
 
-# === WRAP COMMAND FOR SEALED EXECUTION ===
+# Sync working tree to unsanitized directory
+foreach ($file in Get-ChildItem -Path $projectPath -Recurse -File -ErrorAction SilentlyContinue) {
+    $relativePath = $file.FullName.Substring($projectPath.Length).TrimStart('\', '/')
 
-# Escape the command for passing to SealedExec
-$escapedCommand = $command -replace '"', '\"' -replace "'", "''"
+    if (Test-ExcludedPath -RelativePath $relativePath -ExcludePaths $config.excludePaths) { continue }
+    if ($file.Length -gt 10MB) { continue }
 
-# Build the wrapped command that executes through SealedExec
-# SealedExec returns JSON with {output, exitCode}
-# We parse it and output just the output text
+    $destPath = Join-Path $unsanitizedPath $relativePath
+    $destDir = Split-Path $destPath -Parent
+
+    if (-not (Test-Path $destDir)) {
+        New-Item -Path $destDir -ItemType Directory -Force | Out-Null
+    }
+
+    if (Test-BinaryFile -Path $file.FullName) {
+        Copy-Item -Path $file.FullName -Destination $destPath -Force
+    }
+    else {
+        try {
+            $content = [System.IO.File]::ReadAllText($file.FullName)
+            $content = ConvertTo-RenderedText -Text $content -ReverseMappings $reverseMappings
+            [System.IO.File]::WriteAllText($destPath, $content)
+        }
+        catch {
+            Copy-Item -Path $file.FullName -Destination $destPath -Force
+        }
+    }
+}
+
+# Build wrapped command that runs in unsanitized dir and sanitizes output
+$escapedCommand = $command -replace '"', '\"'
+$escapedUnsanitizedPath = $unsanitizedPath -replace '\\', '\\'
 
 $wrappedCommand = @"
 powershell.exe -ExecutionPolicy Bypass -NoProfile -Command "
-    `$result = & '$sealedExecScript' -Command '$escapedCommand' | ConvertFrom-Json
-    `$result.output
-    exit `$result.exitCode
+    Import-Module '$sanitizerDir\Sanitizer.psm1' -Force
+    `$mappings = Get-SanitizerMappings -SecretsPath '$($paths.Secrets)'
+
+    Set-Location '$unsanitizedPath'
+    `$output = cmd /c `"$escapedCommand`" 2>&1 | Out-String
+
+    `$output = ConvertTo-SanitizedText -Text `$output -Mappings `$mappings
+    `$output
 "
 "@
 
-# Return the modified command
 @{
     hookSpecificOutput = @{
         hookEventName = "PreToolUse"
