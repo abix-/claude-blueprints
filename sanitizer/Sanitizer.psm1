@@ -1,14 +1,6 @@
 <#
 .SYNOPSIS
     Shared functions for the Claude Code sanitizer system.
-
-.DESCRIPTION
-    This module provides common functionality used across sanitizer scripts:
-    - Configuration loading
-    - Mapping management (real<->fake)
-    - Binary file detection
-    - Path/extension exclusion checks
-    - Text transformation
 #>
 
 # === DEFAULTS ===

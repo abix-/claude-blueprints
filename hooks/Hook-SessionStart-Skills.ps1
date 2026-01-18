@@ -1,9 +1,6 @@
 <#
 .SYNOPSIS
     SessionStart hook - injects skills once at session start.
-
-.EXAMPLE
-    # Called automatically by Claude Code via SessionStart hook
 #>
 
 [CmdletBinding()]

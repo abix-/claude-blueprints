@@ -1,9 +1,6 @@
 <#
 .SYNOPSIS
     Stop hook - final sync to unsanitized directory.
-
-.EXAMPLE
-    # Called automatically by Claude Code via Stop hook
 #>
 
 [CmdletBinding()]

@@ -1,9 +1,6 @@
 <#
 .SYNOPSIS
     PreToolUse hook for Bash - routes commands (DENY/FAKE/REAL).
-
-.EXAMPLE
-    # Called automatically by Claude Code via PreToolUse hook
 #>
 
 [CmdletBinding()]

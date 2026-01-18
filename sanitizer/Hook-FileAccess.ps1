@@ -1,9 +1,6 @@
 <#
 .SYNOPSIS
     PreToolUse hook for Read/Edit/Write - blocks access to sensitive files.
-
-.EXAMPLE
-    # Called automatically by Claude Code via PreToolUse hook
 #>
 
 [CmdletBinding()]
