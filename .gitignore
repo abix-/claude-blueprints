@@ -1,5 +1,2 @@
-# Sanitizer creates this when it renders real versions
-_REAL_VERSION.url
-
 # Local Claude settings (permissions, etc.)
 .claude/
