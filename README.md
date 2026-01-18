@@ -59,7 +59,7 @@ Prevents sensitive identifiers (server names, IPs, domains) from being sent to A
 
 | Hook | Description |
 |------|-------------|
-| [Hook-PowerShell](hooks/Hook-PowerShell.ps1) | Injects ansible-powershell skill before writing .ps1 files |
+| [Hook-PowerShell](hooks/Hook-PowerShell.ps1) | Injects ansible-powershell skill before writing PowerShell files (.ps1, .psm1, .psd1) |
 
 ### claude-depester
 
