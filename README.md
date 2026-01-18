@@ -24,17 +24,6 @@ Then tell Claude: *"Bootstrap my ~/.claude from claude-blueprints"*
 
 After bootstrap, use `/claude-pull` and `/claude-push` to sync.
 
-### Post-Bootstrap (optional)
-
-```bash
-# Initialize sanitizer and edit secrets
-~/.claude/sanitizer/Initialize.ps1
-notepad ~/.claude/sanitizer/secrets.json
-
-# Patch spinner words (run outside Claude)
-npx claude-depester --all
-```
-
 ## Components
 
 ### [Sanitizer](sanitizer/README.md)
@@ -46,10 +35,9 @@ Prevents sensitive identifiers (server names, IPs, domains) from being sent to A
 | Skill | Description |
 |-------|-------------|
 | [ansible-powershell](skills/ansible-powershell.md) | Ansible and PowerShell development standards |
-| [claude-code-config](skills/claude-code-config.md) | Claude Code settings, hooks, and permissions |
-| [infrastructure-troubleshooting](skills/infrastructure-troubleshooting.md) | Systematic methodology for diagnosing infrastructure problems |
-| [skill-management](skills/skill-management.md) | How to create, version, validate, and maintain Claude skills |
-| [try-harder](skills/try-harder.md) | Response calibration for accuracy, efficiency, and honest self-assessment |
+| [claude-config](skills/claude-config.md) | Skills, hooks, settings, and sync workflow |
+| [infrastructure-troubleshooting](skills/infrastructure-troubleshooting.md) | Diagnosing infrastructure problems |
+| [try-harder](skills/try-harder.md) | Response calibration for accuracy and efficiency |
 | [vmware-esxi-performance](skills/vmware-esxi-performance.md) | ESXi storage/network performance troubleshooting |
 
 ### Hooks

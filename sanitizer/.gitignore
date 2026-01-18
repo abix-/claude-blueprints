@@ -1,7 +1,5 @@
-# Never commit actual secrets - these files contain real values
-secrets.json
-auto_mappings.json
-ip_mappings_temp.json
+# Local config with mappings
+sanitizer.json
 
 # Temporary files
 *.tmp

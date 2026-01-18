@@ -1,30 +1,10 @@
-# Global CLAUDE.md
+# CLAUDE.md
 
-## Response Quality
+Read and follow `~/.claude/skills/try-harder.md` for every response.
 
-Follow standards in `~/.claude/skills/try-harder.md` for every response.
+When writing PowerShell or Ansible, read `~/.claude/skills/ansible-powershell.md` first.
+When modifying Claude config (skills, hooks, settings, CLAUDE.md), read `~/.claude/skills/claude-config.md` first.
+When diagnosing infrastructure problems, read `~/.claude/skills/infrastructure-troubleshooting.md` first.
+For ESXi performance issues, read `~/.claude/skills/vmware-esxi-performance.md` first.
 
-## Git Commits
-
-- Do NOT add `Co-Authored-By` lines to commits
-- Keep commit messages concise and lowercase
-
-## Ansible & PowerShell
-
-Follow standards in `~/.claude/skills/ansible-powershell.md` when writing PowerShell or Ansible.
-
-## Skill Management
-
-Follow standards in `~/.claude/skills/skill-management.md` when creating or modifying skills.
-
-## Infrastructure Troubleshooting
-
-Follow methodology in `~/.claude/skills/infrastructure-troubleshooting.md` when diagnosing infrastructure problems.
-
-## VMware ESXi Performance
-
-Follow `~/.claude/skills/vmware-esxi-performance.md` for ESXi storage/network performance issues (KAVG/DAVG, DSNRO, vmxnet3, PVSCSI).
-
-## Claude Code Configuration
-
-Follow `~/.claude/skills/claude-code-config.md` when configuring Claude Code settings, hooks, or permissions.
+Git commits: no Co-Authored-By, concise, lowercase.

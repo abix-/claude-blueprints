@@ -15,6 +15,21 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Auto-initialize if sanitizer.json doesn't exist
+$secretsPath = "$SanitizerDir\sanitizer.json"
+if (-not (Test-Path $secretsPath)) {
+    @($SanitizerDir, "$env:USERPROFILE\.claude\unsanitized") | ForEach-Object {
+        if (-not (Test-Path $_)) { New-Item -Path $_ -ItemType Directory -Force | Out-Null }
+    }
+    @{
+        mappings = @{}
+        autoMappings = @{}
+        patterns = @{ ipv4 = $true; hostnames = @() }
+        unsanitizedPath = "~/.claude/unsanitized/{project}"
+        excludePaths = @(".git", "node_modules", ".venv", "__pycache__")
+    } | ConvertTo-Json -Depth 5 | Set-Content -Path $secretsPath -Encoding UTF8
+}
+
 Import-Module "$SanitizerDir\Sanitizer.psm1" -Force
 
 $paths = Get-SanitizerPaths -SanitizerDir $SanitizerDir

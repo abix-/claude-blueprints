@@ -12,7 +12,7 @@ param()
 $skills = @(
     "$env:USERPROFILE\.claude\skills\try-harder.md"
     "$env:USERPROFILE\.claude\skills\ansible-powershell.md"
-    "$env:USERPROFILE\.claude\skills\claude-code-config.md"
+    "$env:USERPROFILE\.claude\skills\claude-config.md"
 )
 
 foreach ($skill in $skills) {
