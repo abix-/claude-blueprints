@@ -54,7 +54,9 @@ if (-not $isReal) { exit 0 }
 # === Execute in unsanitized ===
 $projectPath = (Get-Location).Path
 $projectName = Split-Path $projectPath -Leaf
-$unsanitizedPath = ($config.unsanitizedPath -replace '\{project\}', $projectName) -replace '^~', $env:USERPROFILE
+# Default unsanitizedPath if not configured
+$unsanitizedPathTemplate = if ($config.unsanitizedPath) { $config.unsanitizedPath } else { "~/.claude/unsanitized/{project}" }
+$unsanitizedPath = ($unsanitizedPathTemplate -replace '\{project\}', $projectName) -replace '^~', $env:USERPROFILE
 
 if (-not (Test-Path $unsanitizedPath)) { New-Item -Path $unsanitizedPath -ItemType Directory -Force | Out-Null }
 

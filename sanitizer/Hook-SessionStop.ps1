@@ -21,7 +21,10 @@ $config = Get-SanitizerConfig -SecretsPath $paths.Secrets
 $reverseMappings = Get-ReverseMappings -SecretsPath $paths.Secrets
 
 $projectName = Split-Path $ProjectPath -Leaf
-$unsanitizedPath = $config.unsanitizedPath -replace '\{project\}', $projectName
+
+# Default unsanitizedPath if not configured
+$unsanitizedPathTemplate = if ($config.unsanitizedPath) { $config.unsanitizedPath } else { "~/.claude/unsanitized/{project}" }
+$unsanitizedPath = $unsanitizedPathTemplate -replace '\{project\}', $projectName
 $unsanitizedPath = $unsanitizedPath -replace '^~', $env:USERPROFILE
 
 if (-not (Test-Path $unsanitizedPath)) { New-Item -Path $unsanitizedPath -ItemType Directory -Force | Out-Null }
