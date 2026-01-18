@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-SessionStart.ps1\""
+            "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-session-start"
           }
         ]
       },
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-SessionStop.ps1\""
+            "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-session-stop"
           }
         ]
       }
