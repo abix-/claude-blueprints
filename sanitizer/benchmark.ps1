@@ -1,10 +1,10 @@
 Import-Module C:/Users/Abix/.claude/sanitizer/Sanitizer.psm1 -Force
 
 $testData = @'
-Server 11.100.201.234 connected
-Database at 11.178.40.57 responding
-Gateway 11.112.65.63 routing to 11.63.167.174
-Backup server 11.100.166.98 online
+Server 111.148.25.233 connected
+Database at 111.83.13.238 responding
+Gateway 111.42.149.75 routing to 111.54.21.207
+Backup server 111.129.88.154 online
 '@
 
 # Warm up

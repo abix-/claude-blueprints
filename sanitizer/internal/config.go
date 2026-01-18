@@ -153,7 +153,7 @@ func InitializeConfigIfNeeded() error {
 		"mappingsAuto":     map[string]string{},
 		"mappingsManual": map[string]string{
 			"server.domain.local":    "server.example.test",
-			"192.168.1.100":          "111.50.100.1",
+			"111.91.241.85":          "111.50.100.1",
 			"C:\\Users\\realuser":    "C:\\Users\\fakeuser",
 			"secretproject":          "projectname",
 		},
