@@ -8,7 +8,7 @@ Personal Claude configuration shared across Claude web and Claude Code instances
 claude-blueprints/
 ├── skills/           # Reusable prompts and standards
 ├── hooks/            # General-purpose hooks (skill injection, etc.)
-├── commands/         # Slash commands (/claude-pull, /learn, etc.)
+├── commands/         # Slash commands (/load, /learn, etc.)
 ├── sanitizer/        # Credential sanitization system
 ├── CLAUDE.md         # Global context (copy to ~/.claude/)
 └── settings.json     # Global settings with hooks (copy to ~/.claude/)
@@ -22,7 +22,7 @@ git clone https://github.com/abix-/claude-blueprints.git
 
 Then tell Claude: *"Bootstrap my ~/.claude from claude-blueprints"*
 
-After bootstrap, edit repo directly, commit, push, then `/claude-pull` to apply locally.
+After bootstrap, edit repo directly, commit, push, then `/load` to apply locally.
 
 ## Components
 
@@ -68,7 +68,7 @@ See [sanitizer/README.md](sanitizer/README.md) for setup.
 
 | Command | Description |
 |---------|-------------|
-| [/claude-pull](commands/claude-pull.md) | Pull repo and apply to ~/.claude |
+| [/load](commands/load.md) | Pull repo and apply to ~/.claude |
 | [/learn](commands/learn.md) | Review conversation and update skills with learnings |
 | [/rtfm](commands/rtfm.md) | Search for existing solutions before building |
 
