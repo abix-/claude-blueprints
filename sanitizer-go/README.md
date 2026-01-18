@@ -1,8 +1,6 @@
-# Claude Code Secret Sanitizer (Go)
+# Claude Code Secret Sanitizer
 
 Prevent sensitive identifiers (server names, IPs, domains) from being sent to Anthropic.
-
-This is a Go rewrite of the [PowerShell sanitizer](../sanitizer/README.md) with **9-35x faster** hook execution.
 
 ## Performance
 
@@ -67,6 +65,35 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
     ✗ Blocked                Runs directly              Syncs changes, runs
                                                         with real values,
                                                         output sanitized
+                                                               │
+                                                               ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ STEP 2: Sync changes to unsanitized directory                           │
+│                                                                         │
+│     Working Tree                         Unsanitized Directory          │
+│     ┌─────────────────┐     copy &       ┌─────────────────┐            │
+│     │ 11.22.33.44     │   unsanitize     │ 192.168.1.100   │            │
+│     │ host-a1b.test   │ ───────────────► │ prod.internal   │            │
+│     └─────────────────┘   (changed       └─────────────────┘            │
+│                            files only)                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ STEP 3: Execute command in unsanitized directory                        │
+│         (command runs with REAL values)                                 │
+│                                                                         │
+│         "Deploying to prod.internal..."                                 │
+│         "Connected to 192.168.1.100"                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│ STEP 4: Sanitize output (real → fake)                                   │
+│                                                                         │
+│         "Deploying to host-a1b.test..."   ◄── Claude sees this          │
+│         "Connected to 11.22.33.44"                                      │
+└─────────────────────────────────────────────────────────────────────────┘
 
 
 WHERE REAL VALUES EXIST
@@ -203,6 +230,7 @@ Commands:
   hook-bash            Route Bash commands (DENY/FAKE/REAL)
   hook-file-access     Block access to sensitive files
   sanitize-ips         Stdin→stdout IP sanitization (deterministic)
+  exec                 Run command in unsanitized dir, sanitize output
 ```
 
 ### Standalone usage
@@ -286,17 +314,6 @@ sanitizer-go/
 |------|--------|
 | `~/.claude/sanitizer/sanitizer.json` | Contains real→fake mappings |
 | `~/.claude/unsanitized/**` | Contains real values |
-
-## Comparison with PowerShell Version
-
-| Aspect | PowerShell | Go |
-|--------|------------|-----|
-| Startup time | ~200-350ms | ~10-60ms |
-| Dependencies | PowerShell 5.1+ | None (single binary) |
-| Cross-platform | Windows-focused | Portable (with path changes) |
-| Source | `../sanitizer/*.ps1` | `./internal/**/*.go` |
-
-Both versions use the same `sanitizer.json` config format and are interchangeable.
 
 ## Troubleshooting
 
