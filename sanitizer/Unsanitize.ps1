@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-    Manually renders real values to a separate directory.
+    Manually unsanitizes working tree to a separate directory.
 
 .DESCRIPTION
     Use this script when:
     - Claude crashed and the Stop hook didn't run
-    - You want to render to a specific custom location
+    - You want to unsanitize to a specific custom location
     - You want to create multiple real versions
 
-    Copies the fake working tree to a separate directory and applies
-    reverse mappings (fake -> real) to get usable code.
+    Copies the sanitized working tree to a separate directory and applies
+    reverse mappings (fake -> real) to get deployable code.
 
 .PARAMETER SourceDir
     Source directory containing fake values. Defaults to current directory.
@@ -21,10 +21,13 @@
     Overwrite output directory if it exists.
 
 .EXAMPLE
-    .\RenderReal.ps1 -OutputDir C:\deploy\real
-    .\RenderReal.ps1 -SourceDir C:\code\myproject -OutputDir C:\deploy\real -Force
+    .\Unsanitize.ps1 -OutputDir C:\deploy\real
+
+.EXAMPLE
+    .\Unsanitize.ps1 -SourceDir C:\code\myproject -OutputDir C:\deploy\real -Force
 #>
 
+[CmdletBinding()]
 param(
     [string]$SourceDir = (Get-Location).Path,
 
@@ -46,7 +49,7 @@ $reverseMappings = Get-ReverseMappings -SecretsPath $paths.Secrets
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Render Real Values" -ForegroundColor Cyan
+Write-Host "  Unsanitize to Real Values" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Source (fake):  $SourceDir" -ForegroundColor Gray
@@ -82,7 +85,7 @@ if ($reverseMappings.Count -eq 0) {
 
 New-Item -Path $OutputDir -ItemType Directory -Force | Out-Null
 
-# === COPY AND RENDER ===
+# === COPY AND UNSANITIZE ===
 
 Write-Host ""
 Write-Host "Processing files..." -ForegroundColor Cyan
@@ -134,7 +137,7 @@ foreach ($file in Get-ChildItem -Path $SourceDir -Recurse -File -ErrorAction Sil
         $copiedCount++
 
         if ($content -ne $originalContent) {
-            Write-Host "  Rendered: $relativePath" -ForegroundColor Green
+            Write-Host "  Unsanitized: $relativePath" -ForegroundColor Green
             $modifiedCount++
         }
     }
@@ -149,7 +152,7 @@ foreach ($file in Get-ChildItem -Path $SourceDir -Recurse -File -ErrorAction Sil
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Render Complete" -ForegroundColor Cyan
+Write-Host "  Unsanitize Complete" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Output location:" -ForegroundColor White
@@ -159,6 +162,6 @@ Write-Host "Files copied:   $copiedCount" -ForegroundColor Gray
 Write-Host "Files modified: $modifiedCount" -ForegroundColor Gray
 Write-Host "Files skipped:  $skippedCount" -ForegroundColor Gray
 Write-Host ""
-Write-Host "This directory contains REAL secrets." -ForegroundColor Red
+Write-Host "This directory contains REAL values." -ForegroundColor Red
 Write-Host "Do NOT let Claude access it." -ForegroundColor Red
 Write-Host ""

@@ -5,11 +5,13 @@
 .DESCRIPTION
     Run this once before first use. Creates:
     - sanitizer.json: Template for mappings and config (if not exists)
+    - unsanitized directory for real values
 
 .EXAMPLE
     .\Initialize.ps1
 #>
 
+[CmdletBinding()]
 param(
     [string]$SanitizerDir = "$env:USERPROFILE\.claude\sanitizer"
 )
@@ -25,7 +27,7 @@ Write-Host ""
 # Create directories
 $dirs = @(
     $SanitizerDir,
-    "$env:USERPROFILE\.claude\rendered"
+    "$env:USERPROFILE\.claude\unsanitized"
 )
 
 foreach ($dir in $dirs) {
@@ -47,6 +49,7 @@ if (-not (Test-Path $secretsPath)) {
             ipv4 = $true
             hostnames = @("\.internal\.corp$", "\.local$")
         }
+        unsanitizedPath = "~/.claude/unsanitized/{project}"
     } | ConvertTo-Json -Depth 5 | Set-Content -Path $secretsPath -Encoding UTF8
     Write-Host "Created: sanitizer.json (edit this with your mappings)" -ForegroundColor Green
 }
@@ -55,7 +58,7 @@ if (-not (Test-Path $secretsPath)) {
 $settingsPath = "$env:USERPROFILE\.claude\settings.json"
 $requiredDenyPaths = @(
     "~/.claude/sanitizer/sanitizer.json",
-    "~/.claude/rendered/**"
+    "~/.claude/unsanitized/**"
 )
 
 if (Test-Path $settingsPath) {
@@ -79,7 +82,7 @@ if (Test-Path $settingsPath) {
             Write-Host '  "permissions": {' -ForegroundColor White
             Write-Host '    "deny": [' -ForegroundColor White
             Write-Host '      "~/.claude/sanitizer/sanitizer.json",' -ForegroundColor White
-            Write-Host '      "~/.claude/rendered/**"' -ForegroundColor White
+            Write-Host '      "~/.claude/unsanitized/**"' -ForegroundColor White
             Write-Host '    ]' -ForegroundColor White
             Write-Host '  },' -ForegroundColor White
         } else {
