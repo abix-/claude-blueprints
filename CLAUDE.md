@@ -8,4 +8,4 @@ When modifying Claude config (skills, hooks, settings, CLAUDE.md), read `~/.clau
 When diagnosing infrastructure problems, read `~/.claude/skills/infrastructure-troubleshooting.md` first.
 For ESXi performance issues, read `~/.claude/skills/vmware-esxi-performance.md` first.
 
-Git commits: no Co-Authored-By, concise, lowercase.
+Git commits: no Co-Authored-By, concise, lowercase, always push immediately.
