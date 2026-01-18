@@ -2,8 +2,8 @@
 name: ansible-powershell
 description: Ansible and PowerShell development standards
 metadata:
-  version: "2.6"
-  updated: "2026-01-17"
+  version: "2.7"
+  updated: "2026-01-18"
 ---
 # Ansible & PowerShell Standards
 ## Universal Principles
@@ -24,6 +24,7 @@ metadata:
 - Functions only (not scripts); standard Verb-Noun naming
 - Always `[CmdletBinding()]`; output `[PSCustomObject]`
 - Use `$()` for expansion (not `${}`), especially with properties or after colons
+- Use `-not` instead of `!` when running PowerShell via bash (bash escapes `!` to `\!`)
 - Collection pattern: `$results = foreach ($item in $collection) { ... }` (avoid `+=`)
 - Prefer splatting for cmdlets with 3+ parameters
 - Use `Write-Verbose` for debug/progress messages (not `Write-Host`)

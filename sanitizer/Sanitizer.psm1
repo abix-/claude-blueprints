@@ -104,7 +104,7 @@ function Get-SanitizerMappings {
 
     .EXAMPLE
         $mappings = Get-SanitizerMappings
-        $fake = $mappings['192.168.1.100']
+        $fake = $mappings['11.139.237.229']
     #>
     [CmdletBinding()]
     param(
@@ -335,7 +335,7 @@ function Get-DeterministicFakeIp {
         Generates a deterministic fake IP from a real IP (for output scrubbing).
 
     .EXAMPLE
-        $fake = Get-DeterministicFakeIp -RealIp "192.168.1.100"
+        $fake = Get-DeterministicFakeIp -RealIp "11.139.237.229"
     #>
     [CmdletBinding()]
     param(

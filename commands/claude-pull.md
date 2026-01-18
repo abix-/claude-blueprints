@@ -1,19 +1,25 @@
 ---
 description: Pull claude-blueprints repo and apply to ~/.claude
-allowed-tools: Bash(cp:*), Bash(git:*)
+allowed-tools: Bash(powershell:*), Bash(git:*)
 ---
 
 ## Task
 
-Pull repo changes and apply to local Claude config:
+Run this PowerShell to pull and sync:
 
-1. Pull latest: `git -C "C:/code/claude-blueprints" pull`
-2. Copy all:
-   - `cp -r C:/code/claude-blueprints/skills/* ~/.claude/skills/`
-   - `cp -r C:/code/claude-blueprints/hooks/* ~/.claude/hooks/`
-   - `cp -r C:/code/claude-blueprints/commands/* ~/.claude/commands/`
-   - `cp -r C:/code/claude-blueprints/sanitizer/* ~/.claude/sanitizer/`
-   - `cp C:/code/claude-blueprints/CLAUDE.md ~/.claude/`
-   - `cp C:/code/claude-blueprints/settings.json ~/.claude/`
+```powershell
+git -C "C:/code/claude-blueprints" pull
+$repo = 'C:/code/claude-blueprints'; $local = "$env:USERPROFILE/.claude"
+foreach ($dir in 'skills','hooks','commands','sanitizer') {
+    $s, $d = "$repo/$dir", "$local/$dir"
+    if (-not (Test-Path $d)) { mkdir $d -Force | Out-Null }
+    if (Test-Path $s) {
+        $srcNames = (Get-ChildItem $s -File -ErrorAction SilentlyContinue).Name
+        Get-ChildItem $d -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin $srcNames } | Remove-Item -Force
+        Copy-Item "$s/*" $d -Force -ErrorAction SilentlyContinue
+    }
+}
+'CLAUDE.md','settings.json' | ForEach-Object { Copy-Item "$repo/$_" $local -Force -ErrorAction SilentlyContinue }
+```
 
-Report what was updated.
+Report what git pulled and confirm sync completed.

@@ -14,7 +14,7 @@ When Claude Code launches, BEFORE Claude sees anything:
     ┌─────────────────────┐                 ┌─────────────────────┐
     │ inventory.yml       │    scan &       │ inventory.yml       │
     │ ─────────────────── │    replace      │ ─────────────────── │
-    │ host: 192.168.1.100 │ ──────────────► │ host: 11.22.33.44   │
+    │ host: 11.139.237.229 │ ──────────────► │ host: 11.22.33.44   │
     │ name: prod.internal │   (in place)    │ name: host-a1b.test │
     └─────────────────────┘                 └─────────────────────┘
                                                       ▲
@@ -60,7 +60,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │                                                                         │
 │     Working Tree                         Unsanitized Directory          │
 │     ┌─────────────────┐     copy &       ┌─────────────────┐            │
-│     │ 11.22.33.44     │   unsanitize     │ 192.168.1.100   │            │
+│     │ 11.22.33.44     │   unsanitize     │ 11.139.237.229   │            │
 │     │ host-a1b.test   │ ───────────────► │ prod.internal   │            │
 │     └─────────────────┘   (changed       └─────────────────┘            │
 │                            files only)                                  │
@@ -72,7 +72,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │         (command runs with REAL values)                                 │
 │                                                                         │
 │         "Deploying to prod.internal..."                                 │
-│         "Connected to 192.168.1.100"                                    │
+│         "Connected to 11.139.237.229"                                    │
 └─────────────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼
