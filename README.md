@@ -24,16 +24,6 @@ Then tell Claude: *"Bootstrap my ~/.claude from claude-blueprints"*
 
 After bootstrap, use `/claude-pull` and `/claude-push` to sync.
 
-### Post-Bootstrap (optional)
-
-```bash
-# Initialize sanitizer (creates sanitizer.json with defaults)
-~/.claude/sanitizer/Initialize.ps1
-
-# Patch spinner words (run outside Claude)
-npx claude-depester --all
-```
-
 ## Components
 
 ### [Sanitizer](sanitizer/README.md)
