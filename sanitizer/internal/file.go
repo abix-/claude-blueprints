@@ -28,6 +28,20 @@ func IsBinary(path string) bool {
 	return false
 }
 
+func ShouldProcessFile(path string, info os.FileInfo, projectPath string, skipPaths []string) bool {
+	if info.IsDir() || info.Size() == 0 || info.Size() > 10*1024*1024 {
+		return false
+	}
+	relPath, err := filepath.Rel(projectPath, path)
+	if err != nil || strings.HasPrefix(relPath, "..") {
+		return false
+	}
+	if IsSkippedPath(relPath, skipPaths) {
+		return false
+	}
+	return !IsBinary(path)
+}
+
 func IsSkippedPath(relativePath string, skipPaths []string) bool {
 	relativePath = strings.ReplaceAll(relativePath, "\\", "/")
 

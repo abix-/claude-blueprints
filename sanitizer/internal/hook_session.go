@@ -3,7 +3,6 @@ package internal
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 )
 
 func HookSessionStart(input []byte) ([]byte, error) {
@@ -21,81 +20,38 @@ func HookSessionStart(input []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	autoMappings := make(map[string]string)
-	for k, v := range cfg.MappingsAuto {
-		autoMappings[k] = v
-	}
-
 	// Gather text files
 	var files []string
 	filepath.Walk(projectPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+		if err != nil {
 			return nil
 		}
-
-		relPath, _ := filepath.Rel(projectPath, path)
-		if IsSkippedPath(relPath, cfg.SkipPaths) {
-			return nil
+		if ShouldProcessFile(path, info, projectPath, cfg.SkipPaths) {
+			files = append(files, path)
 		}
-		if info.Size() == 0 || info.Size() > 10*1024*1024 {
-			return nil
-		}
-		if IsBinary(path) {
-			return nil
-		}
-
-		files = append(files, path)
 		return nil
 	})
 
-	// Discover IPs and hostnames
-	discovered := make(map[string]string)
-	ipRegex := IPv4Regex()
-
+	// Discover sensitive values across all files
+	allDiscovered := make(map[string]string)
 	for _, path := range files {
 		content, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		text := string(content)
-
-		for _, ip := range ipRegex.FindAllString(text, -1) {
-			if !IsExcludedIP(ip) {
-				discovered[ip] = "ip"
-			}
-		}
-
-		for _, pattern := range cfg.HostnamePatterns {
-			re, err := regexp.Compile(`(?i)[a-zA-Z0-9][-a-zA-Z0-9\.]*` + regexp.QuoteMeta(pattern))
-			if err != nil {
-				continue
-			}
-			for _, match := range re.FindAllString(text, -1) {
-				discovered[match] = "hostname"
+		for k, v := range DiscoverSensitiveValues(string(content), cfg) {
+			if _, exists := allDiscovered[k]; !exists {
+				allDiscovered[k] = v
 			}
 		}
 	}
 
-	// Generate mappings for new discoveries
-	for value, typ := range discovered {
-		if _, exists := cfg.MappingsManual[value]; exists {
-			continue
-		}
-		if _, exists := autoMappings[value]; exists {
-			continue
-		}
-		if typ == "ip" {
-			autoMappings[value] = NewSanitizedIP()
-		} else {
-			autoMappings[value] = NewSanitizedHostname()
-		}
-	}
-
+	autoMappings := cfg.MergeAutoMappings(allDiscovered)
 	if len(autoMappings) > len(cfg.MappingsAuto) {
 		SaveAutoMappings(autoMappings)
 	}
 
-	// Build combined mappings
+	// Build combined mappings (auto + manual, manual wins)
 	allMappings := make(map[string]string)
 	for k, v := range autoMappings {
 		allMappings[k] = v

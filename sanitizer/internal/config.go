@@ -16,6 +16,13 @@ type Config struct {
 
 var DefaultSkipPaths = []string{".git", "node_modules", ".venv", "__pycache__"}
 
+func stripBOM(data []byte) []byte {
+	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
+		return data[3:]
+	}
+	return data
+}
+
 func SanitizerDir() string {
 	return filepath.Join(os.Getenv("USERPROFILE"), ".claude", "sanitizer")
 }
@@ -45,10 +52,7 @@ func LoadConfigFrom(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// Strip UTF-8 BOM if present
-	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
-		data = data[3:]
-	}
+	data = stripBOM(data)
 
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, err
@@ -73,6 +77,17 @@ func (c *Config) AllMappings() map[string]string {
 		all[k] = v
 	}
 	return all
+}
+
+func (c *Config) MergeAutoMappings(new map[string]string) map[string]string {
+	merged := make(map[string]string)
+	for k, v := range c.MappingsAuto {
+		merged[k] = v
+	}
+	for k, v := range new {
+		merged[k] = v
+	}
+	return merged
 }
 
 func (c *Config) ReverseMappings() map[string]string {
@@ -116,9 +131,7 @@ func SaveAutoMappingsTo(path string, autoMappings map[string]string) error {
 		return err
 	}
 
-	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
-		data = data[3:]
-	}
+	data = stripBOM(data)
 
 	var raw map[string]any
 	if len(data) > 0 {

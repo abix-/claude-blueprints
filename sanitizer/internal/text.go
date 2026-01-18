@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -32,4 +33,39 @@ func SanitizeTextWithFallback(text string, mappings map[string]string) string {
 
 func UnsanitizeText(text string, reverseMappings map[string]string) string {
 	return SanitizeText(text, reverseMappings)
+}
+
+func DiscoverSensitiveValues(text string, cfg *Config) map[string]string {
+	discovered := make(map[string]string)
+
+	ipRegex := IPv4Regex()
+	for _, ip := range ipRegex.FindAllString(text, -1) {
+		if !IsExcludedIP(ip) {
+			if _, exists := cfg.MappingsManual[ip]; !exists {
+				if _, exists := cfg.MappingsAuto[ip]; !exists {
+					if _, exists := discovered[ip]; !exists {
+						discovered[ip] = NewSanitizedIP()
+					}
+				}
+			}
+		}
+	}
+
+	for _, pattern := range cfg.HostnamePatterns {
+		re, err := regexp.Compile(`(?i)[a-zA-Z0-9][-a-zA-Z0-9\.]*` + pattern)
+		if err != nil {
+			continue
+		}
+		for _, match := range re.FindAllString(text, -1) {
+			if _, exists := cfg.MappingsManual[match]; !exists {
+				if _, exists := cfg.MappingsAuto[match]; !exists {
+					if _, exists := discovered[match]; !exists {
+						discovered[match] = NewSanitizedHostname()
+					}
+				}
+			}
+		}
+	}
+
+	return discovered
 }

@@ -47,7 +47,7 @@ func HookBash(input []byte) ([]byte, error) {
 	// BLOCK
 	for _, pattern := range blockedCmdPatterns {
 		if pattern.MatchString(command) {
-			return denyResponse("Blocked")
+			return DenyResponse("Blocked")
 		}
 	}
 
@@ -76,7 +76,7 @@ func HookBash(input []byte) ([]byte, error) {
 	return allowWithUpdatedCommand(wrappedCommand)
 }
 
-func denyResponse(reason string) ([]byte, error) {
+func DenyResponse(reason string) ([]byte, error) {
 	return json.Marshal(map[string]any{
 		"hookSpecificOutput": map[string]any{
 			"hookEventName":      "PreToolUse",

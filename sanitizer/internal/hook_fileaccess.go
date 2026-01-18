@@ -37,13 +37,7 @@ func HookFileAccess(input []byte) ([]byte, error) {
 
 	for _, pattern := range blockedPathPatterns {
 		if pattern.MatchString(path) {
-			return json.Marshal(map[string]any{
-				"hookSpecificOutput": map[string]any{
-					"hookEventName":      "PreToolUse",
-					"permissionDecision": "deny",
-					"reason":             "Access blocked: sensitive sanitizer file",
-				},
-			})
+			return DenyResponse("Access blocked: sensitive sanitizer file")
 		}
 	}
 
@@ -61,17 +55,11 @@ func SanitizeSingleFile(filePath string) {
 		return
 	}
 
-	// Normalize paths
 	filePath = filepath.Clean(filePath)
 	projectPath = filepath.Clean(projectPath)
 
-	// Check if file is under project
+	// Check if file is under project (case-insensitive for Windows)
 	if !strings.HasPrefix(strings.ToLower(filePath), strings.ToLower(projectPath)) {
-		return
-	}
-
-	relPath, err := filepath.Rel(projectPath, filePath)
-	if err != nil || strings.HasPrefix(relPath, "..") {
 		return
 	}
 
@@ -80,69 +68,35 @@ func SanitizeSingleFile(filePath string) {
 		return
 	}
 
-	// Check exclusions
-	if IsSkippedPath(relPath, cfg.SkipPaths) {
-		return
-	}
-
-	// Check file exists and size
 	info, err := os.Stat(filePath)
-	if err != nil || info.IsDir() || info.Size() == 0 || info.Size() > 10*1024*1024 {
+	if err != nil {
 		return
 	}
 
-	if IsBinary(filePath) {
+	if !ShouldProcessFile(filePath, info, projectPath, cfg.SkipPaths) {
 		return
 	}
 
+	relPath, _ := filepath.Rel(projectPath, filePath)
 	projectName := filepath.Base(projectPath)
 	unsanitizedPath := cfg.ExpandUnsanitizedPath(projectName)
 	unsanitizedFilePath := filepath.Join(unsanitizedPath, relPath)
 
-	// Read current file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return
 	}
 	currentContent := string(content)
 
-	// Discover IPs/hostnames in current content
-	autoMappings := make(map[string]string)
-	for k, v := range cfg.MappingsAuto {
-		autoMappings[k] = v
-	}
+	// Discover and merge auto mappings
+	discovered := DiscoverSensitiveValues(currentContent, cfg)
+	autoMappings := cfg.MergeAutoMappings(discovered)
 
-	ipRegex := IPv4Regex()
-	for _, ip := range ipRegex.FindAllString(currentContent, -1) {
-		if !IsExcludedIP(ip) {
-			if _, exists := cfg.MappingsManual[ip]; !exists {
-				if _, exists := autoMappings[ip]; !exists {
-					autoMappings[ip] = NewSanitizedIP()
-				}
-			}
-		}
-	}
-
-	for _, pattern := range cfg.HostnamePatterns {
-		re, err := regexp.Compile(`(?i)[a-zA-Z0-9][-a-zA-Z0-9\.]*` + pattern)
-		if err != nil {
-			continue
-		}
-		for _, match := range re.FindAllString(currentContent, -1) {
-			if _, exists := cfg.MappingsManual[match]; !exists {
-				if _, exists := autoMappings[match]; !exists {
-					autoMappings[match] = NewSanitizedHostname()
-				}
-			}
-		}
-	}
-
-	// Save autoMappings if changed
 	if len(autoMappings) > len(cfg.MappingsAuto) {
 		SaveAutoMappings(autoMappings)
 	}
 
-	// Build all mappings
+	// Build all mappings (auto + manual, manual wins)
 	allMappings := make(map[string]string)
 	for k, v := range autoMappings {
 		allMappings[k] = v
@@ -151,18 +105,12 @@ func SanitizeSingleFile(filePath string) {
 		allMappings[k] = v
 	}
 
-	// Sanitize content
 	sanitized := SanitizeText(currentContent, allMappings)
-
-	// If unchanged, already clean - nothing to do
 	if sanitized == currentContent {
 		return
 	}
 
-	// Write sanitized to working tree
 	os.WriteFile(filePath, []byte(sanitized), info.Mode())
-
-	// Write unsanitized content to unsanitized dir (update backup)
 	os.MkdirAll(filepath.Dir(unsanitizedFilePath), 0755)
 	os.WriteFile(unsanitizedFilePath, content, info.Mode())
 }
