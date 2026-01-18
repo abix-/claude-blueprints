@@ -31,7 +31,7 @@ After bootstrap, edit repo directly, commit, push, then `/load` to apply locally
 Go binary that prevents infrastructure details from reaching Anthropic's servers.
 
 **What gets replaced:**
-- IPs → `111.x.x.x` fake range
+- IPs → `111.x.x.x` sanitized range
 - Hostnames matching patterns (e.g., `*.domain.local`) → `host-xxxx.example.test`
 - Manual mappings you define (server names, paths, project names)
 
