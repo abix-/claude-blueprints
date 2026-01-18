@@ -2,6 +2,7 @@ package internal
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -101,7 +102,13 @@ func SanitizeSingleFile(filePath string) {
 		return
 	}
 
-	os.WriteFile(filePath, []byte(sanitized), info.Mode())
-	os.MkdirAll(filepath.Dir(unsanitizedFilePath), 0755)
-	os.WriteFile(unsanitizedFilePath, content, info.Mode())
+	if err := os.WriteFile(filePath, []byte(sanitized), info.Mode()); err != nil {
+		log.Printf("sanitizer: failed to write %s: %v", filePath, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(unsanitizedFilePath), 0755); err != nil {
+		log.Printf("sanitizer: failed to create dir %s: %v", filepath.Dir(unsanitizedFilePath), err)
+	}
+	if err := os.WriteFile(unsanitizedFilePath, content, info.Mode()); err != nil {
+		log.Printf("sanitizer: failed to write backup %s: %v", unsanitizedFilePath, err)
+	}
 }

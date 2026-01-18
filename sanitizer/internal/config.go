@@ -28,12 +28,12 @@ func SanitizerDir() string {
 	return filepath.Join(os.Getenv("USERPROFILE"), ".claude", "sanitizer")
 }
 
-func SecretsPath() string {
+func ConfigPath() string {
 	return filepath.Join(SanitizerDir(), "sanitizer.json")
 }
 
 func LoadConfig() (*Config, error) {
-	return LoadConfigFrom(SecretsPath())
+	return LoadConfigFrom(ConfigPath())
 }
 
 func LoadConfigFrom(path string) (*Config, error) {
@@ -122,7 +122,7 @@ func (c *Config) BuildAllMappings(autoMappings map[string]string) map[string]str
 }
 
 func SaveAutoMappings(autoMappings map[string]string) error {
-	return SaveAutoMappingsTo(SecretsPath(), autoMappings)
+	return SaveAutoMappingsTo(ConfigPath(), autoMappings)
 }
 
 func SaveAutoMappingsTo(path string, autoMappings map[string]string) error {
@@ -153,7 +153,7 @@ func SaveAutoMappingsTo(path string, autoMappings map[string]string) error {
 }
 
 func InitializeConfigIfNeeded() error {
-	path := SecretsPath()
+	path := ConfigPath()
 	if _, err := os.Stat(path); err == nil {
 		return nil
 	}

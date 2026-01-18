@@ -25,7 +25,7 @@ func SanitizeText(text string, mappings map[string]string) string {
 	return text
 }
 
-func SanitizeTextWithFallback(text string, mappings map[string]string) string {
+func sanitizeTextWithFallback(text string, mappings map[string]string) string {
 	text = SanitizeText(text, mappings)
 	text = SanitizeIPs(text)
 	return text

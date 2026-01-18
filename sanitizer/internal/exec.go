@@ -48,7 +48,7 @@ func Exec(command string) error {
 
 	// Sanitize output
 	allMappings := cfg.AllMappings()
-	sanitized := SanitizeTextWithFallback(output, allMappings)
+	sanitized := sanitizeTextWithFallback(output, allMappings)
 
 	fmt.Print(sanitized)
 

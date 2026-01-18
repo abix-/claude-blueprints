@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const MaxFileSize = 10 * 1024 * 1024 // 10MB
+
 func IsBinary(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
@@ -29,7 +31,7 @@ func IsBinary(path string) bool {
 }
 
 func ShouldProcessFile(path string, info os.FileInfo, projectPath string, skipPaths []string) bool {
-	if info.IsDir() || info.Size() == 0 || info.Size() > 10*1024*1024 {
+	if info.IsDir() || info.Size() == 0 || info.Size() > MaxFileSize {
 		return false
 	}
 	relPath, err := filepath.Rel(projectPath, path)
@@ -71,7 +73,7 @@ func SyncDir(srcDir, dstDir string, skipPaths []string, transform func(string) s
 			return nil
 		}
 
-		if info.Size() > 10*1024*1024 {
+		if info.Size() > MaxFileSize {
 			return nil
 		}
 
