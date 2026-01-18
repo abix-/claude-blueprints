@@ -2,7 +2,7 @@
 name: skill-management
 description: How to create, version, and maintain Claude skills. Read this skill FIRST when creating or modifying any skill file.
 metadata:
-  version: "3.2"
+  version: "3.3"
   updated: "2026-01-18"
 ---
 # Skill Management
@@ -16,7 +16,17 @@ metadata:
 - Be explicit about scope. When does this skill apply?
 - Resolve ambiguities. If instructions could conflict, clarify which wins.
 - Cut repetition. Say it once.
-- Leaner is better. Same payload, fewer tokens.
+
+## Avoiding Token Bloat
+
+| Bloat | Lean |
+|-------|------|
+| "You should always..." | Just state the rule |
+| "It is important to..." | Just state the rule |
+| Headers for 2-3 lines of content | Skip the header |
+| Paragraphs explaining simple concepts | Bullets |
+| Same concept in multiple sections | Say it once |
+| "When X, you should Y" | "X → Y" |
 
 ## Frontmatter Structure
 
