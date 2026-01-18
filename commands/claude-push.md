@@ -1,6 +1,6 @@
 ---
 description: Sync ~/.claude to claude-blueprints repo and push
-allowed-tools: Bash(powershell:*), Bash(git:*)
+allowed-tools: Bash(sync:*), Bash(git:*)
 ---
 
 ## Context
@@ -9,24 +9,13 @@ allowed-tools: Bash(powershell:*), Bash(git:*)
 
 ## Task
 
-1. Run this PowerShell to sync local to repo:
+1. Sync local to repo (run as single command):
 
-```powershell
-$local = "$env:USERPROFILE/.claude"; $repo = 'C:/code/claude-blueprints'
-foreach ($dir in 'skills','hooks','commands','sanitizer') {
-    $s, $d = "$local/$dir", "$repo/$dir"
-    if (-not (Test-Path $d)) { mkdir $d -Force | Out-Null }
-    if (Test-Path $s) {
-        $srcNames = (Get-ChildItem $s -File -ErrorAction SilentlyContinue).Name
-        Get-ChildItem $d -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin $srcNames } | Remove-Item -Force
-        Copy-Item "$s/*" $d -Force -ErrorAction SilentlyContinue
-    }
-}
-'CLAUDE.md','settings.json' | ForEach-Object { Copy-Item "$local/$_" $repo -Force -ErrorAction SilentlyContinue }
+```bash
+local="$HOME/.claude"; repo="C:/code/claude-blueprints"; for dir in skills hooks commands sanitizer; do mkdir -p "$repo/$dir"; if [ -d "$local/$dir" ]; then for f in "$repo/$dir"/*; do [ -f "$f" ] && [ ! -f "$local/$dir/$(basename "$f")" ] && rm -f "$f"; done; cp "$local/$dir"/* "$repo/$dir"/ 2>/dev/null; fi; done; cp "$local/CLAUDE.md" "$repo/" 2>/dev/null; cp "$local/settings.json" "$repo/" 2>/dev/null; echo "Sync complete"
 ```
 
-2. Stage: `git -C "C:/code/claude-blueprints" add -A`
-3. Diff: `git -C "C:/code/claude-blueprints" diff --cached --stat`
-4. If changes, commit (lowercase, concise) and push
+2. Stage and diff: `git -C "C:/code/claude-blueprints" add -A && git -C "C:/code/claude-blueprints" diff --cached --stat`
+3. If changes, commit (lowercase, concise) and push
 
 Report what was synced.

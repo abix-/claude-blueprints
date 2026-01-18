@@ -1,41 +1,22 @@
 ---
 description: Pull claude-blueprints repo and apply to ~/.claude
-allowed-tools: Bash(powershell:*), Bash(git:*), Bash(go:*)
+allowed-tools: Bash(git:*), Bash(sync:*), Bash(go:*)
 ---
 
 ## Task
 
-1. Pull and sync config:
+1. Pull latest: `git -C "C:/code/claude-blueprints" pull`
 
-```powershell
-git -C "C:/code/claude-blueprints" pull
-$repo = 'C:/code/claude-blueprints'; $local = "$env:USERPROFILE/.claude"
-foreach ($dir in 'skills','hooks','commands','sanitizer') {
-    $s, $d = "$repo/$dir", "$local/$dir"
-    if (-not (Test-Path $d)) { mkdir $d -Force | Out-Null }
-    if (Test-Path $s) {
-        $srcNames = (Get-ChildItem $s -File -ErrorAction SilentlyContinue).Name
-        Get-ChildItem $d -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin $srcNames } | Remove-Item -Force
-        Copy-Item "$s/*" $d -Force -ErrorAction SilentlyContinue
-    }
-}
-'CLAUDE.md','settings.json' | ForEach-Object { Copy-Item "$repo/$_" $local -Force -ErrorAction SilentlyContinue }
+2. Sync repo to local (run as single command):
+
+```bash
+repo="C:/code/claude-blueprints"; local="$HOME/.claude"; for dir in skills hooks commands sanitizer; do mkdir -p "$local/$dir"; if [ -d "$repo/$dir" ]; then for f in "$local/$dir"/*; do [ -f "$f" ] && [ ! -f "$repo/$dir/$(basename "$f")" ] && rm -f "$f"; done; cp "$repo/$dir"/* "$local/$dir"/ 2>/dev/null; fi; done; cp "$repo/CLAUDE.md" "$local/" 2>/dev/null; cp "$repo/settings.json" "$local/" 2>/dev/null; echo "Sync complete"
 ```
 
-2. Build Go sanitizer:
+3. Build Go sanitizer (if Go installed):
 
-```powershell
-$goExe = 'C:/Program Files/Go/bin/go.exe'
-if (Test-Path $goExe) {
-    Push-Location "C:/code/claude-blueprints/sanitizer-go"
-    & $goExe build -o sanitizer.exe ./cmd/sanitizer
-    if (-not (Test-Path "$env:USERPROFILE/.claude/bin")) { mkdir "$env:USERPROFILE/.claude/bin" -Force | Out-Null }
-    Copy-Item sanitizer.exe "$env:USERPROFILE/.claude/bin/" -Force
-    Pop-Location
-    Write-Host "Go sanitizer built and installed"
-} else {
-    Write-Host "Go not installed - skipping sanitizer build"
-}
+```bash
+if [ -f "/c/Program Files/Go/bin/go.exe" ]; then cd "C:/code/claude-blueprints/sanitizer-go" && "/c/Program Files/Go/bin/go.exe" build -o sanitizer.exe ./cmd/sanitizer && mkdir -p "$HOME/.claude/bin" && cp sanitizer.exe "$HOME/.claude/bin/" && echo "Go sanitizer built"; else echo "Go not installed - skipping"; fi
 ```
 
 Report what git pulled and confirm sync completed.
