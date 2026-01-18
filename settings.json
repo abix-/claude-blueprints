@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "C:/code/claude-blueprints/sanitizer-go/sanitizer.exe hook-file-access"
+            "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-file-access"
           }
         ]
       }
