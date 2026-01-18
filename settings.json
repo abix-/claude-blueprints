@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-FileAccess.ps1\""
+            "command": "C:/code/claude-blueprints/sanitizer-go/sanitizer.exe hook-file-access"
           }
         ]
       }
