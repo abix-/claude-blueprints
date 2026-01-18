@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-session-start"
+            "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-session-start"
           }
         ]
       },
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-bash"
+            "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-bash"
           }
         ]
       },
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-file-access"
+            "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-file-access"
           }
         ]
       }
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-session-stop"
+            "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-session-stop"
           }
         ]
       }

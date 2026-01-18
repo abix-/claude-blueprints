@@ -16,7 +16,7 @@ local="$HOME/.claude"
 repo="C:/code/claude-blueprints"
 
 # Sync directories (remove orphans, copy files)
-for dir in skills hooks commands sanitizer; do
+for dir in skills hooks commands; do
     mkdir -p "$repo/$dir"
     if [ -d "$local/$dir" ]; then
         # Remove files in repo that don't exist in local
