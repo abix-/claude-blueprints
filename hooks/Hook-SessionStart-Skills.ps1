@@ -8,7 +8,7 @@ param()
 
 $skills = @(
     "$env:USERPROFILE\.claude\skills\try-harder.md"
-    "$env:USERPROFILE\.claude\skills\coding.md"
+    "$env:USERPROFILE\.claude\skills\code.md"
     "$env:USERPROFILE\.claude\skills\claude-config.md"
 )
 

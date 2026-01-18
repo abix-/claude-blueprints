@@ -1,5 +1,5 @@
 ---
-name: coding
+name: code
 description: Development standards for Ansible, PowerShell, and Go
 metadata:
   version: "1.0"
