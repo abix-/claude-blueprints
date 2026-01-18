@@ -2,7 +2,7 @@
 
 ## Response Quality
 
-Follow standards in `~/.claude/skills/try-harder.md` for every response.
+Read and follow `~/.claude/skills/try-harder.md` for every response.
 
 ## Git Commits
 
@@ -11,20 +11,20 @@ Follow standards in `~/.claude/skills/try-harder.md` for every response.
 
 ## Ansible & PowerShell
 
-Follow standards in `~/.claude/skills/ansible-powershell.md` when writing PowerShell or Ansible.
+When writing PowerShell or Ansible, read `~/.claude/skills/ansible-powershell.md` first.
 
 ## Skill Management
 
-Follow standards in `~/.claude/skills/skill-management.md` when creating or modifying skills.
+When creating or modifying skills, read `~/.claude/skills/skill-management.md` first.
 
 ## Infrastructure Troubleshooting
 
-Follow methodology in `~/.claude/skills/infrastructure-troubleshooting.md` when diagnosing infrastructure problems.
+When diagnosing infrastructure problems, read `~/.claude/skills/infrastructure-troubleshooting.md` first.
 
 ## VMware ESXi Performance
 
-Follow `~/.claude/skills/vmware-esxi-performance.md` for ESXi storage/network performance issues (KAVG/DAVG, DSNRO, vmxnet3, PVSCSI).
+For ESXi storage/network performance issues (KAVG/DAVG, DSNRO, vmxnet3, PVSCSI), read `~/.claude/skills/vmware-esxi-performance.md` first.
 
 ## Claude Code Configuration
 
-Follow `~/.claude/skills/claude-code-config.md` when configuring Claude Code settings, hooks, or permissions.
+When configuring Claude Code settings, hooks, or permissions, read `~/.claude/skills/claude-code-config.md` first.
