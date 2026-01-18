@@ -32,7 +32,7 @@ When Claude Code launches, BEFORE Claude sees anything:
                                                       ▲
     - Finds IPs matching patterns                     │
     - Finds hostnames matching patterns         Claude reads
-    - Generates fake replacements               and edits this
+    - Generates sanitized replacements               and edits this
     - Saves mappings to sanitizer.json
 
 
@@ -139,7 +139,7 @@ Create `~/.claude/sanitizer/sanitizer.json`:
     "mappingsManual": {
         "server.domain.local": "server.example.test",
         "192.168.1.100": "111.50.100.1",
-        "C:\\Users\\realuser": "C:\\Users\\fakeuser",
+        "C:\\Users\\realuser": "C:\\Users\\sanitizeduser",
         "secretproject": "projectname"
     },
     "skipPaths": [".git", "node_modules", ".venv", "__pycache__"],
@@ -235,7 +235,7 @@ Commands:
 ### Standalone usage
 
 ```powershell
-# Sanitize text with deterministic fake IPs
+# Sanitize text with deterministic sanitized IPs
 echo "Server at 111.91.241.85" | sanitizer.exe sanitize-ips
 # Output: Server at 111.52.117.80
 
@@ -280,14 +280,14 @@ Everything else: `git`, `ls`, `npm`, `python`, etc.
 - Link-local: `169.254.x.x`
 - Multicast: `224.x.x.x` - `239.x.x.x`
 - Subnet masks: `255.x.x.x`
-- Already fake: `111.x.x.x` (our fake range)
+- Already sanitized: `111.x.x.x` (our sanitized range)
 
 ### Fake IP generation
 
 - **Random**: Used for auto-discovered values (stored in `mappingsAuto`)
-- **Deterministic**: Used for output scrubbing (MD5 hash → consistent fake IP)
+- **Deterministic**: Used for output scrubbing (MD5 hash → consistent sanitized IP)
 
-All fake IPs use the `111.x.x.x` range.
+All sanitized IPs use the `111.x.x.x` range.
 
 ## Project Structure
 

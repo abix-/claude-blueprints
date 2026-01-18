@@ -117,7 +117,7 @@ func SanitizeSingleFile(filePath string) {
 		if !IsExcludedIP(ip) {
 			if _, exists := cfg.MappingsManual[ip]; !exists {
 				if _, exists := autoMappings[ip]; !exists {
-					autoMappings[ip] = NewFakeIP()
+					autoMappings[ip] = NewSanitizedIP()
 				}
 			}
 		}
@@ -131,7 +131,7 @@ func SanitizeSingleFile(filePath string) {
 		for _, match := range re.FindAllString(currentContent, -1) {
 			if _, exists := cfg.MappingsManual[match]; !exists {
 				if _, exists := autoMappings[match]; !exists {
-					autoMappings[match] = NewFakeHostname()
+					autoMappings[match] = NewSanitizedHostname()
 				}
 			}
 		}

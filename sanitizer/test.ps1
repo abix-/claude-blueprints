@@ -33,7 +33,7 @@ if (Test-Command "sanitize-ips: Basic IP replacement" {
         throw "IPs not sanitized: $result"
     }
     if ($result -notmatch "111\.\d+\.\d+\.\d+.*111\.\d+\.\d+\.\d+") {
-        throw "Expected fake IPs (111.x.x.x), got: $result"
+        throw "Expected sanitized IPs (111.x.x.x), got: $result"
     }
     Write-Host "Input:  $input"
     Write-Host "Output: $result"
@@ -150,7 +150,7 @@ gateway = 111.189.164.227
             throw "IP not sanitized: $sanitized"
         }
         if ($sanitized -notmatch "111\.\d+\.\d+\.\d+") {
-            throw "No fake IPs found: $sanitized"
+            throw "No sanitized IPs found: $sanitized"
         }
         Write-Host "Original IPs: 111.67.177.64, 111.229.14.114, 111.189.164.227"
         Write-Host "Sanitized content:"
@@ -176,7 +176,7 @@ if (Test-Command "hook-session-stop: Sync to unsanitized" {
 
     Push-Location $testDir
     try {
-        # Session start sanitizes real -> fake
+        # Session start sanitizes real -> sanitized
         $null = '{"hook_event_name":"SessionStart"}' | & $sanitizer hook-session-start 2>&1
 
         $sanitized = Get-Content "$testDir/test.txt"

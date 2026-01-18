@@ -85,9 +85,9 @@ func HookSessionStart(input []byte) ([]byte, error) {
 			continue
 		}
 		if typ == "ip" {
-			autoMappings[real] = NewFakeIP()
+			autoMappings[real] = NewSanitizedIP()
 		} else {
-			autoMappings[real] = NewFakeHostname()
+			autoMappings[real] = NewSanitizedHostname()
 		}
 	}
 

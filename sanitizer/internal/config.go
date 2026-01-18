@@ -77,8 +77,8 @@ func (c *Config) AllMappings() map[string]string {
 
 func (c *Config) ReverseMappings() map[string]string {
 	reverse := make(map[string]string)
-	for real, fake := range c.AllMappings() {
-		reverse[fake] = real
+	for unsanitized, sanitized := range c.AllMappings() {
+		reverse[sanitized] = unsanitized
 	}
 	return reverse
 }
@@ -154,7 +154,7 @@ func InitializeConfigIfNeeded() error {
 		"mappingsManual": map[string]string{
 			"server.domain.local":    "server.example.test",
 			"111.91.241.85":          "111.50.100.1",
-			"C:\\Users\\realuser":    "C:\\Users\\fakeuser",
+			"C:\\Users\\realuser":    "C:\\Users\\exampleuser",
 			"secretproject":          "projectname",
 		},
 		"skipPaths":        DefaultSkipPaths,
