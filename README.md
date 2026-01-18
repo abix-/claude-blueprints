@@ -41,7 +41,9 @@ Go binary that prevents infrastructure details from reaching Anthropic's servers
 - Real values stored in `~/.claude/unsanitized/{project}/` (never sent to API)
 - Idempotent: re-sanitizes if you modify files mid-session
 
-**What Claude sees:** fake values only. What stays local: real values + mappings.
+| Sent to Anthropic | Stays local |
+|-------------------|-------------|
+| Fake values only | Real values + mappings |
 
 See [sanitizer/README.md](sanitizer/README.md) for setup.
 
