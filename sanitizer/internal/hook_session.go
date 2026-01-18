@@ -51,14 +51,7 @@ func HookSessionStart(input []byte) ([]byte, error) {
 		SaveAutoMappings(autoMappings)
 	}
 
-	// Build combined mappings (auto + manual, manual wins)
-	allMappings := make(map[string]string)
-	for k, v := range autoMappings {
-		allMappings[k] = v
-	}
-	for k, v := range cfg.MappingsManual {
-		allMappings[k] = v
-	}
+	allMappings := cfg.BuildAllMappings(autoMappings)
 
 	// Sanitize files
 	for _, path := range files {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Config struct {
@@ -106,19 +107,18 @@ func (c *Config) ExpandUnsanitizedPath(projectName string) string {
 	if len(path) > 0 && path[0] == '~' {
 		path = filepath.Join(os.Getenv("USERPROFILE"), path[1:])
 	}
-	return filepath.Clean(stringReplace(path, "{project}", projectName))
+	return filepath.Clean(strings.Replace(path, "{project}", projectName, 1))
 }
 
-func stringReplace(s, old, new string) string {
-	for i := 0; i < len(s); {
-		if i+len(old) <= len(s) && s[i:i+len(old)] == old {
-			s = s[:i] + new + s[i+len(old):]
-			i += len(new)
-		} else {
-			i++
-		}
+func (c *Config) BuildAllMappings(autoMappings map[string]string) map[string]string {
+	all := make(map[string]string)
+	for k, v := range autoMappings {
+		all[k] = v
 	}
-	return s
+	for k, v := range c.MappingsManual {
+		all[k] = v
+	}
+	return all
 }
 
 func SaveAutoMappings(autoMappings map[string]string) error {
