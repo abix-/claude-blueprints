@@ -12,7 +12,7 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: sanitizer <command>")
-		fmt.Fprintln(os.Stderr, "commands: sanitize-ips, hook-file-access")
+		fmt.Fprintln(os.Stderr, "commands: sanitize-ips, hook-file-access, hook-bash")
 		os.Exit(1)
 	}
 
@@ -21,6 +21,8 @@ func main() {
 		runSanitizeIPs()
 	case "hook-file-access":
 		runHook(hook.FileAccess)
+	case "hook-bash":
+		runHook(hook.Bash)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		os.Exit(1)
@@ -43,10 +45,12 @@ func runSanitizeIPs() {
 func runHook(fn func([]byte) ([]byte, error)) {
 	input, err := readStdin()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "stdin error: %v\n", err)
 		os.Exit(0) // fail open
 	}
 	output, err := fn(input)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "hook error: %v\n", err)
 		os.Exit(0) // fail open
 	}
 	if output != nil {
