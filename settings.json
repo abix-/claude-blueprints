@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-Bash.ps1\""
+            "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-bash"
           }
         ]
       },
