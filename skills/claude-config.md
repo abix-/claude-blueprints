@@ -2,7 +2,7 @@
 name: claude-config
 description: Managing Claude configuration - skills, hooks, settings, and sync workflow. Read first when modifying any Claude config.
 metadata:
-  version: "1.3"
+  version: "1.5"
   updated: "2026-01-18"
 ---
 # Claude Config
@@ -74,10 +74,13 @@ JSON on stdin with `hook_event_name` and `tool_input`. Check `tool_input.file_pa
 
 ## Sync Workflow
 
-**Always edit ~/.claude first, then /claude-push. Never edit repo directly.**
+**`claude-blueprints` repo is source of truth.**
 
-`/claude-push` — sync ~/.claude to repo and push
-`/claude-pull` — pull repo and apply to ~/.claude
+1. Edit `claude-blueprints` repo directly (all files)
+2. Commit and push to remote
+3. Run `/claude-pull` to apply to `~/.claude`
+
+`/claude-pull` — pull repo, sync to ~/.claude, build sanitizer
 
 Both sync: skills/, hooks/, commands/, sanitizer/, CLAUDE.md, settings.json
 

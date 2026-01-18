@@ -2,7 +2,7 @@
 name: code
 description: Development standards for Ansible, PowerShell, and Golang
 metadata:
-  version: "1.2"
+  version: "1.3"
   updated: "2026-01-18"
 ---
 # Coding Standards
@@ -15,6 +15,7 @@ metadata:
 5. **Minimal docs** — SE2 should follow; explain *what/why*, not *how*
 6. Status messages match property names — use same terms in messages as output properties
 7. Comments mark phases — explain why and major sections, not individual lines
+8. Default configs match documentation — same order, same example values
 
 ## Ansible
 - Roles contain all logic; playbooks only call roles
