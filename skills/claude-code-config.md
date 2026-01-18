@@ -2,7 +2,7 @@
 name: claude-code-config
 description: How to configure Claude Code settings, hooks, and permissions correctly
 metadata:
-  version: "1.0"
+  version: "1.1"
   updated: "2026-01-18"
 ---
 # Claude Code Configuration
@@ -90,3 +90,12 @@ exit 0
 - Single tool: `"Bash"`
 - Multiple tools: `"Read|Edit|Write"`
 - Empty string: matches all
+
+## Workflow: Syncing Changes
+
+After modifying skills, hooks, or Claude config in `~/.claude/`:
+
+1. Copy updated files to `C:\Code\claude-blueprints\`
+2. Commit and push to git
+
+This keeps the repo as the source of truth for all Claude configuration.
