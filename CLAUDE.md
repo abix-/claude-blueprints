@@ -24,3 +24,7 @@ Follow methodology in `~/.claude/skills/infrastructure-troubleshooting.md` when 
 ## VMware ESXi Performance
 
 Follow `~/.claude/skills/vmware-esxi-performance.md` for ESXi storage/network performance issues (KAVG/DAVG, DSNRO, vmxnet3, PVSCSI).
+
+## Claude Code Configuration
+
+Follow `~/.claude/skills/claude-code-config.md` when configuring Claude Code settings, hooks, or permissions.
