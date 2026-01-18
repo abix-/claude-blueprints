@@ -47,8 +47,8 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 
     Examples:                Examples:                  Examples:
     - cat sanitizer.json     - git status               - powershell script.ps1
-    - ls ~/.claude/uns...    - python, npm, etc         - pwsh -File test.ps1
-                             - everything else          - & .\Deploy.ps1
+    - ls ~/.claude/uns...    - python, npm, etc         - ansible-playbook site.yml
+                             - everything else          - awx job_templates launch
 
     ✗ Blocked                Runs directly              Syncs changes, runs
                                                         with real values,
@@ -193,6 +193,8 @@ Working tree stays fake (safe). Unsanitized directory already has real values.
 - `powershell` / `pwsh` - PowerShell executables
 - `*.ps1` - Any PowerShell script (any path format)
 - `& ...` - Call operator
+- `ansible*` - ansible, ansible-playbook, ansible-vault, etc.
+- `awx` - AWX CLI
 
 **FAKE** - Everything else runs in working tree with fake values (default)
 
