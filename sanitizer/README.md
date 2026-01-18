@@ -254,7 +254,7 @@ Commands accessing sensitive paths:
 - `*/sanitizer.json`
 - `~/.claude/unsanitized/*`
 
-### UNSANITIZED - Run in unsanitized directory with real values
+### UNSANITIZED - Run in unsanitized directory with unsanitized values
 
 | Pattern | Examples |
 |---------|----------|
@@ -282,7 +282,7 @@ Everything else: `git`, `ls`, `npm`, `python`, etc.
 - Subnet masks: `255.x.x.x`
 - Already sanitized: `111.x.x.x` (our sanitized range)
 
-### Fake IP generation
+### Sanitized IP generation
 
 - **Random**: Used for auto-discovered values (stored in `mappingsAuto`)
 - **Deterministic**: Used for output scrubbing (MD5 hash → consistent sanitized IP)

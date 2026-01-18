@@ -162,7 +162,7 @@ func SanitizeSingleFile(filePath string) {
 	// Write sanitized to working tree
 	os.WriteFile(filePath, []byte(sanitized), info.Mode())
 
-	// Write real content to unsanitized dir (update backup)
+	// Write unsanitized content to unsanitized dir (update backup)
 	os.MkdirAll(filepath.Dir(unsanitizedFilePath), 0755)
 	os.WriteFile(unsanitizedFilePath, content, info.Mode())
 }

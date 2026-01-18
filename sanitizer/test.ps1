@@ -170,13 +170,13 @@ if (Test-Command "hook-session-stop: Sync to unsanitized" {
     if (Test-Path $testDir) { Remove-Item $testDir -Recurse -Force }
     if (Test-Path $unsanitizedDir) { Remove-Item $unsanitizedDir -Recurse -Force }
 
-    # Start with real IP
+    # Start with unsanitized IP
     New-Item -ItemType Directory -Path $testDir -Force | Out-Null
     Set-Content "$testDir/test.txt" "server = 111.8.230.60"
 
     Push-Location $testDir
     try {
-        # Session start sanitizes real -> sanitized
+        # Session start sanitizes unsanitized -> sanitized
         $null = '{"hook_event_name":"SessionStart"}' | & $sanitizer hook-session-start 2>&1
 
         $sanitized = Get-Content "$testDir/test.txt"
@@ -185,7 +185,7 @@ if (Test-Command "hook-session-stop: Sync to unsanitized" {
             throw "IP not sanitized after session-start: $sanitized"
         }
 
-        # Session stop should create unsanitized copy with real IP
+        # Session stop should create unsanitized copy with unsanitized IP
         $null = '{"hook_event_name":"Stop"}' | & $sanitizer hook-session-stop 2>&1
 
         if (-not (Test-Path "$unsanitizedDir/test.txt")) {
@@ -193,7 +193,7 @@ if (Test-Command "hook-session-stop: Sync to unsanitized" {
         }
         $unsanitized = Get-Content "$unsanitizedDir/test.txt"
         if ($unsanitized -notmatch "192\.168\.1\.50") {
-            throw "Real IP not restored: $unsanitized"
+            throw "Unsanitized IP not restored: $unsanitized"
         }
         Write-Host "After session-stop (unsanitized): $unsanitized"
     } finally {

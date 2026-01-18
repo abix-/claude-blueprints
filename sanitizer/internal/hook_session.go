@@ -77,17 +77,17 @@ func HookSessionStart(input []byte) ([]byte, error) {
 	}
 
 	// Generate mappings for new discoveries
-	for real, typ := range discovered {
-		if _, exists := cfg.MappingsManual[real]; exists {
+	for value, typ := range discovered {
+		if _, exists := cfg.MappingsManual[value]; exists {
 			continue
 		}
-		if _, exists := autoMappings[real]; exists {
+		if _, exists := autoMappings[value]; exists {
 			continue
 		}
 		if typ == "ip" {
-			autoMappings[real] = NewSanitizedIP()
+			autoMappings[value] = NewSanitizedIP()
 		} else {
-			autoMappings[real] = NewSanitizedHostname()
+			autoMappings[value] = NewSanitizedHostname()
 		}
 	}
 

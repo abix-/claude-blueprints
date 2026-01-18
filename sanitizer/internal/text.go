@@ -18,8 +18,8 @@ func SanitizeText(text string, mappings map[string]string) string {
 		return len(keys[i]) > len(keys[j])
 	})
 
-	for _, real := range keys {
-		text = strings.ReplaceAll(text, real, mappings[real])
+	for _, key := range keys {
+		text = strings.ReplaceAll(text, key, mappings[key])
 	}
 	return text
 }
