@@ -1,8 +1,8 @@
 ---
 name: code
-description: Development standards for Ansible, PowerShell, and Go
+description: Development standards for Ansible, PowerShell, and Golang
 metadata:
-  version: "1.0"
+  version: "1.1"
   updated: "2026-01-18"
 ---
 # Coding Standards
@@ -33,7 +33,7 @@ metadata:
 - Use `Write-Verbose` for debug/progress messages (not `Write-Host`)
 - Comment-based help: `.SYNOPSIS` required, 1+ `.EXAMPLE`, omit `.NOTES`
 
-## Go
+## Golang
 - CLI tools: single binary with subcommands (`switch os.Args[1]`)
 - Small projects: flat package structure under `internal/`
 - Private packages in `internal/` — not importable externally
@@ -41,7 +41,7 @@ metadata:
 - Error handling: `if err != nil { return err }` — don't over-wrap
 - JSON config: strip UTF-8 BOM before `json.Unmarshal` (Windows creates BOM)
 - Regex: no negative lookahead `(?!...)` — use alternation or post-filtering
-- When Go > scripts: cold-start matters, single binary, cross-platform
+- When Golang > scripts: cold-start matters, single binary, cross-platform
 
 ## Avoid
 - Excessive error handling — simple is fine, overblown is not
@@ -50,7 +50,7 @@ metadata:
 - Guessing parameters — verify syntax via docs or web search before writing code
 - Inventing plausible-sounding syntax — "looks right" is not verification
 - Unverified code without disclosure — if not verified, explicitly state it
-- Go: nested hierarchies, premature interfaces, channels when mutex suffices
+- Golang: nested hierarchies, premature interfaces, channels when mutex suffices
 
 ## Response Efficiency
 - Single targeted change: describe it, don't output full file
