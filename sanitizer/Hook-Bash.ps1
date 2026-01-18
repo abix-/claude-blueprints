@@ -41,7 +41,10 @@ foreach ($pattern in $blockedPatterns) {
 }
 
 # === REAL ===
-$realPatterns = @('^\s*powershell', '^\s*pwsh', '\.ps1(\s|$|")', '^\s*&\s')
+$realPatterns = @(
+    '^\s*powershell', '^\s*pwsh', '\.ps1(\s|$|")', '^\s*&\s',
+    '^\s*ansible\b', '^\s*awx\b'
+)
 $isReal = $false
 foreach ($pattern in $realPatterns) { if ($command -match $pattern) { $isReal = $true; break } }
 
