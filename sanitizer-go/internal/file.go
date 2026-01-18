@@ -1,4 +1,4 @@
-package fileutil
+package internal
 
 import (
 	"io"
@@ -7,11 +7,10 @@ import (
 	"strings"
 )
 
-// IsBinary checks if file contains null bytes (binary indicator)
 func IsBinary(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
-		return true // assume binary on error
+		return true
 	}
 	defer f.Close()
 
@@ -29,9 +28,7 @@ func IsBinary(path string) bool {
 	return false
 }
 
-// IsExcludedPath checks if path matches exclusion patterns
 func IsExcludedPath(relativePath string, excludePaths []string) bool {
-	// Normalize separators
 	relativePath = strings.ReplaceAll(relativePath, "\\", "/")
 
 	for _, exclude := range excludePaths {
@@ -45,13 +42,9 @@ func IsExcludedPath(relativePath string, excludePaths []string) bool {
 	return false
 }
 
-// SyncDir copies files from src to dst, applying transform to text files
 func SyncDir(srcDir, dstDir string, excludePaths []string, transform func(string) string) error {
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil // skip errors
-		}
-		if info.IsDir() {
+		if err != nil || info.IsDir() {
 			return nil
 		}
 
@@ -64,27 +57,23 @@ func SyncDir(srcDir, dstDir string, excludePaths []string, transform func(string
 			return nil
 		}
 
-		// Skip large files (>10MB)
 		if info.Size() > 10*1024*1024 {
 			return nil
 		}
 
 		dstPath := filepath.Join(dstDir, relPath)
 
-		// Ensure destination directory exists
 		if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
 			return nil
 		}
 
-		// Binary files: copy directly
 		if IsBinary(path) {
 			return copyFile(path, dstPath)
 		}
 
-		// Text files: transform content
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return copyFile(path, dstPath) // fallback to copy
+			return copyFile(path, dstPath)
 		}
 
 		transformed := content

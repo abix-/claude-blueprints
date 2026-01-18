@@ -267,18 +267,15 @@ All fake IPs use the `11.x.x.x` range.
 
 ```
 sanitizer-go/
-├── cmd/sanitizer/main.go       # CLI entry point
+├── cmd/sanitizer/main.go   # CLI entry point
 ├── internal/
-│   ├── config/config.go        # Load/save sanitizer.json
-│   ├── fileutil/fileutil.go    # File operations, binary detection
-│   ├── hook/
-│   │   ├── bash.go             # Bash command routing
-│   │   ├── fileaccess.go       # File access blocking
-│   │   ├── sessionstart.go     # Project sanitization
-│   │   └── sessionstop.go      # Unsanitized sync
-│   └── sanitize/
-│       ├── ip.go               # IP detection/generation
-│       └── text.go             # Text transformation
+│   ├── config.go           # Load/save sanitizer.json
+│   ├── file.go             # File operations, binary detection
+│   ├── hook_bash.go        # Bash command routing
+│   ├── hook_fileaccess.go  # File access blocking
+│   ├── hook_session.go     # Session start/stop hooks
+│   ├── ip.go               # IP detection/generation
+│   └── text.go             # Text transformation
 ├── go.mod
 └── README.md
 ```

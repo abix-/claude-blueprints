@@ -1,4 +1,4 @@
-package hook
+package internal
 
 import (
 	"encoding/json"
@@ -7,21 +7,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/abix-/claude-blueprints/sanitizer-go/internal/config"
-	"github.com/abix-/claude-blueprints/sanitizer-go/internal/fileutil"
-	"github.com/abix-/claude-blueprints/sanitizer-go/internal/sanitize"
 )
 
 var (
-	// Commands that should be blocked entirely
-	blockedPatterns = []*regexp.Regexp{
+	blockedCmdPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`[/\\]sanitizer\.json($|[\s"'])`),
 		regexp.MustCompile(`\.claude[/\\]unsanitized`),
 	}
 
-	// Commands that need to run in unsanitized directory with real values
-	realPatterns = []*regexp.Regexp{
+	realCmdPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^\s*powershell`),
 		regexp.MustCompile(`(?i)^\s*pwsh`),
 		regexp.MustCompile(`(?i)\.ps1(\s|$|")`),
@@ -31,7 +25,7 @@ var (
 	}
 )
 
-func Bash(input []byte) ([]byte, error) {
+func HookBash(input []byte) ([]byte, error) {
 	var hookData struct {
 		HookEventName string `json:"hook_event_name"`
 		ToolInput     struct {
@@ -40,7 +34,7 @@ func Bash(input []byte) ([]byte, error) {
 	}
 
 	if err := json.Unmarshal(input, &hookData); err != nil {
-		return nil, nil // invalid input, allow
+		return nil, nil
 	}
 
 	if hookData.HookEventName != "PreToolUse" {
@@ -52,29 +46,29 @@ func Bash(input []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	// === DENY ===
-	for _, pattern := range blockedPatterns {
+	// DENY
+	for _, pattern := range blockedCmdPatterns {
 		if pattern.MatchString(command) {
 			return denyResponse("Blocked")
 		}
 	}
 
-	// === Check if REAL ===
+	// Check if REAL
 	isReal := false
-	for _, pattern := range realPatterns {
+	for _, pattern := range realCmdPatterns {
 		if pattern.MatchString(command) {
 			isReal = true
 			break
 		}
 	}
 
-	// === FAKE (default) - allow command as-is ===
+	// FAKE (default)
 	if !isReal {
 		return nil, nil
 	}
 
-	// === REAL - execute in unsanitized directory ===
-	cfg, err := config.Load()
+	// REAL - execute in unsanitized directory
+	cfg, err := LoadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("config load: %w", err)
 	}
@@ -86,21 +80,16 @@ func Bash(input []byte) ([]byte, error) {
 	projectName := filepath.Base(projectPath)
 	unsanitizedPath := cfg.ExpandUnsanitizedPath(projectName)
 
-	// Create unsanitized directory
 	if err := os.MkdirAll(unsanitizedPath, 0755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", unsanitizedPath, err)
 	}
 
-	// Sync files to unsanitized directory (unsanitizing content)
 	reverseMappings := cfg.ReverseMappings()
 	transform := func(content string) string {
-		return sanitize.Unsanitize(content, reverseMappings)
+		return UnsanitizeText(content, reverseMappings)
 	}
-	_ = fileutil.SyncDir(projectPath, unsanitizedPath, cfg.ExcludePaths, transform)
+	_ = SyncDir(projectPath, unsanitizedPath, cfg.ExcludePaths, transform)
 
-	// Build wrapped command that:
-	// 1. Runs in unsanitized directory
-	// 2. Sanitizes output
 	sanitizerExe := filepath.Join(os.Getenv("USERPROFILE"), ".claude", "bin", "sanitizer.exe")
 	escapedCommand := strings.ReplaceAll(command, `"`, `\"`)
 

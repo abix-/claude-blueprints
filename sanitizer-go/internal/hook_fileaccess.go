@@ -1,4 +1,4 @@
-package hook
+package internal
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ var blockedPathPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\.claude[/\\]unsanitized[/\\]`),
 }
 
-func FileAccess(input []byte) ([]byte, error) {
+func HookFileAccess(input []byte) ([]byte, error) {
 	var hookData struct {
 		HookEventName string `json:"hook_event_name"`
 		ToolInput     struct {
@@ -20,7 +20,7 @@ func FileAccess(input []byte) ([]byte, error) {
 	}
 
 	if err := json.Unmarshal(input, &hookData); err != nil {
-		return nil, nil // invalid input, allow
+		return nil, nil
 	}
 
 	if hookData.HookEventName != "PreToolUse" {
@@ -31,7 +31,6 @@ func FileAccess(input []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	// Normalize path separators
 	path := strings.ReplaceAll(hookData.ToolInput.FilePath, "\\", "/")
 
 	for _, pattern := range blockedPathPatterns {
@@ -46,5 +45,5 @@ func FileAccess(input []byte) ([]byte, error) {
 		}
 	}
 
-	return nil, nil // allow
+	return nil, nil
 }

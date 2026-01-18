@@ -1,23 +1,17 @@
-package hook
+package internal
 
 import (
 	"os"
 	"path/filepath"
 	"regexp"
-
-	"github.com/abix-/claude-blueprints/sanitizer-go/internal/config"
-	"github.com/abix-/claude-blueprints/sanitizer-go/internal/fileutil"
-	"github.com/abix-/claude-blueprints/sanitizer-go/internal/sanitize"
 )
 
-// SessionStart sanitizes project files at session start
-func SessionStart(input []byte) ([]byte, error) {
-	// Initialize config if needed
-	if err := config.InitializeIfNeeded(); err != nil {
+func HookSessionStart(input []byte) ([]byte, error) {
+	if err := InitializeConfigIfNeeded(); err != nil {
 		return nil, err
 	}
 
-	cfg, err := config.Load()
+	cfg, err := LoadConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +21,6 @@ func SessionStart(input []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// Copy existing autoMappings
 	autoMappings := make(map[string]string)
 	for k, v := range cfg.AutoMappings {
 		autoMappings[k] = v
@@ -41,13 +34,13 @@ func SessionStart(input []byte) ([]byte, error) {
 		}
 
 		relPath, _ := filepath.Rel(projectPath, path)
-		if fileutil.IsExcludedPath(relPath, cfg.ExcludePaths) {
+		if IsExcludedPath(relPath, cfg.ExcludePaths) {
 			return nil
 		}
 		if info.Size() == 0 || info.Size() > 10*1024*1024 {
 			return nil
 		}
-		if fileutil.IsBinary(path) {
+		if IsBinary(path) {
 			return nil
 		}
 
@@ -56,8 +49,8 @@ func SessionStart(input []byte) ([]byte, error) {
 	})
 
 	// Discover IPs and hostnames
-	discovered := make(map[string]string) // value -> type (ip/hostname)
-	ipRegex := sanitize.IPv4Regex()
+	discovered := make(map[string]string)
+	ipRegex := IPv4Regex()
 
 	for _, path := range files {
 		content, err := os.ReadFile(path)
@@ -66,16 +59,14 @@ func SessionStart(input []byte) ([]byte, error) {
 		}
 		text := string(content)
 
-		// Find IPs
 		if cfg.Patterns.IPv4 {
 			for _, ip := range ipRegex.FindAllString(text, -1) {
-				if !sanitize.IsExcludedIP(ip) {
+				if !IsExcludedIP(ip) {
 					discovered[ip] = "ip"
 				}
 			}
 		}
 
-		// Find hostnames
 		for _, pattern := range cfg.Patterns.Hostnames {
 			re, err := regexp.Compile(`(?i)[a-zA-Z0-9][-a-zA-Z0-9\.]*` + regexp.QuoteMeta(pattern))
 			if err != nil {
@@ -96,18 +87,17 @@ func SessionStart(input []byte) ([]byte, error) {
 			continue
 		}
 		if typ == "ip" {
-			autoMappings[real] = sanitize.NewFakeIP()
+			autoMappings[real] = NewFakeIP()
 		} else {
-			autoMappings[real] = sanitize.NewFakeHostname()
+			autoMappings[real] = NewFakeHostname()
 		}
 	}
 
-	// Save if new mappings discovered
 	if len(autoMappings) > len(cfg.AutoMappings) {
-		config.SaveAutoMappings(autoMappings)
+		SaveAutoMappings(autoMappings)
 	}
 
-	// Build combined mappings (manual takes precedence)
+	// Build combined mappings
 	allMappings := make(map[string]string)
 	for k, v := range autoMappings {
 		allMappings[k] = v
@@ -124,10 +114,9 @@ func SessionStart(input []byte) ([]byte, error) {
 		}
 
 		original := string(content)
-		sanitized := sanitize.Text(original, allMappings)
+		sanitized := SanitizeText(original, allMappings)
 
 		if sanitized != original {
-			// Preserve file mode
 			info, _ := os.Stat(path)
 			mode := os.FileMode(0644)
 			if info != nil {
@@ -140,8 +129,40 @@ func SessionStart(input []byte) ([]byte, error) {
 	return nil, nil
 }
 
-// SessionStartCmd is for CLI invocation (not hook JSON)
+func HookSessionStop(input []byte) ([]byte, error) {
+	cfg, err := LoadConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	projectPath, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	projectName := filepath.Base(projectPath)
+	unsanitizedPath := cfg.ExpandUnsanitizedPath(projectName)
+
+	if err := os.MkdirAll(unsanitizedPath, 0755); err != nil {
+		return nil, err
+	}
+
+	reverseMappings := cfg.ReverseMappings()
+	transform := func(content string) string {
+		return UnsanitizeText(content, reverseMappings)
+	}
+
+	SyncDir(projectPath, unsanitizedPath, cfg.ExcludePaths, transform)
+
+	return nil, nil
+}
+
 func SessionStartCmd() error {
-	_, err := SessionStart(nil)
+	_, err := HookSessionStart(nil)
+	return err
+}
+
+func SessionStopCmd() error {
+	_, err := HookSessionStop(nil)
 	return err
 }
