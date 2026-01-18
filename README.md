@@ -27,9 +27,8 @@ After bootstrap, use `/claude-pull` and `/claude-push` to sync.
 ### Post-Bootstrap (optional)
 
 ```bash
-# Initialize sanitizer and edit secrets
+# Initialize sanitizer (creates sanitizer.json with defaults)
 ~/.claude/sanitizer/Initialize.ps1
-notepad ~/.claude/sanitizer/secrets.json
 
 # Patch spinner words (run outside Claude)
 npx claude-depester --all
