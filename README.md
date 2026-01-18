@@ -8,6 +8,7 @@ Personal Claude configuration shared across Claude web and Claude Code instances
 claude-blueprints/
 ├── skills/           # Reusable prompts and standards
 ├── hooks/            # General-purpose hooks (skill injection, etc.)
+├── commands/         # Slash commands (/claude-push, /claude-pull)
 ├── sanitizer/        # Credential sanitization system (Windows/PowerShell)
 ├── CLAUDE.md         # Global context (copy to ~/.claude/)
 └── settings.json     # Global settings with hooks (copy to ~/.claude/)
@@ -25,6 +26,7 @@ Copy-Item claude-blueprints/settings.json ~/.claude/
 Copy-Item -Recurse claude-blueprints/skills ~/.claude/
 Copy-Item -Recurse claude-blueprints/hooks ~/.claude/
 Copy-Item -Recurse claude-blueprints/sanitizer ~/.claude/
+Copy-Item -Recurse claude-blueprints/commands ~/.claude/
 
 # 3. Initialize sanitizer and edit secrets
 ~/.claude/sanitizer/Initialize.ps1
@@ -60,6 +62,13 @@ Prevents sensitive identifiers (server names, IPs, domains) from being sent to A
 | Hook | Description |
 |------|-------------|
 | [Hook-SessionStart-Skills](hooks/Hook-SessionStart-Skills.ps1) | Injects skills at session start |
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| [/claude-pull](commands/claude-pull.md) | Pull repo and apply to ~/.claude |
+| [/claude-push](commands/claude-push.md) | Sync ~/.claude to repo and push |
 
 ### claude-depester
 
