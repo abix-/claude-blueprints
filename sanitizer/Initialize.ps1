@@ -18,15 +18,29 @@ $ErrorActionPreference = "Stop"
     if (-not (Test-Path $_)) { New-Item -Path $_ -ItemType Directory -Force | Out-Null }
 }
 
-# Create template sanitizer.json if not exists
+# Create sanitizer.json with defaults
 $secretsPath = "$SanitizerDir\sanitizer.json"
-if (-not (Test-Path $secretsPath)) {
-    @{
-        mappings = @{ "example-real-server.internal.corp" = "fake-server.example.test" }
-        autoMappings = @{}
-        patterns = @{ ipv4 = $true; hostnames = @("\.internal\.corp$", "\.local$") }
-        unsanitizedPath = "~/.claude/unsanitized/{project}"
-    } | ConvertTo-Json -Depth 5 | Set-Content -Path $secretsPath -Encoding UTF8
+$defaults = @{
+    mappings = @{}
+    autoMappings = @{}
+    patterns = @{ ipv4 = $true; hostnames = @() }
+    unsanitizedPath = "~/.claude/unsanitized/{project}"
+    excludePaths = @(".git", "node_modules", ".venv", "__pycache__")
+}
+
+if (Test-Path $secretsPath) {
+    Write-Warning "sanitizer.json already exists at: $secretsPath"
+    $response = Read-Host "Overwrite with defaults? (y/N)"
+    if ($response -eq 'y') {
+        $defaults | ConvertTo-Json -Depth 5 | Set-Content -Path $secretsPath -Encoding UTF8
+        Write-Host "Overwritten with defaults"
+    }
+    else {
+        Write-Host "Skipped - keeping existing file"
+    }
+}
+else {
+    $defaults | ConvertTo-Json -Depth 5 | Set-Content -Path $secretsPath -Encoding UTF8
 }
 
 # Validate settings.json

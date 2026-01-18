@@ -2,10 +2,8 @@
   "autoUpdatesChannel": "latest",
   "permissions": {
     "deny": [
-      "~/.claude/sanitizer/secrets.json",
-      "~/.claude/sanitizer/auto_mappings.json",
-      "~/.claude/sanitizer/ip_mappings_temp.json",
-      "~/.claude/rendered/**"
+      "~/.claude/sanitizer/sanitizer.json",
+      "~/.claude/unsanitized/**"
     ]
   },
   "hooks": {
@@ -24,18 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File %USERPROFILE%/.claude/sanitizer/Sanitize.ps1"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File %USERPROFILE%/.claude/sanitizer/AutoRenderReal.ps1"
+            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-SessionStart.ps1\""
           }
         ]
       }
@@ -46,18 +33,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File %USERPROFILE%/.claude/sanitizer/RunWrapper.ps1"
+            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-Bash.ps1\""
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-FileAccess.ps1\""
           }
         ]
       }
     ],
-    "PostToolUse": [
+    "Stop": [
       {
-        "matcher": "Bash",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File %USERPROFILE%/.claude/sanitizer/RunWrapper.ps1"
+            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/sanitizer/Hook-SessionStop.ps1\""
           }
         ]
       }
