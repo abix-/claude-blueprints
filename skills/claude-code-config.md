@@ -2,7 +2,7 @@
 name: claude-code-config
 description: How to configure Claude Code settings, hooks, and permissions correctly
 metadata:
-  version: "1.3"
+  version: "1.4"
   updated: "2026-01-18"
 ---
 # Claude Code Configuration
@@ -121,6 +121,7 @@ After modifying skills, hooks, or Claude config in `~/.claude/`:
 
 1. Update `~/.claude/CLAUDE.md` if adding/changing skill references
 2. Copy updated files to `C:\Code\claude-blueprints\`
-3. Commit and push to git
+3. Update `C:\Code\claude-blueprints\README.md` if structure/components changed
+4. Commit and push to git
 
 This keeps the repo as the source of truth for all Claude configuration.
