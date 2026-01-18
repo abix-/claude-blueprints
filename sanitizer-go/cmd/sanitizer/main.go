@@ -26,6 +26,8 @@ func main() {
 		runSessionHook(internal.SessionStartCmd)
 	case "hook-session-stop":
 		runSessionHook(internal.SessionStopCmd)
+	case "exec":
+		runExec()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
 		os.Exit(1)
@@ -64,5 +66,16 @@ func runHook(fn func([]byte) ([]byte, error)) {
 func runSessionHook(fn func() error) {
 	if err := fn(); err != nil {
 		fmt.Fprintf(os.Stderr, "session hook error: %v\n", err)
+	}
+}
+
+func runExec() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "usage: sanitizer exec <command>")
+		os.Exit(1)
+	}
+	if err := internal.Exec(os.Args[2]); err != nil {
+		fmt.Fprintf(os.Stderr, "exec error: %v\n", err)
+		os.Exit(1)
 	}
 }

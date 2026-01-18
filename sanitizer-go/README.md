@@ -28,7 +28,7 @@ When Claude Code launches, BEFORE Claude sees anything:
     ┌─────────────────────┐                 ┌─────────────────────┐
     │ inventory.yml       │    scan &       │ inventory.yml       │
     │ ─────────────────── │    replace      │ ─────────────────── │
-    │ host: 192.168.1.100 │ ──────────────► │ host: 11.22.33.44   │
+    │ host: 11.100.201.234 │ ──────────────► │ host: 11.22.33.44   │
     │ name: prod.internal │   (in place)    │ name: host-a1b.test │
     └─────────────────────┘                 └─────────────────────┘
                                                       ▲
@@ -209,7 +209,7 @@ Commands:
 
 ```powershell
 # Sanitize text with deterministic fake IPs
-echo "Server at 192.168.1.100" | sanitizer.exe sanitize-ips
+echo "Server at 11.100.201.234" | sanitizer.exe sanitize-ips
 # Output: Server at 11.145.240.80
 
 # Manually run session start (sanitize current directory)

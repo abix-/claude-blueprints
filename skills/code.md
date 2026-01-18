@@ -2,7 +2,7 @@
 name: code
 description: Development standards for Ansible, PowerShell, and Golang
 metadata:
-  version: "1.1"
+  version: "1.2"
   updated: "2026-01-18"
 ---
 # Coding Standards
@@ -35,6 +35,7 @@ metadata:
 
 ## Golang
 - CLI tools: single binary with subcommands (`switch os.Args[1]`)
+- Subcommand names: user-facing clarity > internal jargon
 - Small projects: flat package structure under `internal/`
 - Private packages in `internal/` — not importable externally
 - Module path: `github.com/user/repo/subdir`
@@ -42,6 +43,12 @@ metadata:
 - JSON config: strip UTF-8 BOM before `json.Unmarshal` (Windows creates BOM)
 - Regex: no negative lookahead `(?!...)` — use alternation or post-filtering
 - When Golang > scripts: cold-start matters, single binary, cross-platform
+
+## Bash + PowerShell interop
+- Single quotes prevent bash `$` expansion: `printf '%s' '$var'` → literal `$var`
+- Escape single quotes for bash: `'` → `'\''`
+- `cmd /c` mangles nested quotes — use PowerShell as shell instead
+- Self-referential hooks: keep sensitive paths internal to tool, not in command string
 
 ## Avoid
 - Excessive error handling — simple is fine, overblown is not
@@ -51,6 +58,9 @@ metadata:
 - Inventing plausible-sounding syntax — "looks right" is not verification
 - Unverified code without disclosure — if not verified, explicitly state it
 - Golang: nested hierarchies, premature interfaces, channels when mutex suffices
+
+## Testing
+- Verify tests actually validate the change — input shouldn't already match expected pattern
 
 ## Response Efficiency
 - Single targeted change: describe it, don't output full file

@@ -67,38 +67,13 @@ func HookBash(input []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	// REAL - execute in unsanitized directory
-	cfg, err := LoadConfig()
-	if err != nil {
-		return nil, fmt.Errorf("config load: %w", err)
-	}
-
-	projectPath, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("getwd: %w", err)
-	}
-	projectName := filepath.Base(projectPath)
-	unsanitizedPath := cfg.ExpandUnsanitizedPath(projectName)
-
-	if err := os.MkdirAll(unsanitizedPath, 0755); err != nil {
-		return nil, fmt.Errorf("mkdir %s: %w", unsanitizedPath, err)
-	}
-
-	reverseMappings := cfg.ReverseMappings()
-	transform := func(content string) string {
-		return UnsanitizeText(content, reverseMappings)
-	}
-	_ = SyncDir(projectPath, unsanitizedPath, cfg.ExcludePaths, transform)
-
+	// REAL - wrap with sanitizer exec
 	sanitizerExe := filepath.Join(os.Getenv("USERPROFILE"), ".claude", "bin", "sanitizer.exe")
-	escapedCommand := strings.ReplaceAll(command, `"`, `\"`)
 
-	wrappedCommand := fmt.Sprintf(
-		`powershell.exe -NoProfile -Command "Set-Location '%s'; $o = cmd /c \"%s\" 2>&1 | Out-String; $o | & '%s' sanitize-ips"`,
-		unsanitizedPath,
-		escapedCommand,
-		sanitizerExe,
-	)
+	// Escape single quotes for bash: ' → '\''
+	escapedCmd := strings.ReplaceAll(command, "'", `'\''`)
+
+	wrappedCommand := fmt.Sprintf(`'%s' exec '%s'`, sanitizerExe, escapedCmd)
 
 	return allowWithUpdatedCommand(wrappedCommand)
 }
