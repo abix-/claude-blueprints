@@ -1,4 +1,5 @@
 # Never commit actual secrets - these files contain real values
+sanitizer.json
 secrets.json
 auto_mappings.json
 ip_mappings_temp.json
