@@ -47,8 +47,8 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 
     Examples:                Examples:                  Examples:
     - cat sanitizer.json     - git status               - powershell script.ps1
-    - ls ~/.claude/uns...    - ls, cat, grep            - python deploy.py
-                             - mkdir, rm, cp            - npm run build
+    - ls ~/.claude/uns...    - python, npm, etc         - pwsh -File test.ps1
+                             - everything else          - & .\Deploy.ps1
 
     ✗ Blocked                Runs directly              Syncs changes, runs
                                                         with real values,
@@ -187,11 +187,14 @@ Working tree stays fake (safe). Unsanitized directory already has real values.
 
 ## Reference
 
-### Passthrough Commands
+### Command Routing (Implicit Deny)
 
-These run directly in working tree (they don't need real values):
-- `git`, `gh`, `ls`, `cd`, `pwd`, `mkdir`, `rm`, `cp`, `mv`
-- `cat`, `head`, `tail`, `grep`, `find`
+**REAL** - These patterns run in unsanitized directory with real values:
+- `powershell` / `pwsh` - PowerShell executables
+- `*.ps1` - Any PowerShell script (any path format)
+- `& ...` - Call operator
+
+**FAKE** - Everything else runs in working tree with fake values (default)
 
 ### Files Blocked from Claude
 
