@@ -52,6 +52,7 @@ Prevents sensitive identifiers (server names, IPs, domains) from being sent to A
 |---------|-------------|
 | [/claude-pull](commands/claude-pull.md) | Pull repo and apply to ~/.claude |
 | [/claude-push](commands/claude-push.md) | Sync ~/.claude to repo and push |
+| [/learn](commands/learn.md) | Review conversation and update skills with learnings |
 
 ### claude-depester
 
