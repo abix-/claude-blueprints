@@ -2,7 +2,7 @@
 name: claude-config
 description: Managing Claude configuration - skills, hooks, settings, and sync workflow. Read first when modifying any Claude config.
 metadata:
-  version: "1.1"
+  version: "1.2"
   updated: "2026-01-18"
 ---
 # Claude Config
@@ -73,6 +73,8 @@ Return JSON with `"permissionDecision": "deny"` or exit code 2.
 JSON on stdin with `hook_event_name` and `tool_input`. Check `tool_input.file_path` for file ops.
 
 ## Sync Workflow
+
+**Always edit ~/.claude first, then /claude-push. Never edit repo directly.**
 
 `/claude-push` — sync ~/.claude to repo and push
 `/claude-pull` — pull repo and apply to ~/.claude
