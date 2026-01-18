@@ -28,7 +28,7 @@ After bootstrap, edit repo directly, commit, push, then `/claude-pull` to apply 
 
 ### Sanitizer
 
-Go binary that prevents work infrastructure details from reaching Anthropic's servers.
+Go binary that prevents infrastructure details from reaching Anthropic's servers.
 
 **What gets replaced:**
 - IPs → `111.x.x.x` fake range
