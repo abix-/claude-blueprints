@@ -26,13 +26,13 @@ When Claude Code launches, BEFORE Claude sees anything:
     ┌─────────────────────┐                 ┌─────────────────────┐
     │ inventory.yml       │    scan &       │ inventory.yml       │
     │ ─────────────────── │    replace      │ ─────────────────── │
-    │ host: 111.91.241.85 │ ──────────────► │ host: 111.52.117.80 │
+    │ host: 192.168.1.100 │ ──────────────► │ host: 111.52.117.80 │
     │ name: prod.internal │   (in place)    │ name: host-a1b.test │
     └─────────────────────┘                 └─────────────────────┘
                                                       ▲
     - Finds IPs matching patterns                     │
     - Finds hostnames matching patterns         Claude reads
-    - Generates sanitized replacements               and edits this
+    - Generates random sanitized replacements       and edits this
     - Saves mappings to sanitizer.json
 
 
@@ -55,7 +55,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 
     Command tries to         Command runs in            Command runs in
     access sanitizer.json    WORKING TREE               UNSANITIZED DIR
-    or unsanitized/**        (sanitized values)         (unsanitized values)
+    or unsanitized/**        (sanitized values)         (real values)
 
     Examples:                Examples:                  Examples:
     - cat sanitizer.json     - git status               - powershell script.ps1
@@ -63,7 +63,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
                              - everything else          - & $command
 
     ✗ Blocked                Runs directly              Syncs changes, runs
-                                                        with unsanitized values,
+                                                        with real values,
                                                         output sanitized
                                                                │
                                                                ▼
@@ -72,7 +72,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │                                                                         │
 │     Working Tree                         Unsanitized Directory          │
 │     ┌─────────────────┐     copy &       ┌─────────────────┐            │
-│     │ 111.52.117.80   │   unsanitize     │ 111.91.241.85   │            │
+│     │ 111.52.117.80   │   unsanitize     │ 192.168.1.100   │            │
 │     │ host-a1b.test   │ ───────────────► │ prod.internal   │            │
 │     └─────────────────┘   (changed       └─────────────────┘            │
 │                            files only)                                  │
@@ -81,25 +81,25 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ STEP 3: Execute command in unsanitized directory                        │
-│         (command runs with unsanitized values)                          │
+│         (command string is also unsanitized)                            │
 │                                                                         │
 │         "Deploying to prod.internal..."                                 │
-│         "Connected to 111.91.241.85"                                     │
+│         "Connected to 192.168.1.100"                                    │
 └─────────────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ STEP 4: Sanitize output (unsanitized → sanitized)                       │
+│ STEP 4: Sanitize output (real → sanitized)                              │
 │                                                                         │
 │         "Deploying to host-a1b.test..."   ◄── Claude sees this          │
-│         "Connected to 111.52.117.80"                                     │
+│         "Connected to 111.52.117.80"                                    │
 └─────────────────────────────────────────────────────────────────────────┘
 
 
-WHERE UNSANITIZED VALUES EXIST
+WHERE REAL VALUES EXIST
 ═══════════════════════════════════════════════════════════════════════════
 
-    Location                     Contains Unsanitized Values?
+    Location                     Contains Real Values?
     ─────────────────────────    ─────────────────────────────────────────
     Working tree                 ✗ NO  - always sanitized
     Claude's view                ✗ NO  - only sees sanitized
@@ -149,7 +149,7 @@ Create `~/.claude/sanitizer/sanitizer.json`:
 
 | Field | Description |
 |-------|-------------|
-| `mappingsManual` | Manual unsanitized → sanitized mappings (takes precedence) |
+| `mappingsManual` | Manual real → sanitized mappings (takes precedence) |
 | `mappingsAuto` | Auto-discovered IPs/hostnames (populated automatically) |
 | `hostnamePatterns` | Regex patterns for hostname discovery |
 | `skipPaths` | Paths to skip during sanitization |
@@ -161,12 +161,6 @@ Add to `~/.claude/settings.json`:
 
 ```json
 {
-    "permissions": {
-        "deny": [
-            "~/.claude/sanitizer/sanitizer.json",
-            "~/.claude/unsanitized/**"
-        ]
-    },
     "hooks": {
         "SessionStart": [
             {
@@ -193,6 +187,15 @@ Add to `~/.claude/settings.json`:
                 }]
             }
         ],
+        "PostToolUse": [
+            {
+                "matcher": "Grep|Glob",
+                "hooks": [{
+                    "type": "command",
+                    "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-post"
+                }]
+            }
+        ],
         "Stop": [
             {
                 "matcher": "",
@@ -210,13 +213,13 @@ Add to `~/.claude/settings.json`:
 
 ## Usage
 
-1. Start Claude - files get sanitized, unsanitized copy created
-2. Work normally - Claude sees sanitized values, commands run with unsanitized values
+1. Start Claude - files get sanitized, mappings saved
+2. Work normally - Claude sees sanitized values, commands run with real values
 3. Deploy from `~/.claude/unsanitized/{project}/`
 
 ### If Claude crashes
 
-Working tree stays sanitized (safe). Unsanitized directory already has unsanitized values.
+Working tree stays sanitized (safe). Unsanitized directory already has real values.
 
 ## CLI Commands
 
@@ -227,16 +230,17 @@ Commands:
   hook-session-start   Sanitize project at session start
   hook-session-stop    Sync to unsanitized directory at session end
   hook-bash            Route Bash commands (BLOCK/SANITIZED/UNSANITIZED)
-  hook-file-access     Block access to sensitive files
-  sanitize-ips         Stdin→stdout IP sanitization (deterministic)
+  hook-file-access     Block access to sensitive files, sanitize on read/write
+  hook-post            Sanitize tool output (for Grep/Glob)
+  sanitize-ips         Stdin→stdout IP sanitization
   exec                 Run command in unsanitized dir, sanitize output
 ```
 
 ### Standalone usage
 
 ```powershell
-# Sanitize text with deterministic sanitized IPs
-echo "Server at 111.91.241.85" | sanitizer.exe sanitize-ips
+# Sanitize text (discovers new IPs, saves to mappings)
+echo "Server at 192.168.1.100" | sanitizer.exe sanitize-ips
 # Output: Server at 111.52.117.80
 
 # Manually run session start (sanitize current directory)
@@ -254,7 +258,7 @@ Commands accessing sensitive paths:
 - `*/sanitizer.json`
 - `~/.claude/unsanitized/*`
 
-### UNSANITIZED - Run in unsanitized directory with unsanitized values
+### UNSANITIZED - Run with real values
 
 | Pattern | Examples |
 |---------|----------|
@@ -262,9 +266,9 @@ Commands accessing sensitive paths:
 | `*.ps1` | `./Deploy-App.ps1` |
 | `& ...` | `& $command` |
 
-Output from UNSANITIZED commands is sanitized before Claude sees it.
+Command string is unsanitized before execution. Output is sanitized before Claude sees it.
 
-### SANITIZED - Run in working tree with sanitized values (default)
+### SANITIZED - Run with sanitized values (default)
 
 Everything else: `git`, `ls`, `npm`, `python`, etc.
 
@@ -284,10 +288,13 @@ Everything else: `git`, `ls`, `npm`, `python`, etc.
 
 ### Sanitized IP generation
 
-- **Random**: Used for auto-discovered values (stored in `mappingsAuto`)
-- **Deterministic**: Used for output scrubbing (MD5 hash → consistent sanitized IP)
+All sanitized IPs use the `111.x.x.x` range with random octets (1-254).
 
-All sanitized IPs use the `111.x.x.x` range.
+- **First discovery**: Random IP generated, saved to `mappingsAuto`
+- **Subsequent encounters**: Looked up from saved mappings (consistent)
+- **Collision detection**: Regenerates if random value already used
+
+This approach is not reversible - someone with sanitized output cannot determine the original IP.
 
 ## Project Structure
 
@@ -296,13 +303,16 @@ sanitizer/
 ├── cmd/sanitizer/main.go   # CLI entry point
 ├── internal/
 │   ├── config.go           # Load/save sanitizer.json
+│   ├── exec.go             # Run command with real values
 │   ├── file.go             # File operations, binary detection
 │   ├── hook_bash.go        # Bash command routing
-│   ├── hook_fileaccess.go  # File access blocking
+│   ├── hook_fileaccess.go  # File access blocking/sanitization
+│   ├── hook_post.go        # Post-tool output sanitization
 │   ├── hook_session.go     # Session start/stop hooks
 │   ├── ip.go               # IP detection/generation
 │   └── text.go             # Text transformation
 ├── go.mod
+├── test.ps1                # Test suite
 └── README.md
 ```
 
@@ -310,8 +320,8 @@ sanitizer/
 
 | Path | Reason |
 |------|--------|
-| `~/.claude/sanitizer/sanitizer.json` | Contains unsanitized→sanitized mappings |
-| `~/.claude/unsanitized/**` | Contains unsanitized values |
+| `~/.claude/sanitizer/sanitizer.json` | Contains real→sanitized mappings |
+| `~/.claude/unsanitized/**` | Contains real values |
 
 ## Troubleshooting
 
