@@ -36,14 +36,6 @@ func SanitizeText(text string, mappings map[string]string) string {
 	return text
 }
 
-// sanitizeTextWithFallback applies mappings, then catches any unmapped IPs.
-// Used for command output where we might see IPs that weren't in the original files.
-func sanitizeTextWithFallback(text string, mappings map[string]string) string {
-	text = SanitizeText(text, mappings)
-	text = SanitizeIPs(text) // Catch any IPs not in mappings
-	return text
-}
-
 // UnsanitizeText reverses sanitization. Same algorithm, just pass reversed mappings.
 // reverseMappings: sanitized -> original (opposite of normal mappings).
 func UnsanitizeText(text string, reverseMappings map[string]string) string {
@@ -51,10 +43,11 @@ func UnsanitizeText(text string, reverseMappings map[string]string) string {
 }
 
 // DiscoverSensitiveValues scans text for IPs and hostnames not yet in mappings.
-// Returns new mappings only - caller should merge with existing.
+// Returns new mappings only - caller should merge with existing and save.
 //
-// Skips values that already exist in manual or auto mappings to avoid
-// regenerating (and potentially changing) existing sanitized values.
+// Generates random sanitized values. Caller MUST save to mappingsAuto for
+// consistency - the same real value will get the same sanitized value because
+// it's looked up from saved mappings, not regenerated.
 func DiscoverSensitiveValues(text string, cfg *Config) map[string]string {
 	discovered := make(map[string]string)
 
@@ -68,7 +61,7 @@ func DiscoverSensitiveValues(text string, cfg *Config) map[string]string {
 			if _, exists := cfg.MappingsManual[ip]; !exists {
 				if _, exists := cfg.MappingsAuto[ip]; !exists {
 					if _, exists := discovered[ip]; !exists {
-						discovered[ip] = NewSanitizedIP(ip)
+						discovered[ip] = NewSanitizedIP()
 					}
 				}
 			}
@@ -87,7 +80,7 @@ func DiscoverSensitiveValues(text string, cfg *Config) map[string]string {
 			if _, exists := cfg.MappingsManual[match]; !exists {
 				if _, exists := cfg.MappingsAuto[match]; !exists {
 					if _, exists := discovered[match]; !exists {
-						discovered[match] = NewSanitizedHostname(match)
+						discovered[match] = NewSanitizedHostname()
 					}
 				}
 			}

@@ -53,15 +53,30 @@ func readStdin() ([]byte, error) {
 	return io.ReadAll(os.Stdin)
 }
 
-// runSanitizeIPs is a simple pipe filter: stdin -> sanitize IPs -> stdout.
-// Useful for testing or one-off sanitization.
+// runSanitizeIPs is a pipe filter: stdin -> discover & sanitize -> stdout.
+// Uses config for mappings, saves new discoveries. Useful for testing.
 func runSanitizeIPs() {
 	input, err := readStdin()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error reading stdin: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Print(internal.SanitizeIPs(string(input)))
+
+	cfg, err := internal.LoadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
+		os.Exit(1)
+	}
+
+	text := string(input)
+	discovered := internal.DiscoverSensitiveValues(text, cfg)
+	if len(discovered) > 0 {
+		autoMappings := cfg.MergeAutoMappings(discovered)
+		internal.SaveAutoMappings(autoMappings)
+		cfg.MappingsAuto = autoMappings
+	}
+
+	fmt.Print(internal.SanitizeText(text, cfg.AllMappings()))
 }
 
 // runHook handles PreToolUse/PostToolUse hooks.

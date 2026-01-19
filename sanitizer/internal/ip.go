@@ -1,16 +1,14 @@
 // ip.go - IP address and hostname detection and sanitization.
-// Uses deterministic hashing so the same real value always maps to the same fake value.
+// Uses random generation - caller saves to mappingsAuto for consistency.
 package internal
 
 import (
-	"crypto/md5"
 	"fmt"
+	"math/rand"
 	"regexp"
 )
 
 // Package-level variables initialized once at startup.
-// var (...) groups related declarations. MustCompile panics if regex is invalid
-// (caught at startup, not runtime).
 var (
 	// Matches valid IPv4 addresses (0-255 in each octet).
 	// \b = word boundary to avoid matching "1.2.3.4" inside "11.2.3.45"
@@ -37,45 +35,28 @@ func IsExcludedIP(ip string) bool {
 	return false
 }
 
-// NewSanitizedIP generates a deterministic fake IP for a real IP.
-// Uses MD5 hash so same input always produces same output. This ensures:
-// - Consistent mappings across sessions (no random drift)
-// - Same IP in output matches same IP discovered in files
-//
-// All sanitized IPs use 111.x.x.x range (excluded from sanitization to prevent
-// double-sanitizing). Octets are 1-254 to avoid .0 and .255.
-func NewSanitizedIP(realIP string) string {
-	// Prefix "ip:" prevents collision with hostname hashes
-	hash := md5.Sum([]byte("ip:" + realIP))
-	// Use first 3 bytes of hash for octets 2-4. Mod 254 + 1 gives range 1-254.
-	b2 := int(hash[0])%254 + 1
-	b3 := int(hash[1])%254 + 1
-	b4 := int(hash[2])%254 + 1
+// NewSanitizedIP generates a random fake IP in the 111.x.x.x range.
+// Caller must save the mapping to mappingsAuto for consistency across sessions.
+// Octets are 1-254 to avoid .0 (network) and .255 (broadcast).
+func NewSanitizedIP() string {
+	b2 := rand.Intn(254) + 1
+	b3 := rand.Intn(254) + 1
+	b4 := rand.Intn(254) + 1
 	return fmt.Sprintf("111.%d.%d.%d", b2, b3, b4)
 }
 
-// SanitizeIPs finds all IPs in text and replaces non-excluded ones.
-// Used as fallback for command output that might contain IPs not in mappings.
-func SanitizeIPs(text string) string {
-	// ReplaceAllStringFunc calls the function for each match.
-	// Like PowerShell: [regex]::Replace($text, $pattern, { param($m) ... })
-	return ipv4Regex.ReplaceAllStringFunc(text, func(ip string) string {
-		if IsExcludedIP(ip) {
-			return ip
-		}
-		return NewSanitizedIP(ip)
-	})
+// NewSanitizedHostname generates a random fake hostname.
+// Caller must save the mapping to mappingsAuto for consistency.
+func NewSanitizedHostname() string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	suffix := make([]byte, 8)
+	for i := range suffix {
+		suffix[i] = chars[rand.Intn(len(chars))]
+	}
+	return fmt.Sprintf("host-%s.example.test", string(suffix))
 }
 
-// NewSanitizedHostname generates a deterministic fake hostname.
-// Example: "server.domain.local" -> "host-a1b2c3d4.example.test"
-func NewSanitizedHostname(realHostname string) string {
-	hash := md5.Sum([]byte("host:" + realHostname))
-	// %x formats as hex. hash[:4] takes first 4 bytes = 8 hex chars.
-	return fmt.Sprintf("host-%x.example.test", hash[:4])
-}
-
-// IPv4Regex returns the compiled regex for external use (e.g., DiscoverSensitiveValues).
+// IPv4Regex returns the compiled regex for external use.
 func IPv4Regex() *regexp.Regexp {
 	return ipv4Regex
 }

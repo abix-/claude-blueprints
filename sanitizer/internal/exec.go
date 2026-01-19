@@ -69,10 +69,18 @@ func Exec(command string) error {
 	// Combine output (note: loses interleaving order between stdout/stderr)
 	output := stdout.String() + stderr.String()
 
-	// Sanitize output so Claude doesn't see real values.
-	// Uses fallback to catch any IPs not in mappings.
+	// Discover any new IPs/hostnames in output and save them.
+	// This ensures consistency - same real value always gets same sanitized value.
+	discovered := DiscoverSensitiveValues(output, cfg)
+	if len(discovered) > 0 {
+		autoMappings := cfg.MergeAutoMappings(discovered)
+		SaveAutoMappings(autoMappings)
+		cfg.MappingsAuto = autoMappings // Update in-memory for immediate use
+	}
+
+	// Sanitize output so Claude doesn't see real values
 	allMappings := cfg.AllMappings()
-	sanitized := sanitizeTextWithFallback(output, allMappings)
+	sanitized := SanitizeText(output, allMappings)
 
 	// Print to stdout (goes back to Claude via bash tool)
 	fmt.Print(sanitized)
