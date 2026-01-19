@@ -7,18 +7,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
-// Paths that should never be accessible to Claude
-var blockedPathPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`\.claude[/\\]sanitizer[/\\]sanitizer\.json$`), // Config with real values
-	regexp.MustCompile(`\.claude[/\\]unsanitized[/\\]`),              // Unsanitized file copies
-}
-
 // HookFileAccess processes Read/Edit/Write tool invocations.
-// - Blocks access to sensitive paths
+// - Blocks access to sensitive paths (configured in blockedPaths)
 // - Sanitizes file content on read/edit (in-place modification)
 // - Sanitizes content before write (modifies tool input)
 func HookFileAccess(input []byte) ([]byte, error) {
@@ -43,11 +36,17 @@ func HookFileAccess(input []byte) ([]byte, error) {
 		return nil, nil
 	}
 
+	// Load config for blocked paths
+	cfg, err := LoadConfig()
+	if err != nil {
+		return nil, nil // Config error = allow (fail open)
+	}
+
 	// Normalize path separators for consistent matching
 	path := strings.ReplaceAll(hookData.ToolInput.FilePath, "\\", "/")
 
-	// Block access to sanitizer internals
-	for _, pattern := range blockedPathPatterns {
+	// Block access to sanitizer internals (paths from config)
+	for _, pattern := range cfg.BlockedPathRegexes() {
 		if pattern.MatchString(path) {
 			return DenyResponse("Access blocked: sensitive sanitizer file")
 		}

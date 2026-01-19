@@ -143,7 +143,11 @@ Create `~/.claude/sanitizer/sanitizer.json`:
         "secretproject": "projectname"
     },
     "skipPaths": [".git", "node_modules", ".venv", "__pycache__"],
-    "unsanitizedPath": "~/.claude/unsanitized/{project}"
+    "unsanitizedPath": "~/.claude/unsanitized/{project}",
+    "blockedPaths": [
+        "\\.claude[/\\\\]sanitizer[/\\\\]sanitizer\\.json$",
+        "\\.claude[/\\\\]unsanitized[/\\\\]"
+    ]
 }
 ```
 
@@ -154,6 +158,7 @@ Create `~/.claude/sanitizer/sanitizer.json`:
 | `hostnamePatterns` | Regex patterns for hostname discovery |
 | `skipPaths` | Paths to skip during sanitization |
 | `unsanitizedPath` | Where to write unsanitized version (`{project}` expands to project folder name) |
+| `blockedPaths` | Regex patterns for paths Claude cannot access (blocks Read/Edit/Write/Bash) |
 
 ### 4. Configure settings.json
 
@@ -318,10 +323,12 @@ sanitizer/
 
 ## Files Blocked from Claude
 
-| Path | Reason |
-|------|--------|
-| `~/.claude/sanitizer/sanitizer.json` | Contains real→sanitized mappings |
-| `~/.claude/unsanitized/**` | Contains real values |
+Configured via `blockedPaths` in sanitizer.json (regex patterns):
+
+| Default Pattern | Blocks | Reason |
+|-----------------|--------|--------|
+| `\.claude[/\\]sanitizer[/\\]sanitizer\.json$` | Config file | Contains real→sanitized mappings |
+| `\.claude[/\\]unsanitized[/\\]` | Unsanitized directory | Contains real values |
 
 ## Troubleshooting
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -19,9 +20,16 @@ type Config struct {
 	SkipPaths        []string          `json:"skipPaths"`
 	HostnamePatterns []string          `json:"hostnamePatterns"`
 	UnsanitizedPath  string            `json:"unsanitizedPath"`
+	BlockedPaths     []string          `json:"blockedPaths"`
 }
 
 var DefaultSkipPaths = []string{".git", "node_modules", ".venv", "__pycache__"}
+
+// DefaultBlockedPaths are paths Claude should never access (contain real values or mappings)
+var DefaultBlockedPaths = []string{
+	`\.claude[/\\]sanitizer[/\\]sanitizer\.json$`,
+	`\.claude[/\\]unsanitized[/\\]`,
+}
 
 // stripBOM removes UTF-8 BOM that Windows apps (notepad, VS Code) add to files.
 // Without this, json.Unmarshal fails on files saved with BOM.
@@ -56,6 +64,7 @@ func LoadConfigFrom(path string) (*Config, error) {
 		SkipPaths:        DefaultSkipPaths,
 		HostnamePatterns: []string{},
 		UnsanitizedPath:  "~/.claude/unsanitized/{project}",
+		BlockedPaths:     DefaultBlockedPaths,
 	}
 
 	data, err := os.ReadFile(path)
@@ -146,6 +155,20 @@ func (c *Config) BuildAllMappings(autoMappings map[string]string) map[string]str
 		all[k] = v
 	}
 	return all
+}
+
+// BlockedPathRegexes compiles blockedPaths into regexp objects.
+// Returns compiled patterns, skipping any that fail to compile.
+func (c *Config) BlockedPathRegexes() []*regexp.Regexp {
+	var patterns []*regexp.Regexp
+	for _, p := range c.BlockedPaths {
+		re, err := regexp.Compile(p)
+		if err != nil {
+			continue // Skip invalid patterns
+		}
+		patterns = append(patterns, re)
+	}
+	return patterns
 }
 
 func SaveAutoMappings(autoMappings map[string]string) error {
@@ -241,6 +264,7 @@ func InitializeConfigIfNeeded() error {
 		},
 		"skipPaths":       DefaultSkipPaths,
 		"unsanitizedPath": "~/.claude/unsanitized/{project}",
+		"blockedPaths":    DefaultBlockedPaths,
 	}
 
 	data, err := json.MarshalIndent(cfg, "", "    ")

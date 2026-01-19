@@ -11,7 +11,7 @@ import (
 // Package-level variables initialized once at startup.
 var (
 	// Matches valid IPv4 addresses (0-255 in each octet).
-	// \b = word boundary to avoid matching "1.2.3.4" inside "11.2.3.45"
+	// \b = word boundary to avoid matching "111.139.3.127" inside "111.155.14.109"
 	ipv4Regex = regexp.MustCompile(`\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b`)
 
 	// IPs that should NOT be sanitized - infrastructure/reserved addresses

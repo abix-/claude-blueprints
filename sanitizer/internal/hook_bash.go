@@ -14,22 +14,14 @@ import (
 	"strings"
 )
 
-var (
-	// Commands that try to access sanitizer internals - BLOCK these
-	blockedCmdPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`[/\\]sanitizer\.json($|[\s"'])`),
-		regexp.MustCompile(`\.claude[/\\]unsanitized`),
-	}
-
-	// Commands that need real values - run UNSANITIZED
-	// PowerShell scripts typically interact with real infrastructure
-	unsanitizedCmdPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)^\s*powershell`), // powershell.exe
-		regexp.MustCompile(`(?i)^\s*pwsh`),       // pwsh (PS Core)
-		regexp.MustCompile(`(?i)\.ps1(\s|$|")`),  // *.ps1 scripts
-		regexp.MustCompile(`^\s*&\s`),            // & (call operator)
-	}
-)
+// Commands that need real values - run UNSANITIZED
+// PowerShell scripts typically interact with real infrastructure
+var unsanitizedCmdPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^\s*powershell`), // powershell.exe
+	regexp.MustCompile(`(?i)^\s*pwsh`),       // pwsh (PS Core)
+	regexp.MustCompile(`(?i)\.ps1(\s|$|")`),  // *.ps1 scripts
+	regexp.MustCompile(`^\s*&\s`),            // & (call operator)
+}
 
 // HookBash processes Bash tool invocations before execution.
 // Claude Code sends hook input as JSON on stdin.
@@ -58,8 +50,14 @@ func HookBash(input []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	// BLOCK: Deny access to sanitizer internals
-	for _, pattern := range blockedCmdPatterns {
+	// Load config for blocked paths
+	cfg, err := LoadConfig()
+	if err != nil {
+		return nil, nil // Config error = allow (fail open)
+	}
+
+	// BLOCK: Deny access to sanitizer internals (paths from config)
+	for _, pattern := range cfg.BlockedPathRegexes() {
 		if pattern.MatchString(command) {
 			return DenyResponse("Blocked")
 		}
