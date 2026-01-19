@@ -145,8 +145,8 @@ Create `~/.claude/sanitizer/sanitizer.json`:
     "skipPaths": [".git", "node_modules", ".venv", "__pycache__"],
     "unsanitizedPath": "~/.claude/unsanitized/{project}",
     "blockedPaths": [
-        "\\.claude[/\\\\]sanitizer[/\\\\]sanitizer\\.json$",
-        "\\.claude[/\\\\]unsanitized[/\\\\]"
+        "\\.claude/sanitizer/sanitizer\\.json$",
+        "\\.claude/unsanitized/"
     ]
 }
 ```
@@ -323,12 +323,12 @@ sanitizer/
 
 ## Files Blocked from Claude
 
-Configured via `blockedPaths` in sanitizer.json (regex patterns):
+Configured via `blockedPaths` in sanitizer.json (regex patterns matched against normalized `/` paths):
 
 | Default Pattern | Blocks | Reason |
 |-----------------|--------|--------|
-| `\.claude[/\\]sanitizer[/\\]sanitizer\.json$` | Config file | Contains real→sanitized mappings |
-| `\.claude[/\\]unsanitized[/\\]` | Unsanitized directory | Contains real values |
+| `\.claude/sanitizer/sanitizer\.json$` | Config file | Contains real→sanitized mappings |
+| `\.claude/unsanitized/` | Unsanitized directory | Contains real values |
 
 ## Troubleshooting
 

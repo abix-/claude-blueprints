@@ -25,10 +25,11 @@ type Config struct {
 
 var DefaultSkipPaths = []string{".git", "node_modules", ".venv", "__pycache__"}
 
-// DefaultBlockedPaths are paths Claude should never access (contain real values or mappings)
+// DefaultBlockedPaths are paths Claude should never access (contain real values or mappings).
+// Patterns are matched against paths normalized to forward slashes.
 var DefaultBlockedPaths = []string{
-	`\.claude[/\\]sanitizer[/\\]sanitizer\.json$`,
-	`\.claude[/\\]unsanitized[/\\]`,
+	`\.claude/sanitizer/sanitizer\.json$`,
+	`\.claude/unsanitized/`,
 }
 
 // stripBOM removes UTF-8 BOM that Windows apps (notepad, VS Code) add to files.

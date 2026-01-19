@@ -56,9 +56,12 @@ func HookBash(input []byte) ([]byte, error) {
 		return nil, nil // Config error = allow (fail open)
 	}
 
+	// Normalize path separators for consistent matching
+	normalizedCmd := strings.ReplaceAll(command, "\\", "/")
+
 	// BLOCK: Deny access to sanitizer internals (paths from config)
 	for _, pattern := range cfg.BlockedPathRegexes() {
-		if pattern.MatchString(command) {
+		if pattern.MatchString(normalizedCmd) {
 			return DenyResponse("Blocked")
 		}
 	}
