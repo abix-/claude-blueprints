@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -125,7 +126,36 @@ func SaveAutoMappings(autoMappings map[string]string) error {
 	return SaveAutoMappingsTo(ConfigPath(), autoMappings)
 }
 
+func lockPath(configPath string) string {
+	return configPath + ".lock"
+}
+
+func acquireLock(configPath string) (*os.File, error) {
+	lock := lockPath(configPath)
+	for i := 0; i < 50; i++ { // 5 second timeout
+		f, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+		if err == nil {
+			return f, nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// Force unlock after timeout (stale lock)
+	os.Remove(lock)
+	return os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+}
+
+func releaseLock(f *os.File, configPath string) {
+	f.Close()
+	os.Remove(lockPath(configPath))
+}
+
 func SaveAutoMappingsTo(path string, autoMappings map[string]string) error {
+	lock, err := acquireLock(path)
+	if err != nil {
+		return err
+	}
+	defer releaseLock(lock, path)
+
 	data, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return err

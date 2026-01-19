@@ -33,8 +33,11 @@ func Exec(command string) error {
 	}
 	_ = SyncDir(projectPath, unsanitizedPath, cfg.SkipPaths, transform)
 
+	// Unsanitize command string so it uses real values
+	unsanitizedCmd := UnsanitizeText(command, reverseMappings)
+
 	// Execute command in unsanitized directory via PowerShell
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command", command)
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command", unsanitizedCmd)
 	cmd.Dir = unsanitizedPath
 
 	var stdout, stderr bytes.Buffer

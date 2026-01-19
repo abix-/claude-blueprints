@@ -17,8 +17,10 @@ var blockedPathPatterns = []*regexp.Regexp{
 func HookFileAccess(input []byte) ([]byte, error) {
 	var hookData struct {
 		HookEventName string `json:"hook_event_name"`
+		ToolName      string `json:"tool_name"`
 		ToolInput     struct {
 			FilePath string `json:"file_path"`
+			Content  string `json:"content"`
 		} `json:"tool_input"`
 	}
 
@@ -42,10 +44,49 @@ func HookFileAccess(input []byte) ([]byte, error) {
 		}
 	}
 
-	// Sanitize file on read if needed
+	// For Write tool: sanitize content before writing
+	if hookData.ToolName == "Write" && hookData.ToolInput.Content != "" {
+		return sanitizeWriteContent(hookData.ToolInput.FilePath, hookData.ToolInput.Content)
+	}
+
+	// Sanitize file on read/edit if needed
 	SanitizeSingleFile(hookData.ToolInput.FilePath)
 
 	return nil, nil
+}
+
+func sanitizeWriteContent(filePath, content string) ([]byte, error) {
+	cfg, err := LoadConfig()
+	if err != nil {
+		return nil, nil
+	}
+
+	// Discover any new sensitive values in content being written
+	discovered := DiscoverSensitiveValues(content, cfg)
+	autoMappings := cfg.MergeAutoMappings(discovered)
+
+	if len(autoMappings) > len(cfg.MappingsAuto) {
+		SaveAutoMappings(autoMappings)
+	}
+
+	allMappings := cfg.BuildAllMappings(autoMappings)
+	sanitized := SanitizeText(content, allMappings)
+
+	if sanitized == content {
+		return nil, nil
+	}
+
+	// Return updated content
+	return json.Marshal(map[string]any{
+		"hookSpecificOutput": map[string]any{
+			"hookEventName":      "PreToolUse",
+			"permissionDecision": "allow",
+			"updatedInput": map[string]any{
+				"file_path": filePath,
+				"content":   sanitized,
+			},
+		},
+	})
 }
 
 // SanitizeSingleFile sanitizes a file on every read/edit.

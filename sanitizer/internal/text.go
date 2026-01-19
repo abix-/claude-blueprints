@@ -44,7 +44,7 @@ func DiscoverSensitiveValues(text string, cfg *Config) map[string]string {
 			if _, exists := cfg.MappingsManual[ip]; !exists {
 				if _, exists := cfg.MappingsAuto[ip]; !exists {
 					if _, exists := discovered[ip]; !exists {
-						discovered[ip] = NewSanitizedIP()
+						discovered[ip] = NewSanitizedIP(ip)
 					}
 				}
 			}
@@ -60,7 +60,7 @@ func DiscoverSensitiveValues(text string, cfg *Config) map[string]string {
 			if _, exists := cfg.MappingsManual[match]; !exists {
 				if _, exists := cfg.MappingsAuto[match]; !exists {
 					if _, exists := discovered[match]; !exists {
-						discovered[match] = NewSanitizedHostname()
+						discovered[match] = NewSanitizedHostname(match)
 					}
 				}
 			}

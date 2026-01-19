@@ -34,6 +34,10 @@ func ShouldProcessFile(path string, info os.FileInfo, projectPath string, skipPa
 	if info.IsDir() || info.Size() == 0 || info.Size() > MaxFileSize {
 		return false
 	}
+	// Skip symlinks - could point outside project or to sensitive files
+	if info.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
 	relPath, err := filepath.Rel(projectPath, path)
 	if err != nil || strings.HasPrefix(relPath, "..") {
 		return false
@@ -61,6 +65,11 @@ func IsSkippedPath(relativePath string, skipPaths []string) bool {
 func SyncDir(srcDir, dstDir string, skipPaths []string, transform func(string) string) error {
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
+			return nil
+		}
+
+		// Skip symlinks
+		if info.Mode()&os.ModeSymlink != 0 {
 			return nil
 		}
 

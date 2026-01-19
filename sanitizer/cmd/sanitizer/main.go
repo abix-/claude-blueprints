@@ -22,6 +22,8 @@ func main() {
 		runHook(internal.HookFileAccess)
 	case "hook-bash":
 		runHook(internal.HookBash)
+	case "hook-post":
+		runHook(internal.HookPostToolUse)
 	case "hook-session-start":
 		runSessionHook(internal.SessionStartCmd)
 	case "hook-session-stop":
