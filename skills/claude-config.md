@@ -2,7 +2,7 @@
 name: claude-config
 description: Managing Claude configuration - skills, hooks, settings, and sync workflow. Read first when modifying any Claude config.
 metadata:
-  version: "1.5"
+  version: "1.6"
   updated: "2026-01-18"
 ---
 # Claude Config
@@ -74,29 +74,9 @@ JSON on stdin with `hook_event_name` and `tool_input`. Check `tool_input.file_pa
 
 ## Sync Workflow
 
-**`claude-blueprints` repo is source of truth.**
+`/load` — pull claude-blueprints repo, sync to ~/.claude, build sanitizer
 
-1. Edit `claude-blueprints` repo directly (all files)
-2. Commit and push to remote
-3. Run `/claude-pull` to apply to `~/.claude`
-
-`/claude-pull` — pull repo, sync to ~/.claude, build sanitizer
-
-Both sync: skills/, hooks/, commands/, sanitizer/, CLAUDE.md, settings.json
-
-### Command Files
-- Embed code directly in command files — don't create temp/helper scripts
-- When a command exists, use it — don't manually recreate its embedded code
-- Code > instructions for reliability (deterministic, no interpretation variance)
-- Sync operations should remove orphan files, not just overwrite
-- Bash mangles PowerShell $ variables — use -EncodedCommand (base64) when needed
-
-### After Changes
-1. Make changes locally in ~/.claude
-2. Run `/claude-push` to sync to repo
-
-### Getting Updates
-1. Run `/claude-pull` to get latest from repo
+Syncs: skills/, hooks/, commands/, sanitizer/, CLAUDE.md, settings.json
 
 ## Notes
 

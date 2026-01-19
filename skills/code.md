@@ -2,7 +2,7 @@
 name: code
 description: Development standards for Ansible, PowerShell, and Golang
 metadata:
-  version: "1.3"
+  version: "1.6"
   updated: "2026-01-18"
 ---
 # Coding Standards
@@ -16,6 +16,10 @@ metadata:
 6. Status messages match property names — use same terms in messages as output properties
 7. Comments mark phases — explain why and major sections, not individual lines
 8. Default configs match documentation — same order, same example values
+9. Magic numbers → named constants when used in multiple places
+10. Never silently suppress errors — log or propagate
+11. Names reflect purpose — `GetConfigPath` not `GetSecretsPath`
+12. Stdlib over custom — don't reimplement what's built-in
 
 ## Ansible
 - Roles contain all logic; playbooks only call roles
@@ -44,6 +48,7 @@ metadata:
 - JSON config: strip UTF-8 BOM before `json.Unmarshal` (Windows creates BOM)
 - Regex: no negative lookahead `(?!...)` — use alternation or post-filtering
 - When Golang > scripts: cold-start matters, single binary, cross-platform
+- Exports: unexport functions only used within the same package
 
 ## Bash + PowerShell interop
 - Single quotes prevent bash `$` expansion: `printf '%s' '$var'` → literal `$var`
@@ -55,9 +60,6 @@ metadata:
 - Excessive error handling — simple is fine, overblown is not
 - Variables for single-use values
 - Comments explaining obvious operations
-- Guessing parameters — verify syntax via docs or web search before writing code
-- Inventing plausible-sounding syntax — "looks right" is not verification
-- Unverified code without disclosure — if not verified, explicitly state it
 - Golang: nested hierarchies, premature interfaces, channels when mutex suffices
 
 ## Testing
