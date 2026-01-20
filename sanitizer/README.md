@@ -26,7 +26,7 @@ When Claude Code launches, BEFORE Claude sees anything:
     ┌─────────────────────┐                 ┌─────────────────────┐
     │ inventory.yml       │    scan &       │ inventory.yml       │
     │ ─────────────────── │    replace      │ ─────────────────── │
-    │ host: 192.168.1.100 │ ──────────────► │ host: 111.52.117.80 │
+    │ host: 111.55.104.65 │ ──────────────► │ host: 111.52.117.80 │
     │ name: prod.internal │   (in place)    │ name: host-a1b.test │
     └─────────────────────┘                 └─────────────────────┘
                                                       ▲
@@ -72,7 +72,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │                                                                         │
 │     Working Tree                         Unsanitized Directory          │
 │     ┌─────────────────┐     copy &       ┌─────────────────┐            │
-│     │ 111.52.117.80   │   unsanitize     │ 192.168.1.100   │            │
+│     │ 111.52.117.80   │   unsanitize     │ 111.55.104.65   │            │
 │     │ host-a1b.test   │ ───────────────► │ prod.internal   │            │
 │     └─────────────────┘   (changed       └─────────────────┘            │
 │                            files only)                                  │
@@ -84,7 +84,7 @@ When Claude runs a command like "powershell ./Deploy-App.ps1":
 │         (command string is also unsanitized)                            │
 │                                                                         │
 │         "Deploying to prod.internal..."                                 │
-│         "Connected to 192.168.1.100"                                    │
+│         "Connected to 111.55.104.65"                                    │
 └─────────────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼
@@ -121,11 +121,11 @@ cd C:/code/claude-blueprints/sanitizer
 go build -o sanitizer.exe ./cmd/sanitizer
 ```
 
-### 2. Install to ~/.claude/bin
+### 2. Install to ~/.claude/sanitizer
 
 ```powershell
-mkdir "$env:USERPROFILE/.claude/bin" -Force
-Copy-Item sanitizer.exe "$env:USERPROFILE/.claude/bin/"
+mkdir "$env:USERPROFILE/.claude/sanitizer" -Force
+Copy-Item sanitizer.exe "$env:USERPROFILE/.claude/sanitizer/"
 ```
 
 ### 3. Create sanitizer.json
@@ -134,13 +134,13 @@ Create `~/.claude/sanitizer/sanitizer.json`:
 
 ```json
 {
-    "hostnamePatterns": ["\\.domain\\.local$"],
+    "hostnamePatterns": ["[A-Za-z]{7}[0-9]{2}L?", "\\.domain\\.local$"],
     "mappingsAuto": {},
     "mappingsManual": {
-        "server.domain.local": "server.example.test",
-        "192.168.1.100": "111.50.100.1",
+        "server.example.test": "server.example.test",
+        "111.55.104.65": "111.50.100.1",
         "C:\\Users\\realuser": "C:\\Users\\sanitizeduser",
-        "secretproject": "projectname"
+        "projectname": "projectname"
     },
     "skipPaths": [".git", "node_modules", ".venv", "__pycache__"],
     "unsanitizedPath": "~/.claude/unsanitized/{project}",
@@ -155,7 +155,7 @@ Create `~/.claude/sanitizer/sanitizer.json`:
 |-------|-------------|
 | `mappingsManual` | Manual real → sanitized mappings (takes precedence) |
 | `mappingsAuto` | Auto-discovered IPs/hostnames (populated automatically) |
-| `hostnamePatterns` | Regex patterns for hostname discovery |
+| `hostnamePatterns` | Regex patterns for hostname discovery (see [Hostname Patterns](#hostname-patterns)) |
 | `skipPaths` | Paths to skip during sanitization |
 | `unsanitizedPath` | Where to write unsanitized version (`{project}` expands to project folder name) |
 | `blockedPaths` | Regex patterns for paths Claude cannot access (blocks Read/Edit/Write/Bash) |
@@ -172,7 +172,7 @@ Add to `~/.claude/settings.json`:
                 "matcher": "",
                 "hooks": [{
                     "type": "command",
-                    "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-session-start"
+                    "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-session-start"
                 }]
             }
         ],
@@ -181,14 +181,14 @@ Add to `~/.claude/settings.json`:
                 "matcher": "Bash",
                 "hooks": [{
                     "type": "command",
-                    "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-bash"
+                    "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-bash"
                 }]
             },
             {
                 "matcher": "Read|Edit|Write",
                 "hooks": [{
                     "type": "command",
-                    "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-file-access"
+                    "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-file-access"
                 }]
             }
         ],
@@ -197,7 +197,7 @@ Add to `~/.claude/settings.json`:
                 "matcher": "Grep|Glob",
                 "hooks": [{
                     "type": "command",
-                    "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-post"
+                    "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-post"
                 }]
             }
         ],
@@ -206,7 +206,7 @@ Add to `~/.claude/settings.json`:
                 "matcher": "",
                 "hooks": [{
                     "type": "command",
-                    "command": "%USERPROFILE%/.claude/bin/sanitizer.exe hook-session-stop"
+                    "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-session-stop"
                 }]
             }
         ]
@@ -245,7 +245,7 @@ Commands:
 
 ```powershell
 # Sanitize text (discovers new IPs, saves to mappings)
-echo "Server at 192.168.1.100" | sanitizer.exe sanitize-ips
+echo "Server at 111.55.104.65" | sanitizer.exe sanitize-ips
 # Output: Server at 111.52.117.80
 
 # Manually run session start (sanitize current directory)
@@ -276,6 +276,39 @@ Command string is unsanitized before execution. Output is sanitized before Claud
 ### SANITIZED - Run with sanitized values (default)
 
 Everything else: `git`, `ls`, `npm`, `python`, etc.
+
+## Hostname Patterns
+
+Patterns in `hostnamePatterns` are wrapped before matching:
+
+```
+(?i)\b + YOUR_PATTERN + (?:\.[a-zA-Z0-9-]+)*
+```
+
+- `(?i)` - case insensitive
+- `\b` - must start at word boundary
+- `(?:\.[a-zA-Z0-9-]+)*` - captures optional domain suffixes
+
+### Pattern Examples
+
+| Use Case | Pattern | Matches |
+|----------|---------|---------|
+| Domain suffix | `[a-z0-9-]+\.corp\.local$` | `server01.corp.local` |
+| Server naming convention | `[A-Za-z]{7}[0-9]{2}L?` | `YOURSVR01`, `yoursvr01L` |
+| Prefix-based | `prod-[a-z0-9]+` | `prod-web01`, `prod-db` |
+
+### Identity Mappings
+
+To protect values from being sanitized, add them to `mappingsManual` with identical key/value:
+
+```json
+"mappingsManual": {
+    "PackedInt32Array": "PackedInt32Array",
+    "PackedFloat32Array": "PackedFloat32Array"
+}
+```
+
+Use this when patterns accidentally match programming type names (e.g., Godot's `Packed*Array` types) or other strings you want preserved.
 
 ## IP Handling
 
