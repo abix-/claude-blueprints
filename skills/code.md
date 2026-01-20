@@ -2,8 +2,8 @@
 name: code
 description: Development standards for Ansible, PowerShell, and Golang
 metadata:
-  version: "1.6"
-  updated: "2026-01-18"
+  version: "1.7"
+  updated: "2026-01-20"
 ---
 # Coding Standards
 
@@ -55,6 +55,7 @@ metadata:
 - Escape single quotes for bash: `'` → `'\''`
 - `cmd /c` mangles nested quotes — use PowerShell as shell instead
 - Self-referential hooks: keep sensitive paths internal to tool, not in command string
+- Windows `cd`: use `cd C:/code/path` not `cd /d C:\code\path` — `/d` is cmd.exe syntax
 
 ## Avoid
 - Excessive error handling — simple is fine, overblown is not

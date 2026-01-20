@@ -2,8 +2,8 @@
 name: godot
 description: Godot 4.x game development patterns for colony/simulation games. Use when writing GDScript, optimizing NPC systems, implementing state machines, or scaling to thousands of entities.
 metadata:
-  version: "1.0"
-  updated: "2026-01-18"
+  version: "1.1"
+  updated: "2026-01-20"
 ---
 # Godot Development
 
@@ -730,3 +730,68 @@ GDScript maxes out around 5,000-7,000 NPCs at 60 FPS. For 10K at 60 FPS, port ho
 - Spatial grid operations
 - State transitions
 - Movement/interpolation
+
+---
+
+## Endless Project Patterns
+
+### Enum Access
+Access enums via class name, not instance:
+```gdscript
+# ❌ WRONG
+npc_manager.jobs[i] != npc_manager.Job.FARMER
+
+# ✅ CORRECT
+npc_manager.jobs[i] != NPCState.Job.FARMER
+```
+
+### Sprite-Based Radii
+Never hardcode pixel distances. Define sprites centrally:
+```gdscript
+const SPRITES := {
+    "farm": {"pos": Vector2i(2, 15), "size": Vector2i(2, 2)},
+    "fountain": {"pos": Vector2i(50, 9), "size": Vector2i(1, 1), "scale": 2.0},
+}
+```
+Derive radii from definitions: `(cells * 16px * scale) / 2`
+
+### Arrival System
+- Target building **centers** (no offset)
+- Use **edge radius** (center to edge, not corner)
+- Separation forces spread NPCs naturally once arrived
+
+### MultiMesh Instance Hiding
+```gdscript
+multimesh.set_instance_transform_2d(i, Transform2D(0, Vector2(-9999, -9999)))
+```
+
+### Exponential Cost Scaling
+```gdscript
+static func get_upgrade_cost(level: int) -> int:
+    return int(10 * pow(1.001, level))  # 10 at level 0, ~220k at level 9999
+```
+
+### Sqrt Stat Scaling
+```gdscript
+static func get_stat_scale(level: int) -> float:
+    return sqrt(float(level + 1))  # 1x at level 0, 100x at level 9999
+```
+
+### Pool Pattern (Projectiles, Audio, etc.)
+```gdscript
+var free_indices: Array[int] = []
+
+func acquire() -> int:
+    if free_indices.is_empty(): return -1
+    return free_indices.pop_back()
+
+func release(i: int) -> void:
+    free_indices.append(i)
+```
+
+### Non-NPC Shooter Indices
+Guard posts use negative indices: `-1000 - post_idx`
+Check `if shooter < 0` to skip XP/aggro logic.
+
+### Grid Spacing
+34px for 32px buildings (1px border each side): `const TOWN_GRID_SPACING := 34`
