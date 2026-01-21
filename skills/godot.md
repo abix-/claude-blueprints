@@ -276,14 +276,14 @@ extends Node
 var count: int = 0
 var positions: PackedVector2Array
 var velocities: PackedVector2Array
-var food: PackedFloat32Array
-var max_food: PackedFloat32Array
-var states: PackedInt32Array
-var next_update_tick: PackedInt64Array
+var food: host-3uyaeoky.example.testArray
+var max_food: host-3uyaeoky.example.testArray
+var states: host-hh0o0585.example.testArray
+var next_update_tick: host-m7np8yn5.example.testArray
 var target_pos: PackedVector2Array
-var home_ids: PackedInt32Array
-var work_ids: PackedInt32Array
-var flags: PackedInt32Array
+var home_ids: host-hh0o0585.example.testArray
+var work_ids: host-hh0o0585.example.testArray
+var flags: host-hh0o0585.example.testArray
 
 func _ready():
     # Pre-allocate for 10K
@@ -560,9 +560,9 @@ For animations: Use texture atlas + custom shader to select sprite frame based o
 const GRID_SIZE = 64
 const MAX_PER_CELL = 64
 
-var grid_cell_counts: PackedInt32Array
-var grid_cells: Array[PackedInt32Array]  # NPC indices per cell
-var npc_cells: PackedInt32Array  # Which cell each NPC is in
+var grid_cell_counts: host-hh0o0585.example.testArray
+var grid_cells: Array[host-hh0o0585.example.testArray]  # NPC indices per cell
+var npc_cells: host-hh0o0585.example.testArray  # Which cell each NPC is in
 
 func _grid_cell_index(pos: Vector2) -> int:
     var x = int(pos.x / cell_size) % GRID_SIZE

@@ -721,6 +721,299 @@ Describe "hostname-patterns" {
                 Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
+
+        It "handles invalid regex pattern gracefully" {
+            # Pattern with unbalanced parentheses - should be skipped, not crash
+            $testDir = New-TestEnvironment -Name "host-invalid" -Config (New-TestConfig -Patterns @("server(", "valid\d+"))
+            try {
+                Write-TestFile "$testDir/test.txt" "valid01 and server("
+                Invoke-SanitizerSession -TestDir $testDir
+
+                # Should still sanitize valid pattern, skip invalid one
+                $sanitized = Read-TestFile "$testDir/test.txt"
+                $sanitized | Should -Not -Match "valid01"
+                $sanitized | Should -Match "host-[a-z0-9]+\.example\.test"
+            }
+            finally {
+                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
+# ============================================================================
+# EXEC FUNCTION (Command Execution in Unsanitized Dir)
+# ============================================================================
+
+Describe "exec" {
+    It "runs command in unsanitized directory with real values" {
+        $testDir = New-TestEnvironment -Name "exec-basic"
+        $originalIP = "192.168.77.77"
+
+        try {
+            # Create config with known mapping
+            $config = New-TestConfig -AutoMappings @{ $originalIP = "111.77.77.77" }
+            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
+
+            # Create a script that echoes its location and an IP
+            Write-TestFile "$testDir/show-ip.ps1" "Write-Output `"IP: $originalIP`""
+
+            $originalProfile = $env:USERPROFILE
+            try {
+                $env:USERPROFILE = $testDir
+                Push-Location $testDir
+
+                # First sanitize the project
+                Invoke-SanitizerSession -TestDir $testDir
+
+                # Now exec should run in unsanitized dir and sanitize output
+                $result = & $sanitizer exec 'powershell -NoProfile -File show-ip.ps1' 2>&1
+
+                # Output should be sanitized (shows 111.x not 192.168.x)
+                $result | Should -Match "111\.77\.77\.77"
+                $result | Should -Not -Match "192\.168\.77\.77"
+            }
+            finally {
+                Pop-Location
+                $env:USERPROFILE = $originalProfile
+            }
+        }
+        finally {
+            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "discovers new IPs from command output" {
+        $testDir = New-TestEnvironment -Name "exec-discover"
+        $newIP = "192.168.88.88"
+
+        try {
+            $config = New-TestConfig
+            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
+
+            # Script that outputs a new IP not in mappings
+            Write-TestFile "$testDir/new-ip.ps1" "Write-Output `"Found: $newIP`""
+
+            $originalProfile = $env:USERPROFILE
+            try {
+                $env:USERPROFILE = $testDir
+                Push-Location $testDir
+
+                Invoke-SanitizerSession -TestDir $testDir
+                $null = & $sanitizer exec 'powershell -NoProfile -File new-ip.ps1' 2>&1
+
+                # New IP should be saved to config
+                $savedConfig = Read-TestFile "$testDir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json
+                $savedConfig.mappingsAuto.PSObject.Properties.Name | Should -Contain $newIP
+            }
+            finally {
+                Pop-Location
+                $env:USERPROFILE = $originalProfile
+            }
+        }
+        finally {
+            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# ============================================================================
+# MANUAL MAPPINGS (Precedence)
+# ============================================================================
+
+Describe "manual-mappings" {
+    It "manual mappings take precedence over auto" {
+        $testDir = New-TestEnvironment -Name "manual-precedence"
+        $testIP = "192.168.55.55"
+
+        try {
+            # Manual mapping specifies a custom sanitized value
+            $config = New-TestConfig -ManualMappings @{ $testIP = "111.99.99.99" } -AutoMappings @{ $testIP = "111.11.11.11" }
+            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
+            Write-TestFile "$testDir/test.txt" "server = $testIP"
+
+            Invoke-SanitizerSession -TestDir $testDir
+
+            # Should use manual mapping (99.99.99), not auto (11.11.11)
+            $sanitized = Read-TestFile "$testDir/test.txt"
+            $sanitized | Should -Match "111\.99\.99\.99"
+            $sanitized | Should -Not -Match "111\.11\.11\.11"
+        }
+        finally {
+            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "preserves manual mapping for custom replacement" {
+        $testDir = New-TestEnvironment -Name "manual-custom"
+
+        try {
+            # Replace a username with a custom value
+            $config = New-TestConfig -ManualMappings @{ "C:\Users\realuser" = "C:\Users\testuser" }
+            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
+            Write-TestFile "$testDir/config.txt" 'path = C:\Users\realuser\data'
+
+            Invoke-SanitizerSession -TestDir $testDir
+
+            $sanitized = Read-TestFile "$testDir/config.txt"
+            $sanitized | Should -Match 'C:\\Users\\testuser\\data'
+        }
+        finally {
+            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# ============================================================================
+# TEXT TRANSFORMATION (Longest-First Ordering)
+# ============================================================================
+
+Describe "text-transformation" {
+    It "replaces longest keys first to avoid partial matches" {
+        $testDir = New-TestEnvironment -Name "text-longest"
+
+        try {
+            # Two IPs where one is a prefix of the other
+            $config = New-TestConfig -AutoMappings @{
+                "10.0.0.1"   = "111.1.1.1"
+                "10.0.0.100" = "111.1.1.100"
+            }
+            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
+            Write-TestFile "$testDir/test.txt" "short: 10.0.0.1`nlong: 10.0.0.100"
+
+            Invoke-SanitizerSession -TestDir $testDir
+
+            $sanitized = Read-TestFile "$testDir/test.txt"
+            # Both should be replaced correctly
+            $sanitized | Should -Match "short: 111\.1\.1\.1"
+            $sanitized | Should -Match "long: 111\.1\.1\.100"
+            # No partial replacement artifacts (like "0" left over)
+            $sanitized | Should -Not -Match "10\.0\.0"
+        }
+        finally {
+            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# ============================================================================
+# FILE HANDLING (Binary Detection, Size Limits, Symlinks)
+# ============================================================================
+
+Describe "file-handling" {
+    Context "Binary detection" {
+        It "detects null bytes as binary" {
+            $testDir = New-TestEnvironment -Name "file-nullbyte"
+            try {
+                # File with null byte in middle
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes("text")
+                $bytes += [byte]0x00
+                $bytes += [System.Text.Encoding]::UTF8.GetBytes("192.168.1.1")
+                [System.IO.File]::WriteAllBytes("$testDir/mixed.bin", $bytes)
+                Write-TestFile "$testDir/clean.txt" "192.168.2.2"
+
+                Invoke-SanitizerSession -TestDir $testDir
+
+                # Binary file should be untouched
+                $binContent = [System.IO.File]::ReadAllBytes("$testDir/mixed.bin")
+                $binContent | Should -Be $bytes
+
+                # Text file should be sanitized
+                Read-TestFile "$testDir/clean.txt" | Should -Match "111\.\d+\.\d+\.\d+"
+            }
+            finally {
+                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    Context "Large files" {
+        It "skips files larger than 10MB" {
+            $testDir = New-TestEnvironment -Name "file-large"
+            try {
+                # Create file just over 10MB
+                $largeContent = "192.168.1.1`n" * 900000  # ~11MB
+                [System.IO.File]::WriteAllText("$testDir/large.txt", $largeContent)
+                Write-TestFile "$testDir/small.txt" "192.168.2.2"
+
+                Invoke-SanitizerSession -TestDir $testDir
+
+                # Large file should be untouched (first line check)
+                $largeFirst = [System.IO.File]::ReadLines("$testDir/large.txt") | Select-Object -First 1
+                $largeFirst | Should -Match "192\.168\.1\.1"
+
+                # Small file should be sanitized
+                Read-TestFile "$testDir/small.txt" | Should -Match "111\.\d+\.\d+\.\d+"
+            }
+            finally {
+                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    Context "Skip paths" {
+        It "skips node_modules directory" {
+            $testDir = New-TestEnvironment -Name "file-nodemodules" -Config (New-TestConfig -SkipPaths @(".git", "node_modules"))
+            try {
+                [System.IO.Directory]::CreateDirectory("$testDir/node_modules/pkg") | Out-Null
+                $originalContent = "ip = 192.168.1.1"
+                Write-TestFile "$testDir/node_modules/pkg/index.js" $originalContent
+                Write-TestFile "$testDir/app.js" "ip = 192.168.2.2"
+
+                Invoke-SanitizerSession -TestDir $testDir
+
+                # node_modules should be untouched
+                Read-TestFile "$testDir/node_modules/pkg/index.js" | Should -Be $originalContent
+                # app.js should be sanitized
+                Read-TestFile "$testDir/app.js" | Should -Match "111\.\d+\.\d+\.\d+"
+            }
+            finally {
+                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        It "skips deeply nested excluded paths" {
+            $testDir = New-TestEnvironment -Name "file-deepskip" -Config (New-TestConfig -SkipPaths @(".git", "vendor"))
+            try {
+                [System.IO.Directory]::CreateDirectory("$testDir/src/lib/vendor/pkg") | Out-Null
+                $originalContent = "192.168.5.5"
+                Write-TestFile "$testDir/src/lib/vendor/pkg/file.go" $originalContent
+
+                Invoke-SanitizerSession -TestDir $testDir
+
+                # Should be skipped because path contains /vendor/
+                Read-TestFile "$testDir/src/lib/vendor/pkg/file.go" | Should -Be $originalContent
+            }
+            finally {
+                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
+# ============================================================================
+# PUBLIC IP SANITIZATION
+# ============================================================================
+
+Describe "public-ips" {
+    It "sanitizes public IP addresses" {
+        $testDir = New-TestEnvironment -Name "public-basic"
+        try {
+            # Public IPs (not in private ranges)
+            Write-TestFile "$testDir/dns.txt" "8.8.8.8`n1.1.1.1`n208.67.222.222"
+
+            Invoke-SanitizerSession -TestDir $testDir
+
+            $sanitized = Read-TestFile "$testDir/dns.txt"
+            # All public IPs should be sanitized to 111.x.x.x
+            $sanitized | Should -Not -Match "8\.8\.8\.8"
+            $sanitized | Should -Not -Match "1\.1\.1\.1"
+            $sanitized | Should -Not -Match "208\.67\.222\.222"
+            ([regex]::Matches($sanitized, "111\.\d+\.\d+\.\d+")).Count | Should -Be 3
+        }
+        finally {
+            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
