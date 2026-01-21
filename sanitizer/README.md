@@ -336,18 +336,33 @@ This approach is not reversible - someone with sanitized output cannot determine
 
 ## Testing
 
-Requires [Pester](https://pester.dev/) v5+:
+38 tests covering all functionality. Requires [Pester](https://pester.dev/) v5+:
 
 ```powershell
 # Install Pester 5 (if needed)
 Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser
 
 # Run tests
-Invoke-Pester ./sanitizer.tests.ps1
-
-# Verbose output
 Invoke-Pester ./sanitizer.tests.ps1 -Output Detailed
 ```
+
+### Test Coverage
+
+| Category | Tests | What's Tested |
+|----------|-------|---------------|
+| sanitize-ips | 5 | Private/public/excluded IP ranges, determinism |
+| hook-bash | 3 | BLOCK/SANITIZED/UNSANITIZED routing |
+| hook-file-access | 3 | Blocking sensitive files, Write content sanitization |
+| hook-post | 2 | Output sanitization for Grep/Glob |
+| hook-session-start | 6 | File sanitization, skip paths, binary detection |
+| hook-session-stop | 1 | Unsanitized directory sync |
+| hostname-patterns | 6 | Regex matching, FQDN capture, identity mappings |
+| exec | 2 | Command execution with real values, output sanitization |
+| manual-mappings | 2 | Precedence over auto, custom replacements |
+| text-transformation | 1 | Longest-key-first replacement |
+| file-handling | 3 | Binary detection, 10MB limit, skip paths |
+| config-handling | 2 | Default creation, UTF-8 BOM |
+| regression-tests | 2 | Hostname charset, config key preservation |
 
 ## Project Structure
 
