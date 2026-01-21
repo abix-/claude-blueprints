@@ -255,7 +255,7 @@ func InitializeConfigIfNeeded() error {
 
 	// Example config with placeholder values user should replace
 	cfg := map[string]any{
-		"hostnamePatterns": []string{"\\.domain\\.local$"},
+		"hostnamePatterns": []string{"[a-zA-Z0-9.-]+\\.domain\\.local"},
 		"mappingsAuto":     map[string]string{},
 		"mappingsManual": map[string]string{
 			"server.example.test": "server.example.test",

@@ -79,12 +79,9 @@ func DiscoverSensitiveValues(text string, cfg *Config) map[string]string {
 		}
 	}
 
-	// Find hostnames matching configured patterns.
-	// Matches both standalone server names and FQDNs.
-	// Pattern can match the server name portion; optional domain suffix is captured.
+	// Find hostnames matching configured patterns (user has full regex control).
 	for _, pattern := range cfg.HostnamePatterns {
-		// Match pattern with optional domain suffix (e.g., .domain.local)
-		re, err := regexp.Compile(`(?i)\b` + pattern + `(?:\.[a-zA-Z0-9-]+)*`)
+		re, err := regexp.Compile(`(?i)` + pattern)
 		if err != nil {
 			continue
 		}

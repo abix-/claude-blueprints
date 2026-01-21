@@ -149,7 +149,7 @@ Edit `~/.claude/sanitizer/sanitizer.json` (created automatically by `/load`):
 
 ```json
 {
-    "hostnamePatterns": ["[A-Za-z]{7}[0-9]{2}L?", "\\.domain\\.local$"],
+    "hostnamePatterns": ["[A-Za-z]{7}[0-9]{2}L?", "[a-zA-Z0-9.-]+\\.domain\\.local"],
     "mappingsAuto": {},
     "mappingsManual": {
         "server.example.test": "server.example.test",
@@ -297,21 +297,27 @@ Everything else: `git`, `ls`, `npm`, `python`, etc.
 
 ## Hostname Patterns
 
-Patterns in `hostnamePatterns` are wrapped before matching:
+Patterns are used as-is with only `(?i)` (case-insensitive) prepended. You have full regex control.
 
-```
-(?i)\b + YOUR_PATTERN + (?:\.[a-zA-Z0-9-]+)*
+```go
+re := regexp.Compile(`(?i)` + yourPattern)
+matches := re.FindAllString(text, -1)
 ```
 
-- `(?i)` - case insensitive
-- `\b` - must start at word boundary
-- `(?:\.[a-zA-Z0-9-]+)*` - captures optional domain suffixes
+### Pattern Tips
+
+**Anchors don't work mid-line.** If your hostname appears in `vcenters['server.corp.local'].path`, the `$` anchor won't match because there's text after `.local`.
+
+| Wrong | Right | Why |
+|-------|-------|-----|
+| `\.corp\.local$` | `[a-zA-Z0-9.-]+\.corp\.local` | `$` only matches end of line/string |
+| `\.domain\.local$` | `[a-zA-Z0-9.-]+\.domain\.local` | Need char class to capture full hostname |
 
 ### Pattern Examples
 
 | Use Case | Pattern | Matches |
 |----------|---------|---------|
-| Domain suffix | `[a-z0-9-]+\.corp\.local$` | `server01.corp.local` |
+| Domain suffix | `[a-zA-Z0-9.-]+\.corp\.local` | `server01.corp.local`, `db.prod.corp.local` |
 | Server naming convention | `[A-Za-z]{7}[0-9]{2}L?` | `YOURSVR01`, `yoursvr01L` |
 | Prefix-based | `prod-[a-z0-9]+` | `prod-web01`, `prod-db` |
 
