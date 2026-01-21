@@ -2,8 +2,8 @@
 name: claude-config
 description: Managing Claude configuration - skills, hooks, settings, and sync workflow. Read first when modifying any Claude config.
 metadata:
-  version: "1.6"
-  updated: "2026-01-18"
+  version: "1.7"
+  updated: "2026-01-21"
 ---
 # Claude Config
 
@@ -77,6 +77,9 @@ JSON on stdin with `hook_event_name` and `tool_input`. Check `tool_input.file_pa
 `/load` — pull claude-blueprints repo, sync to ~/.claude, build sanitizer
 
 Syncs: skills/, hooks/, commands/, sanitizer/, CLAUDE.md, settings.json
+
+### README Clarity
+When documenting automated workflows, make the automation prominent. Manual steps go in collapsed `<details>` blocks as reference, not as the primary instructions.
 
 ## Notes
 

@@ -2,8 +2,8 @@
 name: code
 description: Development standards for Ansible, PowerShell, and Golang
 metadata:
-  version: "1.7"
-  updated: "2026-01-20"
+  version: "1.9"
+  updated: "2026-01-21"
 ---
 # Coding Standards
 
@@ -49,6 +49,7 @@ metadata:
 - Regex: no negative lookahead `(?!...)` — use alternation or post-filtering
 - When Golang > scripts: cold-start matters, single binary, cross-platform
 - Exports: unexport functions only used within the same package
+- Debug tracing: add temp `os.WriteFile` to trace values, rebuild, run, then remove — don't guess at runtime state
 
 ## Bash + PowerShell interop
 - Single quotes prevent bash `$` expansion: `printf '%s' '$var'` → literal `$var`
@@ -56,6 +57,7 @@ metadata:
 - `cmd /c` mangles nested quotes — use PowerShell as shell instead
 - Self-referential hooks: keep sensitive paths internal to tool, not in command string
 - Windows `cd`: use `cd C:/code/path` not `cd /d C:\code\path` — `/d` is cmd.exe syntax
+- `&&` fails in PowerShell — use `;` or separate commands when hooks intercept bash
 
 ## Avoid
 - Excessive error handling — simple is fine, overblown is not
@@ -65,6 +67,14 @@ metadata:
 
 ## Testing
 - Verify tests actually validate the change — input shouldn't already match expected pattern
+
+## PowerShell/Pester
+- Pester 5 syntax: `Describe`/`Context`/`It`, `BeforeAll`, `Should -Be`/`-Match`/`-Not`
+- Use `[System.IO.File]::WriteAllText()` and `ReadAllText()` for deterministic test data (avoids cmdlet overhead)
+- Store expected values in variables, compare after processing — don't hardcode in assertions
+- Consolidate test data (IPs, paths, patterns) as variables in `BeforeAll` — single place to maintain
+- Create test runner helpers (e.g., `Invoke-TestEnvironment`) to handle setup/teardown/environment swap
+- Run with: `Invoke-Pester ./tests.ps1 -Output Detailed`
 
 ## Response Efficiency
 - Single targeted change: describe it, don't output full file
