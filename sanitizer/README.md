@@ -109,28 +109,43 @@ WHERE REAL VALUES EXIST
 
 ## Setup
 
-### Prerequisites
+Run `/load` in Claude Code - it automatically:
+- Pulls the claude-blueprints repo
+- Builds the sanitizer binary
+- Installs to `~/.claude/sanitizer/`
+- Configures hooks in `settings.json`
+
+Then edit `~/.claude/sanitizer/sanitizer.json` to add your hostname patterns.
+
+### Manual Setup (Reference)
+
+<details>
+<summary>Click to expand manual steps</summary>
+
+#### Prerequisites
 
 - Go 1.21+ installed
 - Windows (paths assume Windows; adaptable for Linux/Mac)
 
-### 1. Build the binary
+#### 1. Build the binary
 
 ```powershell
 cd C:/code/claude-blueprints/sanitizer
 go build -o sanitizer.exe ./cmd/sanitizer
 ```
 
-### 2. Install to ~/.claude/sanitizer
+#### 2. Install to ~/.claude/sanitizer
 
 ```powershell
 mkdir "$env:USERPROFILE/.claude/sanitizer" -Force
 Copy-Item sanitizer.exe "$env:USERPROFILE/.claude/sanitizer/"
 ```
 
-### 3. Create sanitizer.json
+</details>
 
-Create `~/.claude/sanitizer/sanitizer.json`:
+## Configuration
+
+Edit `~/.claude/sanitizer/sanitizer.json` (created automatically by `/load`):
 
 ```json
 {
@@ -138,7 +153,7 @@ Create `~/.claude/sanitizer/sanitizer.json`:
     "mappingsAuto": {},
     "mappingsManual": {
         "server.example.test": "server.example.test",
-        "111.55.104.65": "111.50.100.1",
+        "192.168.1.1": "111.50.100.1",
         "C:\\Users\\realuser": "C:\\Users\\sanitizeduser",
         "projectname": "projectname"
     },
@@ -153,16 +168,17 @@ Create `~/.claude/sanitizer/sanitizer.json`:
 
 | Field | Description |
 |-------|-------------|
-| `mappingsManual` | Manual real → sanitized mappings (takes precedence) |
-| `mappingsAuto` | Auto-discovered IPs/hostnames (populated automatically) |
 | `hostnamePatterns` | Regex patterns for hostname discovery (see [Hostname Patterns](#hostname-patterns)) |
+| `mappingsManual` | Manual real → sanitized mappings (takes precedence over auto) |
+| `mappingsAuto` | Auto-discovered IPs/hostnames (populated automatically) |
 | `skipPaths` | Paths to skip during sanitization |
 | `unsanitizedPath` | Where to write unsanitized version (`{project}` expands to project folder name) |
 | `blockedPaths` | Regex patterns for paths Claude cannot access (blocks Read/Edit/Write/Bash) |
 
-### 4. Configure settings.json
+### Hook Configuration (Reference)
 
-Add to `~/.claude/settings.json`:
+<details>
+<summary>settings.json hooks (configured automatically by /load)</summary>
 
 ```json
 {
@@ -214,7 +230,9 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-### 5. Restart Claude Code
+</details>
+
+After setup, restart Claude Code.
 
 ## Usage
 
