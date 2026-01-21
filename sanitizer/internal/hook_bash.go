@@ -83,7 +83,7 @@ func HookBash(input []byte) ([]byte, error) {
 	// UNSANITIZED: Wrap command to run through sanitizer exec.
 	// This syncs to unsanitized directory, runs command with real values,
 	// then sanitizes the output before returning to Claude.
-	sanitizerExe := filepath.Join(os.Getenv("USERPROFILE"), ".claude", "bin", "sanitizer.exe")
+	sanitizerExe := filepath.Join(os.Getenv("USERPROFILE"), ".claude", "sanitizer", "sanitizer.exe")
 
 	// Escape single quotes for bash: ' becomes '\'' (end quote, escaped quote, start quote)
 	escapedCmd := strings.ReplaceAll(command, "'", `'\''`)

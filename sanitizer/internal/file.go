@@ -54,6 +54,12 @@ func ShouldProcessFile(path string, info os.FileInfo, projectPath string, skipPa
 		return false
 	}
 
+	// Always skip .claude directory (config and unsanitized data)
+	normalizedRel := strings.ReplaceAll(relPath, "\\", "/")
+	if strings.HasPrefix(normalizedRel, ".claude/") || normalizedRel == ".claude" {
+		return false
+	}
+
 	if IsSkippedPath(relPath, skipPaths) {
 		return false
 	}

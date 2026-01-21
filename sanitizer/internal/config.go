@@ -23,7 +23,7 @@ type Config struct {
 	BlockedPaths     []string          `json:"blockedPaths"`
 }
 
-var DefaultSkipPaths = []string{".git", "node_modules", ".venv", "__pycache__"}
+var DefaultSkipPaths = []string{".git", ".claude", "node_modules", ".venv", "__pycache__"}
 
 // DefaultBlockedPaths are paths Claude should never access (contain real values or mappings).
 // Patterns are matched against paths normalized to forward slashes.
@@ -258,10 +258,10 @@ func InitializeConfigIfNeeded() error {
 		"hostnamePatterns": []string{"\\.domain\\.local$"},
 		"mappingsAuto":     map[string]string{},
 		"mappingsManual": map[string]string{
-			"server.domain.local": "server.example.test",
-			"111.91.241.85":       "111.50.100.1",
+			"server.example.test": "server.example.test",
+			"111.50.100.1":        "111.50.100.1",
 			"C:\\Users\\realuser": "C:\\Users\\exampleuser",
-			"secretproject":       "projectname",
+			"projectname":         "projectname",
 		},
 		"skipPaths":       DefaultSkipPaths,
 		"unsanitizedPath": "~/.claude/unsanitized/{project}",

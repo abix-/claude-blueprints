@@ -334,23 +334,38 @@ All sanitized IPs use the `111.x.x.x` range with random octets (1-254).
 
 This approach is not reversible - someone with sanitized output cannot determine the original IP.
 
+## Testing
+
+Requires [Pester](https://pester.dev/) v5+:
+
+```powershell
+# Install Pester 5 (if needed)
+Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser
+
+# Run tests
+Invoke-Pester ./sanitizer.tests.ps1
+
+# Verbose output
+Invoke-Pester ./sanitizer.tests.ps1 -Output Detailed
+```
+
 ## Project Structure
 
 ```
 sanitizer/
-├── cmd/sanitizer/main.go   # CLI entry point
+├── cmd/sanitizer/main.go    # CLI entry point
 ├── internal/
-│   ├── config.go           # Load/save sanitizer.json
-│   ├── exec.go             # Run command with real values
-│   ├── file.go             # File operations, binary detection
-│   ├── hook_bash.go        # Bash command routing
-│   ├── hook_fileaccess.go  # File access blocking/sanitization
-│   ├── hook_post.go        # Post-tool output sanitization
-│   ├── hook_session.go     # Session start/stop hooks
-│   ├── ip.go               # IP detection/generation
-│   └── text.go             # Text transformation
+│   ├── config.go            # Load/save sanitizer.json
+│   ├── exec.go              # Run command with real values
+│   ├── file.go              # File operations, binary detection
+│   ├── hook_bash.go         # Bash command routing
+│   ├── hook_fileaccess.go   # File access blocking/sanitization
+│   ├── hook_post.go         # Post-tool output sanitization
+│   ├── hook_session.go      # Session start/stop hooks
+│   ├── ip.go                # IP detection/generation
+│   └── text.go              # Text transformation
 ├── go.mod
-├── test.ps1                # Test suite
+├── sanitizer.tests.ps1      # Pester test suite
 └── README.md
 ```
 

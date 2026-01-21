@@ -81,18 +81,18 @@ func runSanitizeIPs() {
 
 // runHook handles PreToolUse/PostToolUse hooks.
 // Claude Code sends JSON on stdin, expects JSON (or nothing) on stdout.
-// Exit 0 even on error = fail open (allow the operation).
+// Exit 2 on error = fail closed (deny the operation).
 func runHook(fn func([]byte) ([]byte, error)) {
 	input, err := readStdin()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "stdin error: %v\n", err)
-		os.Exit(0) // Fail open
+		os.Exit(2) // Fail closed
 	}
 
 	output, err := fn(input)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "hook error: %v\n", err)
-		os.Exit(0) // Fail open
+		os.Exit(2) // Fail closed
 	}
 
 	// nil output = no modification (allow as-is)
