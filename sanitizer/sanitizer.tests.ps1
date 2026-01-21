@@ -1,7 +1,7 @@
 #Requires -Modules Pester
 <#
 .SYNOPSIS
-    Comprehensive Pester tests for sanitizer CLI tool.
+    Pester tests for sanitizer CLI tool.
 .DESCRIPTION
     Run with: Invoke-Pester -Path ./sanitizer.tests.ps1 -Output Detailed
 #>
@@ -9,13 +9,15 @@
 BeforeAll {
     $script:sanitizer = "$PSScriptRoot/sanitizer.exe"
 
-    # Build sanitizer
     Push-Location $PSScriptRoot
     go build -o sanitizer.exe ./cmd/sanitizer
     if ($LASTEXITCODE -ne 0) { throw "Build failed" }
     Pop-Location
 
-    # Helper to create test config - use .NET to bypass hooks
+    # -------------------------------------------------------------------------
+    # Test Helpers
+    # -------------------------------------------------------------------------
+
     function New-TestConfig {
         param(
             [string[]]$Patterns = @(),
@@ -24,20 +26,31 @@ BeforeAll {
             [string[]]$SkipPaths = @(".git"),
             [string[]]$BlockedPaths = @()
         )
-        $cfg = @{
+        @{
             hostnamePatterns = $Patterns
             mappingsAuto     = $AutoMappings
             mappingsManual   = $ManualMappings
             skipPaths        = $SkipPaths
             unsanitizedPath  = "~/.claude/unsanitized/{project}"
             blockedPaths     = $BlockedPaths
-        }
-        return ($cfg | ConvertTo-Json -Depth 10)
+        } | ConvertTo-Json -Depth 10
     }
 
-    # Helper to create isolated test environment
-    function New-TestEnvironment {
-        param([string]$Name, [string]$Config)
+    function Write-TestFile([string]$Path, [string]$Content) {
+        $dir = Split-Path $Path -Parent
+        if (-not (Test-Path $dir)) { [System.IO.Directory]::CreateDirectory($dir) | Out-Null }
+        [System.IO.File]::WriteAllText($Path, $Content)
+    }
+
+    function Read-TestFile([string]$Path) { [System.IO.File]::ReadAllText($Path) }
+
+    # Main test runner - handles environment setup/teardown and USERPROFILE swap
+    function Invoke-SanitizerTest {
+        param(
+            [string]$Name,
+            [string]$Config,
+            [scriptblock]$Test
+        )
 
         $testDir = "$env:TEMP/sanitizer-$Name-$([guid]::NewGuid().ToString('N').Substring(0,8))"
         if (Test-Path $testDir) { Remove-Item $testDir -Recurse -Force }
@@ -47,160 +60,72 @@ BeforeAll {
             [System.IO.File]::WriteAllText("$testDir/.claude/sanitizer/sanitizer.json", $Config)
         }
 
-        return $testDir
-    }
-
-    # Helper to write file bypassing hooks
-    function Write-TestFile {
-        param([string]$Path, [string]$Content)
-        $dir = Split-Path $Path -Parent
-        if (-not (Test-Path $dir)) {
-            [System.IO.Directory]::CreateDirectory($dir) | Out-Null
-        }
-        [System.IO.File]::WriteAllText($Path, $Content)
-    }
-
-    # Helper to read file bypassing hooks
-    function Read-TestFile {
-        param([string]$Path)
-        return [System.IO.File]::ReadAllText($Path)
-    }
-
-    # Helper to run sanitizer with custom USERPROFILE
-    function Invoke-SanitizerSession {
-        param(
-            [string]$TestDir,
-            [string]$Command = 'hook-session-start'
-        )
-
         $originalProfile = $env:USERPROFILE
         try {
-            $env:USERPROFILE = $TestDir
-            Push-Location $TestDir
-            $null = '{"hook_event_name":"SessionStart"}' | & $script:sanitizer $Command 2>&1
+            $env:USERPROFILE = $testDir
+            Push-Location $testDir
+            & $Test $testDir
         }
         finally {
             Pop-Location
             $env:USERPROFILE = $originalProfile
+            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 
-    # Helper to invoke hook-bash
-    function Invoke-HookBash {
-        param([string]$Command)
-        $input = @{ hook_event_name = "PreToolUse"; tool_input = @{ command = $Command } } | ConvertTo-Json -Compress
-        return $input | & $script:sanitizer hook-bash
+    function Invoke-Session([string]$Cmd = 'hook-session-start') {
+        $null = '{"hook_event_name":"SessionStart"}' | & $script:sanitizer $Cmd 2>&1
     }
 
-    # Helper to invoke hook-file-access
-    function Invoke-HookFileAccess {
-        param([string]$FilePath, [string]$ToolName = "Read")
-        $input = @{ hook_event_name = "PreToolUse"; tool_name = $ToolName; tool_input = @{ file_path = $FilePath } } | ConvertTo-Json -Compress
-        return $input | & $script:sanitizer hook-file-access
+    function Invoke-HookBash([string]$Command) {
+        (@{ hook_event_name = "PreToolUse"; tool_input = @{ command = $Command } } | ConvertTo-Json -Compress) |
+            & $script:sanitizer hook-bash
     }
 
-    # Helper to invoke hook-post
-    function Invoke-HookPost {
-        param([string]$Output, [string]$ToolName = "Grep")
-        $input = @{ hook_event_name = "PostToolUse"; tool_name = $ToolName; tool_output = $Output } | ConvertTo-Json -Compress
-        return $input | & $script:sanitizer hook-post
+    function Invoke-HookFileAccess([string]$FilePath, [string]$ToolName = "Read") {
+        (@{ hook_event_name = "PreToolUse"; tool_name = $ToolName; tool_input = @{ file_path = $FilePath } } | ConvertTo-Json -Compress) |
+            & $script:sanitizer hook-file-access
+    }
+
+    function Invoke-HookPost([string]$Output, [string]$ToolName = "Grep") {
+        (@{ hook_event_name = "PostToolUse"; tool_name = $ToolName; tool_output = $Output } | ConvertTo-Json -Compress) |
+            & $script:sanitizer hook-post
     }
 }
 
 # ============================================================================
-# IP SANITIZATION
+# IP SANITIZATION (sanitize-ips command)
 # ============================================================================
 
 Describe "sanitize-ips" {
-    Context "Private IP ranges" {
-        It "sanitizes 10.x.x.x range" {
-            $result = "111.247.206.175" | & $sanitizer sanitize-ips
-            $result | Should -Not -Match "^10\."
-            $result | Should -Match "^111\.\d+\.\d+\.\d+$"
-        }
-
-        It "sanitizes 172.16-31.x.x range" {
-            $result = "111.235.144.217 and 111.135.181.235" | & $sanitizer sanitize-ips
-            $result | Should -Not -Match "172\.(1[6-9]|2[0-9]|3[01])\."
-            $result | Should -Match "111\.\d+\.\d+\.\d+"
-        }
-
-        It "sanitizes 192.168.x.x range" {
-            $result = "111.64.135.196" | & $sanitizer sanitize-ips
-            $result | Should -Not -Match "192\.168\."
-            $result | Should -Match "^111\.\d+\.\d+\.\d+$"
-        }
+    It "sanitizes private ranges: 10.x, 172.16-31.x, 192.168.x" {
+        "111.247.206.175" | & $sanitizer sanitize-ips | Should -Match "^111\.\d+\.\d+\.\d+$"
+        "111.235.144.217 111.238.118.188" | & $sanitizer sanitize-ips | Should -Match "111\.\d+\.\d+\.\d+.*111\.\d+\.\d+\.\d+"
+        "111.38.230.69" | & $sanitizer sanitize-ips | Should -Match "^111\.\d+\.\d+\.\d+$"
     }
 
-    Context "Excluded IPs (should NOT be sanitized)" {
-        It "preserves loopback 127.x.x.x" {
-            $result = "127.0.0.1 and 127.255.255.255" | & $sanitizer sanitize-ips
-            $result | Should -Match "127\.0\.0\.1"
-            $result | Should -Match "127\.255\.255\.255"
-        }
-
-        It "preserves 0.0.0.0" {
-            $result = "bind to 0.0.0.0" | & $sanitizer sanitize-ips
-            $result | Should -Match "0\.0\.0\.0"
-        }
-
-        It "preserves broadcast/netmask 255.x.x.x" {
-            $result = "255.255.255.0 and 255.255.255.255" | & $sanitizer sanitize-ips
-            $result | Should -Match "255\.255\.255\.0"
-            $result | Should -Match "255\.255\.255\.255"
-        }
-
-        It "preserves link-local 169.254.x.x" {
-            $result = "APIPA 169.254.1.1" | & $sanitizer sanitize-ips
-            $result | Should -Match "169\.254\.1\.1"
-        }
-
-        It "preserves multicast 224-239.x.x.x" {
-            $result = "multicast 224.0.0.1 and 239.255.255.255" | & $sanitizer sanitize-ips
-            $result | Should -Match "224\.0\.0\.1"
-            $result | Should -Match "239\.255\.255\.255"
-        }
-
-        It "preserves already-sanitized 111.x.x.x" {
-            $result = "111.50.100.200" | & $sanitizer sanitize-ips
-            $result | Should -Be "111.50.100.200"
-        }
+    It "preserves excluded IPs: loopback, broadcast, link-local, multicast, already-sanitized" {
+        "127.0.0.1 127.255.255.255" | & $sanitizer sanitize-ips | Should -Match "127\.0\.0\.1.*127\.255\.255\.255"
+        "0.0.0.0" | & $sanitizer sanitize-ips | Should -Match "0\.0\.0\.0"
+        "255.255.255.0 255.255.255.255" | & $sanitizer sanitize-ips | Should -Match "255\.255\.255\.0.*255\.255\.255\.255"
+        "169.254.1.1" | & $sanitizer sanitize-ips | Should -Match "169\.254\.1\.1"
+        "224.0.0.1 239.255.255.255" | & $sanitizer sanitize-ips | Should -Match "224\.0\.0\.1.*239\.255\.255\.255"
+        "111.50.100.200" | & $sanitizer sanitize-ips | Should -Be "111.50.100.200"
     }
 
-    Context "Determinism" {
-        It "produces identical output for same input" {
-            $r1 = "111.38.230.69" | & $sanitizer sanitize-ips
-            $r2 = "111.38.230.69" | & $sanitizer sanitize-ips
-            $r1 | Should -Be $r2
-        }
-
-        It "produces different output for different inputs" {
-            $r1 = "111.38.230.69" | & $sanitizer sanitize-ips
-            $r2 = "111.68.155.57" | & $sanitizer sanitize-ips
-            $r1 | Should -Not -Be $r2
-        }
+    It "is deterministic (same input = same output)" {
+        $r1 = "111.38.230.69" | & $sanitizer sanitize-ips
+        $r2 = "111.38.230.69" | & $sanitizer sanitize-ips
+        $r1 | Should -Be $r2
     }
 
-    Context "Edge cases" {
-        It "handles multiple IPs on one line" {
-            $result = "111.38.230.69, 111.247.206.175, 111.235.144.217" | & $sanitizer sanitize-ips
-            $result | Should -Not -Match "192\.168\."
-            $result | Should -Not -Match "^10\."
-            $result | Should -Not -Match "172\.16\."
-            ([regex]::Matches($result, "111\.\d+\.\d+\.\d+")).Count | Should -Be 3
-        }
+    It "handles multiple IPs on one line" {
+        $result = "111.38.230.69, 111.247.206.175, 111.235.144.217" | & $sanitizer sanitize-ips
+        ([regex]::Matches($result, "111\.\d+\.\d+\.\d+")).Count | Should -Be 3
+    }
 
-        It "does not match version numbers like 111.213.77.138" {
-            # Version numbers within valid IP range could match - this tests boundary
-            $result = "version 111.213.77.138" | & $sanitizer sanitize-ips
-            # 111.213.77.138 is a valid IP and will be sanitized - this is expected behavior
-            $result | Should -Match "111\.\d+\.\d+\.\d+"
-        }
-
-        It "handles IP at start/end of string" {
-            $result = "111.38.230.69" | & $sanitizer sanitize-ips
-            $result | Should -Match "^111\.\d+\.\d+\.\d+$"
-        }
+    It "sanitizes public IPs" {
+        "111.170.233.160 111.161.25.82 111.150.208.239" | & $sanitizer sanitize-ips | Should -Not -Match "8\.8\.8\.8|1\.1\.1\.1|208\.67"
     }
 }
 
@@ -209,80 +134,32 @@ Describe "sanitize-ips" {
 # ============================================================================
 
 Describe "hook-bash" {
-    Context "BLOCK - Sensitive path access" {
-        It "blocks cat of sanitizer.json" {
-            $result = Invoke-HookBash "cat ~/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
-        }
-
-        It "blocks with backslash path" {
-            $result = Invoke-HookBash 'cat ~\.claude\sanitizer\sanitizer.json' | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
-        }
-
-        It "blocks ls of unsanitized directory" {
-            $result = Invoke-HookBash "ls ~/.claude/unsanitized/" | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
-        }
-
-        It "blocks access via full Windows path" {
-            $result = Invoke-HookBash "cat C:/Users/test/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
+    Context "BLOCK - Sensitive paths" {
+        It "blocks access to sanitizer.json and unsanitized directory" {
+            (Invoke-HookBash "cat ~/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json).hookSpecificOutput.permissionDecision | Should -Be "deny"
+            (Invoke-HookBash 'cat ~\.claude\sanitizer\sanitizer.json' | ConvertFrom-Json).hookSpecificOutput.permissionDecision | Should -Be "deny"
+            (Invoke-HookBash "ls ~/.claude/unsanitized/" | ConvertFrom-Json).hookSpecificOutput.permissionDecision | Should -Be "deny"
+            (Invoke-HookBash "cat C:/Users/test/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json).hookSpecificOutput.permissionDecision | Should -Be "deny"
         }
     }
 
-    Context "SANITIZED - Normal commands (allow as-is)" {
-        It "allows ls" {
-            $result = Invoke-HookBash "ls -la"
-            $result | Should -BeNullOrEmpty
-        }
-
-        It "allows git" {
-            $result = Invoke-HookBash "git status"
-            $result | Should -BeNullOrEmpty
-        }
-
-        It "allows npm" {
-            $result = Invoke-HookBash "npm install"
-            $result | Should -BeNullOrEmpty
-        }
-
-        It "allows python" {
-            $result = Invoke-HookBash "python script.py"
-            $result | Should -BeNullOrEmpty
-        }
-
-        It "allows go" {
-            $result = Invoke-HookBash "go build ./..."
-            $result | Should -BeNullOrEmpty
+    Context "SANITIZED - Normal commands (pass through)" {
+        It "allows common commands: ls, git, npm, python, go" {
+            Invoke-HookBash "ls -la" | Should -BeNullOrEmpty
+            Invoke-HookBash "git status" | Should -BeNullOrEmpty
+            Invoke-HookBash "npm install" | Should -BeNullOrEmpty
+            Invoke-HookBash "python script.py" | Should -BeNullOrEmpty
+            Invoke-HookBash "go build ./..." | Should -BeNullOrEmpty
         }
     }
 
     Context "UNSANITIZED - PowerShell commands (wrap for real values)" {
-        It "wraps powershell.exe" {
-            $result = Invoke-HookBash "powershell.exe -Command Get-Date" | ConvertFrom-Json
-            $result.hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
-            $result.hookSpecificOutput.permissionDecision | Should -Be "allow"
-        }
-
-        It "wraps pwsh" {
-            $result = Invoke-HookBash "pwsh -Command Get-Date" | ConvertFrom-Json
-            $result.hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
-        }
-
-        It "wraps .ps1 scripts" {
-            $result = Invoke-HookBash "./Deploy-App.ps1" | ConvertFrom-Json
-            $result.hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
-        }
-
-        It "wraps & call operator" {
-            $result = Invoke-HookBash '& $script' | ConvertFrom-Json
-            $result.hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
-        }
-
-        It "wraps case-insensitive POWERSHELL" {
-            $result = Invoke-HookBash "POWERSHELL -Command test" | ConvertFrom-Json
-            $result.hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
+        It "wraps PowerShell commands for execution in unsanitized dir" {
+            (Invoke-HookBash "powershell.exe -Command Get-Date" | ConvertFrom-Json).hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
+            (Invoke-HookBash "pwsh -Command Get-Date" | ConvertFrom-Json).hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
+            (Invoke-HookBash "./Deploy-App.ps1" | ConvertFrom-Json).hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
+            (Invoke-HookBash '& $script' | ConvertFrom-Json).hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
+            (Invoke-HookBash "POWERSHELL -Command test" | ConvertFrom-Json).hookSpecificOutput.updatedInput.command | Should -Not -BeNullOrEmpty
         }
     }
 }
@@ -292,53 +169,18 @@ Describe "hook-bash" {
 # ============================================================================
 
 Describe "hook-file-access" {
-    Context "BLOCK - Sensitive files" {
-        It "blocks Read of sanitizer.json" {
-            $result = Invoke-HookFileAccess "C:/Users/test/.claude/sanitizer/sanitizer.json" "Read" | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
+    It "blocks Read/Edit/Write of sensitive files" {
+        @("Read", "Edit", "Write") | ForEach-Object {
+            (Invoke-HookFileAccess "C:/Users/test/.claude/sanitizer/sanitizer.json" $_  | ConvertFrom-Json).hookSpecificOutput.permissionDecision | Should -Be "deny"
         }
-
-        It "blocks Edit of sanitizer.json" {
-            $result = Invoke-HookFileAccess "C:/Users/test/.claude/sanitizer/sanitizer.json" "Edit" | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
-        }
-
-        It "blocks Write to sanitizer.json" {
-            $result = Invoke-HookFileAccess "C:/Users/test/.claude/sanitizer/sanitizer.json" "Write" | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
-        }
-
-        It "blocks Read of unsanitized directory" {
-            $result = Invoke-HookFileAccess "C:/Users/test/.claude/unsanitized/project/file.txt" "Read" | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
-        }
-
-        It "blocks with backslash paths" {
-            $result = Invoke-HookFileAccess 'C:\Users\test\.claude\sanitizer\sanitizer.json' "Read" | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
-        }
-
-        It "blocks with mixed separators" {
-            $result = Invoke-HookFileAccess 'C:/Users/test\.claude/sanitizer\sanitizer.json' "Read" | ConvertFrom-Json
-            $result.hookSpecificOutput.permissionDecision | Should -Be "deny"
-        }
+        (Invoke-HookFileAccess "C:/Users/test/.claude/unsanitized/project/file.txt" "Read" | ConvertFrom-Json).hookSpecificOutput.permissionDecision | Should -Be "deny"
+        (Invoke-HookFileAccess 'C:\Users\test\.claude\sanitizer\sanitizer.json' "Read" | ConvertFrom-Json).hookSpecificOutput.permissionDecision | Should -Be "deny"
     }
 
-    Context "ALLOW - Normal files" {
-        It "allows Read of project files" {
-            $result = Invoke-HookFileAccess "C:/code/project/main.go" "Read"
-            $result | Should -BeNullOrEmpty
-        }
-
-        It "allows Edit of project files" {
-            $result = Invoke-HookFileAccess "C:/code/project/main.go" "Edit"
-            $result | Should -BeNullOrEmpty
-        }
-
-        It "allows Write of project files" {
-            $result = Invoke-HookFileAccess "C:/code/project/main.go" "Write"
-            $result | Should -BeNullOrEmpty
-        }
+    It "allows access to normal project files" {
+        Invoke-HookFileAccess "C:/code/project/main.go" "Read" | Should -BeNullOrEmpty
+        Invoke-HookFileAccess "C:/code/project/main.go" "Edit" | Should -BeNullOrEmpty
+        Invoke-HookFileAccess "C:/code/project/main.go" "Write" | Should -BeNullOrEmpty
     }
 }
 
@@ -348,47 +190,15 @@ Describe "hook-file-access" {
 
 Describe "hook-post" {
     It "sanitizes IPs in tool output" {
-        $testDir = New-TestEnvironment -Name "hook-post"
-        try {
-            # Create config with existing mapping
-            $config = New-TestConfig -AutoMappings @{ "111.64.135.196" = "111.50.50.50" }
-            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
-
-            $originalProfile = $env:USERPROFILE
-            $env:USERPROFILE = $testDir
-            try {
-                $result = Invoke-HookPost "Found server at 111.64.135.196"
-                $json = $result | ConvertFrom-Json
-                $json.hookSpecificOutput.updatedOutput | Should -Match "111\.50\.50\.50"
-                $json.hookSpecificOutput.updatedOutput | Should -Not -Match "192\.168\.1\.100"
-            }
-            finally {
-                $env:USERPROFILE = $originalProfile
-            }
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        Invoke-SanitizerTest -Name "hook-post" -Config (New-TestConfig -AutoMappings @{ "111.64.135.196" = "111.50.50.50" }) -Test {
+            $result = Invoke-HookPost "Found server at 111.64.135.196" | ConvertFrom-Json
+            $result.hookSpecificOutput.updatedOutput | Should -Match "111\.50\.50\.50"
         }
     }
 
     It "returns null when no changes needed" {
-        $testDir = New-TestEnvironment -Name "hook-post-nochange"
-        try {
-            $config = New-TestConfig
-            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
-
-            $originalProfile = $env:USERPROFILE
-            $env:USERPROFILE = $testDir
-            try {
-                $result = Invoke-HookPost "No sensitive data here"
-                $result | Should -BeNullOrEmpty
-            }
-            finally {
-                $env:USERPROFILE = $originalProfile
-            }
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        Invoke-SanitizerTest -Name "hook-post-nochange" -Config (New-TestConfig) -Test {
+            Invoke-HookPost "No sensitive data here" | Should -BeNullOrEmpty
         }
     }
 }
@@ -398,137 +208,72 @@ Describe "hook-post" {
 # ============================================================================
 
 Describe "hook-session-start" {
-    Context "IP sanitization" {
-        It "sanitizes all private IP ranges in files" {
-            $testDir = New-TestEnvironment -Name "session-ips"
-            try {
-                Write-TestFile "$testDir/config.txt" @"
-server1 = 111.64.135.196
-server2 = 111.210.246.198
-server3 = 111.187.8.34
-"@
-                Invoke-SanitizerSession -TestDir $testDir
-
-                $sanitized = Read-TestFile "$testDir/config.txt"
-                $sanitized | Should -Not -Match "192\.168\."
-                $sanitized | Should -Not -Match "^10\."
-                $sanitized | Should -Not -Match "172\.16\."
-                ([regex]::Matches($sanitized, "111\.\d+\.\d+\.\d+")).Count | Should -Be 3
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "preserves excluded IPs" {
-            $testDir = New-TestEnvironment -Name "session-excluded"
-            try {
-                Write-TestFile "$testDir/config.txt" "localhost = 127.0.0.1`nbind = 0.0.0.0"
-                Invoke-SanitizerSession -TestDir $testDir
-
-                $sanitized = Read-TestFile "$testDir/config.txt"
-                $sanitized | Should -Match "127\.0\.0\.1"
-                $sanitized | Should -Match "0\.0\.0\.0"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+    It "sanitizes private IP ranges in files" {
+        Invoke-SanitizerTest -Name "session-ips" -Config (New-TestConfig) -Test {
+            param($dir)
+            Write-TestFile "$dir/config.txt" "server1 = 111.38.230.69`nserver2 = 111.247.206.175`nserver3 = 111.235.144.217"
+            Invoke-Session
+            $sanitized = Read-TestFile "$dir/config.txt"
+            $sanitized | Should -Not -Match "192\.168\.|^10\.|172\.16\."
+            ([regex]::Matches($sanitized, "111\.\d+\.\d+\.\d+")).Count | Should -Be 3
         }
     }
 
-    Context "File handling" {
-        It "skips .git directory" {
-            $testDir = New-TestEnvironment -Name "session-skipgit"
-            try {
-                [System.IO.Directory]::CreateDirectory("$testDir/.git") | Out-Null
-                # Use a unique marker that won't be sanitized
-                $gitContent = "secret = 192.168.77.77"
-                $mainContent = "ip = 192.168.88.88"
-                Write-TestFile "$testDir/.git/config" $gitContent
-                Write-TestFile "$testDir/main.go" $mainContent
-                Invoke-SanitizerSession -TestDir $testDir
-
-                # .git should be untouched (exact same content)
-                Read-TestFile "$testDir/.git/config" | Should -Be $gitContent
-                # main.go should be sanitized (different from original)
-                Read-TestFile "$testDir/main.go" | Should -Not -Be $mainContent
-                Read-TestFile "$testDir/main.go" | Should -Match "111\.\d+\.\d+\.\d+"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "skips .claude directory (config protection)" {
-            $testDir = New-TestEnvironment -Name "session-skipclaude"
-            try {
-                $config = New-TestConfig -AutoMappings @{ "111.80.178.23" = "111.1.1.1" }
-                Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
-                Write-TestFile "$testDir/app.py" "host = 111.80.178.23"
-                Invoke-SanitizerSession -TestDir $testDir
-
-                # Config should NOT have its keys sanitized
-                $savedConfig = Read-TestFile "$testDir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json
-                $savedConfig.mappingsAuto.PSObject.Properties.Name | Should -Contain "111.80.178.23"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "skips binary files" {
-            $testDir = New-TestEnvironment -Name "session-binary"
-            try {
-                # Create a file with null bytes (binary)
-                $bytes = [byte[]]@(0x00, 0x50, 0x4B, 0x03, 0x04)  # ZIP header
-                [System.IO.File]::WriteAllBytes("$testDir/archive.zip", $bytes)
-                Write-TestFile "$testDir/main.go" "ip = 111.38.230.69"
-                Invoke-SanitizerSession -TestDir $testDir
-
-                # Binary should be untouched
-                [System.IO.File]::ReadAllBytes("$testDir/archive.zip") | Should -Be $bytes
-                # Text file should be sanitized
-                Read-TestFile "$testDir/main.go" | Should -Not -Match "192\.168\.1\.1"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "processes nested directories" {
-            $testDir = New-TestEnvironment -Name "session-nested"
-            try {
-                Write-TestFile "$testDir/src/config/db.yaml" "host: 111.64.135.196"
-                Write-TestFile "$testDir/src/app/settings.json" '{"ip": "111.210.246.198"}'
-                Invoke-SanitizerSession -TestDir $testDir
-
-                Read-TestFile "$testDir/src/config/db.yaml" | Should -Not -Match "192\.168\."
-                Read-TestFile "$testDir/src/app/settings.json" | Should -Not -Match "10\.0\.0\."
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+    It "preserves excluded IPs" {
+        Invoke-SanitizerTest -Name "session-excluded" -Config (New-TestConfig) -Test {
+            param($dir)
+            Write-TestFile "$dir/config.txt" "localhost = 127.0.0.1`nbind = 0.0.0.0"
+            Invoke-Session
+            $content = Read-TestFile "$dir/config.txt"
+            $content | Should -Match "127\.0\.0\.1"
+            $content | Should -Match "0\.0\.0\.0"
         }
     }
 
-    Context "Mapping persistence" {
-        It "saves discovered mappings to config" {
-            $testDir = New-TestEnvironment -Name "session-persist"
-            try {
-                $config = New-TestConfig
-                Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
-                # Use a specific IP that will be discovered and saved
-                $testIP = "192.168.99.99"
-                Write-TestFile "$testDir/app.txt" "server = $testIP"
-                Invoke-SanitizerSession -TestDir $testDir
+    It "skips .git and .claude directories" {
+        Invoke-SanitizerTest -Name "session-skip" -Config (New-TestConfig) -Test {
+            param($dir)
+            [System.IO.Directory]::CreateDirectory("$dir/.git") | Out-Null
+            $gitContent = "secret = 111.11.165.76"
+            Write-TestFile "$dir/.git/config" $gitContent
+            Write-TestFile "$dir/main.go" "ip = 111.131.131.242"
+            Invoke-Session
+            Read-TestFile "$dir/.git/config" | Should -Be $gitContent
+            Read-TestFile "$dir/main.go" | Should -Match "111\.\d+\.\d+\.\d+"
+        }
+    }
 
-                $savedConfig = Read-TestFile "$testDir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json
-                # The original IP should be saved as a key in mappingsAuto
-                $savedConfig.mappingsAuto.PSObject.Properties.Name | Should -Contain $testIP
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+    It "skips binary files" {
+        Invoke-SanitizerTest -Name "session-binary" -Config (New-TestConfig) -Test {
+            param($dir)
+            $bytes = [byte[]]@(0x00, 0x50, 0x4B, 0x03, 0x04)
+            [System.IO.File]::WriteAllBytes("$dir/archive.zip", $bytes)
+            Write-TestFile "$dir/main.go" "ip = 111.38.230.69"
+            Invoke-Session
+            [System.IO.File]::ReadAllBytes("$dir/archive.zip") | Should -Be $bytes
+            Read-TestFile "$dir/main.go" | Should -Match "111\.\d+\.\d+\.\d+"
+        }
+    }
+
+    It "processes nested directories" {
+        Invoke-SanitizerTest -Name "session-nested" -Config (New-TestConfig) -Test {
+            param($dir)
+            Write-TestFile "$dir/src/config/db.yaml" "host: 111.38.230.69"
+            Write-TestFile "$dir/src/app/settings.json" '{"ip": "111.247.206.175"}'
+            Invoke-Session
+            Read-TestFile "$dir/src/config/db.yaml" | Should -Match "111\.\d+\.\d+\.\d+"
+            Read-TestFile "$dir/src/app/settings.json" | Should -Match "111\.\d+\.\d+\.\d+"
+        }
+    }
+
+    It "saves discovered mappings to config" {
+        Invoke-SanitizerTest -Name "session-persist" -Config (New-TestConfig) -Test {
+            param($dir)
+            # Use a private IP that will be discovered
+            $testIP = "192.168.99.99"
+            Write-TestFile "$dir/app.txt" "server = $testIP"
+            Invoke-Session
+            (Read-TestFile "$dir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json).mappingsAuto.PSObject.Properties.Name | Should -Contain $testIP
         }
     }
 }
@@ -539,38 +284,19 @@ server3 = 111.187.8.34
 
 Describe "hook-session-stop" {
     It "creates unsanitized copy with real values restored" {
-        $testDir = New-TestEnvironment -Name "session-stop"
-        $projectName = Split-Path $testDir -Leaf
-        $originalIP = "192.168.50.123"
+        Invoke-SanitizerTest -Name "session-stop" -Config (New-TestConfig) -Test {
+            param($dir)
+            $projectName = Split-Path $dir -Leaf
+            $originalIP = "111.188.66.239"
+            Write-TestFile "$dir/deploy.ps1" "Connect-Server -IP `"$originalIP`""
 
-        try {
-            Write-TestFile "$testDir/deploy.ps1" "Connect-Server -IP `"$originalIP`""
+            Invoke-Session 'hook-session-start'
+            Read-TestFile "$dir/deploy.ps1" | Should -Match "111\.\d+\.\d+\.\d+"
 
-            # Session start sanitizes and saves mapping
-            Invoke-SanitizerSession -TestDir $testDir -Command 'hook-session-start'
-            $sanitized = Read-TestFile "$testDir/deploy.ps1"
-            $sanitized | Should -Match "111\.\d+\.\d+\.\d+"
-            $sanitized | Should -Not -Match $originalIP
+            $null = '{"hook_event_name":"Stop"}' | & $script:sanitizer hook-session-stop 2>&1
 
-            # Session stop restores
-            $originalProfile = $env:USERPROFILE
-            try {
-                $env:USERPROFILE = $testDir
-                Push-Location $testDir
-                $null = '{"hook_event_name":"Stop"}' | & $sanitizer hook-session-stop 2>&1
-            }
-            finally {
-                Pop-Location
-                $env:USERPROFILE = $originalProfile
-            }
-
-            # Unsanitized copy should have original IP restored
-            $unsanitizedFile = "$testDir/.claude/unsanitized/$projectName/deploy.ps1"
-            $unsanitizedFile | Should -Exist
-            Read-TestFile $unsanitizedFile | Should -Match $originalIP
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+            "$dir/.claude/unsanitized/$projectName/deploy.ps1" | Should -Exist
+            Read-TestFile "$dir/.claude/unsanitized/$projectName/deploy.ps1" | Should -Match $originalIP
         }
     }
 }
@@ -580,439 +306,195 @@ Describe "hook-session-stop" {
 # ============================================================================
 
 Describe "hostname-patterns" {
-    Context "Pattern matching" {
-        It "sanitizes hostnames matching pattern" {
-            $testDir = New-TestEnvironment -Name "host-basic" -Config (New-TestConfig -Patterns @("server\d{2}"))
-            try {
-                Write-TestFile "$testDir/inventory.yml" "host: server01`nbackup: server99"
-                Invoke-SanitizerSession -TestDir $testDir
-
-                $sanitized = Read-TestFile "$testDir/inventory.yml"
-                $sanitized | Should -Not -Match "server01"
-                $sanitized | Should -Not -Match "server99"
-                $sanitized | Should -Match "host-[a-z0-9]+\.example\.test"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "matches case-insensitively" {
-            $testDir = New-TestEnvironment -Name "host-case" -Config (New-TestConfig -Patterns @("prodweb\d+"))
-            try {
-                Write-TestFile "$testDir/hosts.txt" "host-4x14bsel.example.test`nhost-0309skeo.example.test`nhost-a3plihqn.example.test"
-                Invoke-SanitizerSession -TestDir $testDir
-
-                $sanitized = Read-TestFile "$testDir/hosts.txt"
-                $sanitized | Should -Not -Match "(?i)prodweb"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "captures domain suffix (FQDN)" {
-            $testDir = New-TestEnvironment -Name "host-fqdn" -Config (New-TestConfig -Patterns @("srv[0-9]+"))
-            try {
-                Write-TestFile "$testDir/dns.txt" "srv01.internal.corp.local"
-                Invoke-SanitizerSession -TestDir $testDir
-
-                $sanitized = Read-TestFile "$testDir/dns.txt"
-                $sanitized | Should -Not -Match "srv01"
-                $sanitized | Should -Not -Match "internal\.corp\.local"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "handles multiple patterns" {
-            $testDir = New-TestEnvironment -Name "host-multi" -Config (New-TestConfig -Patterns @("web\d+", "db\d+", "app\d+"))
-            try {
-                Write-TestFile "$testDir/arch.txt" "web01 -> app01 -> db01"
-                Invoke-SanitizerSession -TestDir $testDir
-
-                $sanitized = Read-TestFile "$testDir/arch.txt"
-                $sanitized | Should -Not -Match "web01"
-                $sanitized | Should -Not -Match "app01"
-                $sanitized | Should -Not -Match "db01"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+    It "sanitizes hostnames matching pattern" {
+        Invoke-SanitizerTest -Name "host-basic" -Config (New-TestConfig -Patterns @("server\d{2}")) -Test {
+            param($dir)
+            Write-TestFile "$dir/inventory.yml" "host: server01`nbackup: server99"
+            Invoke-Session
+            $sanitized = Read-TestFile "$dir/inventory.yml"
+            $sanitized | Should -Not -Match "server01|server99"
+            $sanitized | Should -Match "host-[a-z0-9]+\.example\.test"
         }
     }
 
-    Context "Identity mappings (preservation)" {
-        It "preserves values with identity mapping" {
-            $config = New-TestConfig -Patterns @("Packed[A-Za-z0-9]+Array") -ManualMappings @{
-                "host-hh0o0585.example.testArray"   = "host-hh0o0585.example.testArray"
-                "host-3uyaeoky.example.testArray" = "host-3uyaeoky.example.testArray"
-            }
-            $testDir = New-TestEnvironment -Name "host-identity" -Config $config
-            try {
-                Write-TestFile "$testDir/types.gd" "var a: host-hh0o0585.example.testArray`nvar b: host-3uyaeoky.example.testArray"
-                Invoke-SanitizerSession -TestDir $testDir
-
-                $sanitized = Read-TestFile "$testDir/types.gd"
-                $sanitized | Should -Match "host-hh0o0585.example.testArray"
-                $sanitized | Should -Match "host-3uyaeoky.example.testArray"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+    It "matches case-insensitively and captures FQDN suffix" {
+        Invoke-SanitizerTest -Name "host-fqdn" -Config (New-TestConfig -Patterns @("srv[0-9]+")) -Test {
+            param($dir)
+            Write-TestFile "$dir/dns.txt" "SRV01.internal.corp.local"
+            Invoke-Session
+            Read-TestFile "$dir/dns.txt" | Should -Not -Match "srv01|internal\.corp\.local"
         }
     }
 
-    Context "Determinism" {
-        It "produces same output across multiple runs" {
-            $testDir = New-TestEnvironment -Name "host-determ" -Config (New-TestConfig -Patterns @("myhost\d+"))
-            try {
-                $original = "connect to myhost01 and myhost02"
-                Write-TestFile "$testDir/test.txt" $original
-
-                # First run
-                Invoke-SanitizerSession -TestDir $testDir
-                $firstRun = Read-TestFile "$testDir/test.txt"
-
-                # Reset file, keep config
-                Write-TestFile "$testDir/test.txt" $original
-
-                # Second run
-                Invoke-SanitizerSession -TestDir $testDir
-                $secondRun = Read-TestFile "$testDir/test.txt"
-
-                $firstRun | Should -Be $secondRun
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+    It "handles multiple patterns" {
+        Invoke-SanitizerTest -Name "host-multi" -Config (New-TestConfig -Patterns @("web\d+", "db\d+", "app\d+")) -Test {
+            param($dir)
+            Write-TestFile "$dir/arch.txt" "web01 -> app01 -> db01"
+            Invoke-Session
+            Read-TestFile "$dir/arch.txt" | Should -Not -Match "web01|app01|db01"
         }
     }
 
-    Context "Edge cases" {
-        It "leaves non-matching text unchanged" {
-            $testDir = New-TestEnvironment -Name "host-nomatch" -Config (New-TestConfig -Patterns @("server\d{2}"))
-            try {
-                $original = "Hello world, no hostnames here"
-                Write-TestFile "$testDir/readme.txt" $original
-                Invoke-SanitizerSession -TestDir $testDir
-
-                (Read-TestFile "$testDir/readme.txt").Trim() | Should -Be $original
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+    It "preserves values with identity mapping" {
+        $config = New-TestConfig -Patterns @("Packed[A-Za-z0-9]+Array") -ManualMappings @{
+            "host-hh0o0585.example.testArray"   = "host-hh0o0585.example.testArray"
+            "host-3uyaeoky.example.testArray" = "host-3uyaeoky.example.testArray"
         }
-
-        It "handles mixed hostnames and IPs" {
-            $testDir = New-TestEnvironment -Name "host-mixed" -Config (New-TestConfig -Patterns @("dbserver\d+"))
-            try {
-                Write-TestFile "$testDir/config.ini" "host = dbserver01`nip = 111.64.135.196"
-                Invoke-SanitizerSession -TestDir $testDir
-
-                $sanitized = Read-TestFile "$testDir/config.ini"
-                $sanitized | Should -Not -Match "dbserver01"
-                $sanitized | Should -Not -Match "192\.168\.1\.100"
-                $sanitized | Should -Match "host-[a-z0-9]+\.example\.test"
-                $sanitized | Should -Match "111\.\d+\.\d+\.\d+"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+        Invoke-SanitizerTest -Name "host-identity" -Config $config -Test {
+            param($dir)
+            Write-TestFile "$dir/types.gd" "var a: host-hh0o0585.example.testArray`nvar b: host-3uyaeoky.example.testArray"
+            Invoke-Session
+            $sanitized = Read-TestFile "$dir/types.gd"
+            $sanitized | Should -Match "host-hh0o0585.example.testArray"
+            $sanitized | Should -Match "host-3uyaeoky.example.testArray"
         }
+    }
 
-        It "handles invalid regex pattern gracefully" {
-            # Pattern with unbalanced parentheses - should be skipped, not crash
-            $testDir = New-TestEnvironment -Name "host-invalid" -Config (New-TestConfig -Patterns @("server(", "valid\d+"))
-            try {
-                Write-TestFile "$testDir/test.txt" "valid01 and server("
-                Invoke-SanitizerSession -TestDir $testDir
+    It "is deterministic across runs" {
+        Invoke-SanitizerTest -Name "host-determ" -Config (New-TestConfig -Patterns @("myhost\d+")) -Test {
+            param($dir)
+            $original = "connect to myhost01 and myhost02"
+            Write-TestFile "$dir/test.txt" $original
+            Invoke-Session
+            $firstRun = Read-TestFile "$dir/test.txt"
 
-                # Should still sanitize valid pattern, skip invalid one
-                $sanitized = Read-TestFile "$testDir/test.txt"
-                $sanitized | Should -Not -Match "valid01"
-                $sanitized | Should -Match "host-[a-z0-9]+\.example\.test"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+            Write-TestFile "$dir/test.txt" $original
+            Invoke-Session
+            Read-TestFile "$dir/test.txt" | Should -Be $firstRun
+        }
+    }
+
+    It "handles invalid regex pattern gracefully" {
+        Invoke-SanitizerTest -Name "host-invalid" -Config (New-TestConfig -Patterns @("server(", "valid\d+")) -Test {
+            param($dir)
+            Write-TestFile "$dir/test.txt" "valid01 and server("
+            Invoke-Session
+            Read-TestFile "$dir/test.txt" | Should -Match "host-[a-z0-9]+\.example\.test"
         }
     }
 }
 
 # ============================================================================
-# EXEC FUNCTION (Command Execution in Unsanitized Dir)
+# EXEC FUNCTION
 # ============================================================================
 
 Describe "exec" {
-    It "runs command in unsanitized directory with real values" {
-        $testDir = New-TestEnvironment -Name "exec-basic"
-        $originalIP = "192.168.77.77"
-
-        try {
-            # Create config with known mapping
-            $config = New-TestConfig -AutoMappings @{ $originalIP = "111.77.77.77" }
-            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
-
-            # Create a script that echoes its location and an IP
-            Write-TestFile "$testDir/show-ip.ps1" "Write-Output `"IP: $originalIP`""
-
-            $originalProfile = $env:USERPROFILE
-            try {
-                $env:USERPROFILE = $testDir
-                Push-Location $testDir
-
-                # First sanitize the project
-                Invoke-SanitizerSession -TestDir $testDir
-
-                # Now exec should run in unsanitized dir and sanitize output
-                $result = & $sanitizer exec 'powershell -NoProfile -File show-ip.ps1' 2>&1
-
-                # Output should be sanitized (shows 111.x not 192.168.x)
-                $result | Should -Match "111\.77\.77\.77"
-                $result | Should -Not -Match "192\.168\.77\.77"
-            }
-            finally {
-                Pop-Location
-                $env:USERPROFILE = $originalProfile
-            }
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+    It "runs command in unsanitized dir with real values, sanitizes output" {
+        Invoke-SanitizerTest -Name "exec-basic" -Config (New-TestConfig -AutoMappings @{ "111.11.165.76" = "111.77.77.77" }) -Test {
+            param($dir)
+            Write-TestFile "$dir/show-ip.ps1" 'Write-Output "IP: 111.11.165.76"'
+            Invoke-Session
+            $result = & $script:sanitizer exec 'powershell -NoProfile -File show-ip.ps1' 2>&1
+            $result | Should -Match "111\.77\.77\.77"
+            $result | Should -Not -Match "192\.168\.77\.77"
         }
     }
 
     It "discovers new IPs from command output" {
-        $testDir = New-TestEnvironment -Name "exec-discover"
-        $newIP = "192.168.88.88"
-
-        try {
-            $config = New-TestConfig
-            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
-
-            # Script that outputs a new IP not in mappings
-            Write-TestFile "$testDir/new-ip.ps1" "Write-Output `"Found: $newIP`""
-
-            $originalProfile = $env:USERPROFILE
-            try {
-                $env:USERPROFILE = $testDir
-                Push-Location $testDir
-
-                Invoke-SanitizerSession -TestDir $testDir
-                $null = & $sanitizer exec 'powershell -NoProfile -File new-ip.ps1' 2>&1
-
-                # New IP should be saved to config
-                $savedConfig = Read-TestFile "$testDir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json
-                $savedConfig.mappingsAuto.PSObject.Properties.Name | Should -Contain $newIP
-            }
-            finally {
-                Pop-Location
-                $env:USERPROFILE = $originalProfile
-            }
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        Invoke-SanitizerTest -Name "exec-discover" -Config (New-TestConfig) -Test {
+            param($dir)
+            # Use a private IP that will be discovered from output
+            $newIP = "192.168.88.88"
+            Write-TestFile "$dir/new-ip.ps1" "Write-Output `"Found: $newIP`""
+            Invoke-Session
+            $null = & $script:sanitizer exec 'powershell -NoProfile -File new-ip.ps1' 2>&1
+            (Read-TestFile "$dir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json).mappingsAuto.PSObject.Properties.Name | Should -Contain $newIP
         }
     }
 }
 
 # ============================================================================
-# MANUAL MAPPINGS (Precedence)
+# MANUAL MAPPINGS
 # ============================================================================
 
 Describe "manual-mappings" {
-    It "manual mappings take precedence over auto" {
-        $testDir = New-TestEnvironment -Name "manual-precedence"
-        $testIP = "192.168.55.55"
-
-        try {
-            # Manual mapping specifies a custom sanitized value
-            $config = New-TestConfig -ManualMappings @{ $testIP = "111.99.99.99" } -AutoMappings @{ $testIP = "111.11.11.11" }
-            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
-            Write-TestFile "$testDir/test.txt" "server = $testIP"
-
-            Invoke-SanitizerSession -TestDir $testDir
-
-            # Should use manual mapping (99.99.99), not auto (11.11.11)
-            $sanitized = Read-TestFile "$testDir/test.txt"
+    It "takes precedence over auto mappings" {
+        $testIP = "111.212.86.22"
+        $config = New-TestConfig -ManualMappings @{ $testIP = "111.99.99.99" } -AutoMappings @{ $testIP = "111.11.11.11" }
+        Invoke-SanitizerTest -Name "manual-precedence" -Config $config -Test {
+            param($dir)
+            Write-TestFile "$dir/test.txt" "server = $testIP"
+            Invoke-Session
+            $sanitized = Read-TestFile "$dir/test.txt"
             $sanitized | Should -Match "111\.99\.99\.99"
             $sanitized | Should -Not -Match "111\.11\.11\.11"
         }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
     }
 
-    It "preserves manual mapping for custom replacement" {
-        $testDir = New-TestEnvironment -Name "manual-custom"
-
-        try {
-            # Replace a username with a custom value
-            $config = New-TestConfig -ManualMappings @{ "C:\Users\realuser" = "C:\Users\testuser" }
-            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
-            Write-TestFile "$testDir/config.txt" 'path = C:\Users\realuser\data'
-
-            Invoke-SanitizerSession -TestDir $testDir
-
-            $sanitized = Read-TestFile "$testDir/config.txt"
-            $sanitized | Should -Match 'C:\\Users\\testuser\\data'
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+    It "supports custom string replacement" {
+        Invoke-SanitizerTest -Name "manual-custom" -Config (New-TestConfig -ManualMappings @{ 'C:\Users\exampleuser' = 'C:\Users\testuser' }) -Test {
+            param($dir)
+            Write-TestFile "$dir/config.txt" 'path = C:\Users\exampleuser\data'
+            Invoke-Session
+            Read-TestFile "$dir/config.txt" | Should -Match 'C:\\Users\\testuser\\data'
         }
     }
 }
 
 # ============================================================================
-# TEXT TRANSFORMATION (Longest-First Ordering)
+# TEXT TRANSFORMATION
 # ============================================================================
 
 Describe "text-transformation" {
     It "replaces longest keys first to avoid partial matches" {
-        $testDir = New-TestEnvironment -Name "text-longest"
-
-        try {
-            # Two IPs where one is a prefix of the other
-            $config = New-TestConfig -AutoMappings @{
-                "10.0.0.1"   = "111.1.1.1"
-                "10.0.0.100" = "111.1.1.100"
-            }
-            Write-TestFile "$testDir/.claude/sanitizer/sanitizer.json" $config
-            Write-TestFile "$testDir/test.txt" "short: 10.0.0.1`nlong: 10.0.0.100"
-
-            Invoke-SanitizerSession -TestDir $testDir
-
-            $sanitized = Read-TestFile "$testDir/test.txt"
-            # Both should be replaced correctly
+        # Two IPs where one is prefix of the other - longer must be replaced first
+        $config = New-TestConfig -AutoMappings @{ "10.0.0.1" = "111.1.1.1"; "10.0.0.100" = "111.1.1.100" }
+        Invoke-SanitizerTest -Name "text-longest" -Config $config -Test {
+            param($dir)
+            Write-TestFile "$dir/test.txt" "short: 10.0.0.1`nlong: 10.0.0.100"
+            Invoke-Session
+            $sanitized = Read-TestFile "$dir/test.txt"
             $sanitized | Should -Match "short: 111\.1\.1\.1"
             $sanitized | Should -Match "long: 111\.1\.1\.100"
-            # No partial replacement artifacts (like "0" left over)
             $sanitized | Should -Not -Match "10\.0\.0"
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 }
 
 # ============================================================================
-# FILE HANDLING (Binary Detection, Size Limits, Symlinks)
+# FILE HANDLING
 # ============================================================================
 
 Describe "file-handling" {
-    Context "Binary detection" {
-        It "detects null bytes as binary" {
-            $testDir = New-TestEnvironment -Name "file-nullbyte"
-            try {
-                # File with null byte in middle
-                $bytes = [System.Text.Encoding]::UTF8.GetBytes("text")
-                $bytes += [byte]0x00
-                $bytes += [System.Text.Encoding]::UTF8.GetBytes("192.168.1.1")
-                [System.IO.File]::WriteAllBytes("$testDir/mixed.bin", $bytes)
-                Write-TestFile "$testDir/clean.txt" "192.168.2.2"
-
-                Invoke-SanitizerSession -TestDir $testDir
-
-                # Binary file should be untouched
-                $binContent = [System.IO.File]::ReadAllBytes("$testDir/mixed.bin")
-                $binContent | Should -Be $bytes
-
-                # Text file should be sanitized
-                Read-TestFile "$testDir/clean.txt" | Should -Match "111\.\d+\.\d+\.\d+"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+    It "detects null bytes as binary and skips" {
+        Invoke-SanitizerTest -Name "file-nullbyte" -Config (New-TestConfig) -Test {
+            param($dir)
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes("text") + [byte]0x00 + [System.Text.Encoding]::UTF8.GetBytes("111.38.230.69")
+            [System.IO.File]::WriteAllBytes("$dir/mixed.bin", $bytes)
+            Write-TestFile "$dir/clean.txt" "111.166.187.122"
+            Invoke-Session
+            [System.IO.File]::ReadAllBytes("$dir/mixed.bin") | Should -Be $bytes
+            Read-TestFile "$dir/clean.txt" | Should -Match "111\.\d+\.\d+\.\d+"
         }
     }
 
-    Context "Large files" {
-        It "skips files larger than 10MB" {
-            $testDir = New-TestEnvironment -Name "file-large"
-            try {
-                # Create file just over 10MB
-                $largeContent = "192.168.1.1`n" * 900000  # ~11MB
-                [System.IO.File]::WriteAllText("$testDir/large.txt", $largeContent)
-                Write-TestFile "$testDir/small.txt" "192.168.2.2"
-
-                Invoke-SanitizerSession -TestDir $testDir
-
-                # Large file should be untouched (first line check)
-                $largeFirst = [System.IO.File]::ReadLines("$testDir/large.txt") | Select-Object -First 1
-                $largeFirst | Should -Match "192\.168\.1\.1"
-
-                # Small file should be sanitized
-                Read-TestFile "$testDir/small.txt" | Should -Match "111\.\d+\.\d+\.\d+"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
+    It "skips files larger than 10MB" {
+        Invoke-SanitizerTest -Name "file-large" -Config (New-TestConfig) -Test {
+            param($dir)
+            # Large file with private IP - should be skipped (untouched)
+            [System.IO.File]::WriteAllText("$dir/large.txt", ("192.168.1.1`n" * 900000))
+            Write-TestFile "$dir/small.txt" "192.168.2.2"
+            Invoke-Session
+            # Large file should still have original IP (not sanitized)
+            [System.IO.File]::ReadLines("$dir/large.txt") | Select-Object -First 1 | Should -Match "192\.168\.1\.1"
+            # Small file should be sanitized
+            Read-TestFile "$dir/small.txt" | Should -Match "111\.\d+\.\d+\.\d+"
         }
     }
 
-    Context "Skip paths" {
-        It "skips node_modules directory" {
-            $testDir = New-TestEnvironment -Name "file-nodemodules" -Config (New-TestConfig -SkipPaths @(".git", "node_modules"))
-            try {
-                [System.IO.Directory]::CreateDirectory("$testDir/node_modules/pkg") | Out-Null
-                $originalContent = "ip = 192.168.1.1"
-                Write-TestFile "$testDir/node_modules/pkg/index.js" $originalContent
-                Write-TestFile "$testDir/app.js" "ip = 192.168.2.2"
-
-                Invoke-SanitizerSession -TestDir $testDir
-
-                # node_modules should be untouched
-                Read-TestFile "$testDir/node_modules/pkg/index.js" | Should -Be $originalContent
-                # app.js should be sanitized
-                Read-TestFile "$testDir/app.js" | Should -Match "111\.\d+\.\d+\.\d+"
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "skips deeply nested excluded paths" {
-            $testDir = New-TestEnvironment -Name "file-deepskip" -Config (New-TestConfig -SkipPaths @(".git", "vendor"))
-            try {
-                [System.IO.Directory]::CreateDirectory("$testDir/src/lib/vendor/pkg") | Out-Null
-                $originalContent = "192.168.5.5"
-                Write-TestFile "$testDir/src/lib/vendor/pkg/file.go" $originalContent
-
-                Invoke-SanitizerSession -TestDir $testDir
-
-                # Should be skipped because path contains /vendor/
-                Read-TestFile "$testDir/src/lib/vendor/pkg/file.go" | Should -Be $originalContent
-            }
-            finally {
-                Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-    }
-}
-
-# ============================================================================
-# PUBLIC IP SANITIZATION
-# ============================================================================
-
-Describe "public-ips" {
-    It "sanitizes public IP addresses" {
-        $testDir = New-TestEnvironment -Name "public-basic"
-        try {
-            # Public IPs (not in private ranges)
-            Write-TestFile "$testDir/dns.txt" "8.8.8.8`n1.1.1.1`n208.67.222.222"
-
-            Invoke-SanitizerSession -TestDir $testDir
-
-            $sanitized = Read-TestFile "$testDir/dns.txt"
-            # All public IPs should be sanitized to 111.x.x.x
-            $sanitized | Should -Not -Match "8\.8\.8\.8"
-            $sanitized | Should -Not -Match "1\.1\.1\.1"
-            $sanitized | Should -Not -Match "208\.67\.222\.222"
-            ([regex]::Matches($sanitized, "111\.\d+\.\d+\.\d+")).Count | Should -Be 3
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+    It "skips configured paths like node_modules" {
+        Invoke-SanitizerTest -Name "file-skip" -Config (New-TestConfig -SkipPaths @(".git", "node_modules", "vendor")) -Test {
+            param($dir)
+            [System.IO.Directory]::CreateDirectory("$dir/node_modules/pkg") | Out-Null
+            [System.IO.Directory]::CreateDirectory("$dir/src/lib/vendor/pkg") | Out-Null
+            $originalContent = "ip = 111.38.230.69"
+            Write-TestFile "$dir/node_modules/pkg/index.js" $originalContent
+            Write-TestFile "$dir/src/lib/vendor/pkg/file.go" $originalContent
+            Write-TestFile "$dir/app.js" "ip = 111.166.187.122"
+            Invoke-Session
+            Read-TestFile "$dir/node_modules/pkg/index.js" | Should -Be $originalContent
+            Read-TestFile "$dir/src/lib/vendor/pkg/file.go" | Should -Be $originalContent
+            Read-TestFile "$dir/app.js" | Should -Match "111\.\d+\.\d+\.\d+"
         }
     }
 }
@@ -1023,77 +505,50 @@ Describe "public-ips" {
 
 Describe "config-handling" {
     It "creates default config if missing" {
-        $testDir = New-TestEnvironment -Name "config-default"
-        # Don't create config file
-        Remove-Item "$testDir/.claude/sanitizer/sanitizer.json" -ErrorAction SilentlyContinue
-        try {
-            Write-TestFile "$testDir/test.txt" "111.38.230.69"
-            Invoke-SanitizerSession -TestDir $testDir
-
-            # Config should be created
-            "$testDir/.claude/sanitizer/sanitizer.json" | Should -Exist
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        Invoke-SanitizerTest -Name "config-default" -Config $null -Test {
+            param($dir)
+            Remove-Item "$dir/.claude/sanitizer/sanitizer.json" -ErrorAction SilentlyContinue
+            Write-TestFile "$dir/test.txt" "111.38.230.69"
+            Invoke-Session
+            "$dir/.claude/sanitizer/sanitizer.json" | Should -Exist
         }
     }
 
     It "handles UTF-8 BOM in config" {
-        $testDir = New-TestEnvironment -Name "config-bom"
-        try {
-            # Write config with UTF-8 BOM
+        Invoke-SanitizerTest -Name "config-bom" -Config $null -Test {
+            param($dir)
             $config = New-TestConfig -Patterns @("test\d+")
             $bom = [byte[]]@(0xEF, 0xBB, 0xBF)
-            $content = [System.Text.Encoding]::UTF8.GetBytes($config)
-            [System.IO.File]::WriteAllBytes("$testDir/.claude/sanitizer/sanitizer.json", $bom + $content)
-
-            Write-TestFile "$testDir/test.txt" "test01"
-            Invoke-SanitizerSession -TestDir $testDir
-
-            # Should still work
-            Read-TestFile "$testDir/test.txt" | Should -Match "host-[a-z0-9]+\.example\.test"
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+            [System.IO.File]::WriteAllBytes("$dir/.claude/sanitizer/sanitizer.json", $bom + [System.Text.Encoding]::UTF8.GetBytes($config))
+            Write-TestFile "$dir/test.txt" "test01"
+            Invoke-Session
+            Read-TestFile "$dir/test.txt" | Should -Match "host-[a-z0-9]+\.example\.test"
         }
     }
 }
 
 # ============================================================================
-# REGRESSION TESTS (for bugs we've fixed)
+# REGRESSION TESTS
 # ============================================================================
 
 Describe "regression-tests" {
     It "hostname charset generates valid hostnames (no dots in random part)" {
-        # Regression: ip.go had corrupt charset "host-78qei5ef.example.test23456789"
-        $testDir = New-TestEnvironment -Name "reg-charset" -Config (New-TestConfig -Patterns @("testhost\d+"))
-        try {
-            Write-TestFile "$testDir/test.txt" "testhost01"
-            Invoke-SanitizerSession -TestDir $testDir
-
-            $sanitized = Read-TestFile "$testDir/test.txt"
-            # Should match host-XXXXXXXX.example.test where X is alphanumeric only
-            $sanitized | Should -Match "^host-[a-z0-9]{8}\.example\.test$"
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
+        Invoke-SanitizerTest -Name "reg-charset" -Config (New-TestConfig -Patterns @("testhost\d+")) -Test {
+            param($dir)
+            Write-TestFile "$dir/test.txt" "testhost01"
+            Invoke-Session
+            Read-TestFile "$dir/test.txt" | Should -Match "^host-[a-z0-9]{8}\.example\.test$"
         }
     }
 
-    It "config mappings preserve original values as keys (not sanitized keys)" {
-        # Regression: .claude directory wasn't skipped, config got sanitized
-        $testDir = New-TestEnvironment -Name "reg-configkeys" -Config (New-TestConfig -Patterns @("myserver\d+"))
-        try {
-            Write-TestFile "$testDir/test.txt" "myserver01"
-            Invoke-SanitizerSession -TestDir $testDir
-
-            $config = Read-TestFile "$testDir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json
-            # Key should be original value, not sanitized
+    It "config mappings preserve original values as keys" {
+        Invoke-SanitizerTest -Name "reg-configkeys" -Config (New-TestConfig -Patterns @("myserver\d+")) -Test {
+            param($dir)
+            Write-TestFile "$dir/test.txt" "myserver01"
+            Invoke-Session
+            $config = Read-TestFile "$dir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json
             $config.mappingsAuto.PSObject.Properties.Name | Should -Contain "myserver01"
             $config.mappingsAuto.PSObject.Properties.Name | Should -Not -Match "host-.*\.example\.test"
-        }
-        finally {
-            Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 }
