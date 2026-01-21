@@ -15,6 +15,34 @@ BeforeAll {
     Pop-Location
 
     # -------------------------------------------------------------------------
+    # Test Data - IPs and Patterns
+    # -------------------------------------------------------------------------
+
+    # Private IPs (will be sanitized)
+    $script:IP_10      = "10.0.0.1"
+    $script:IP_172     = "172.16.0.1"
+    $script:IP_192     = "192.168.1.1"
+    $script:IP_192_2   = "192.168.2.2"
+    $script:IP_192_99  = "192.168.99.99"
+    $script:IP_192_88  = "192.168.88.88"
+
+    # Excluded IPs (should NOT be sanitized)
+    $script:IP_LOOP    = "127.0.0.1"
+    $script:IP_LOOP2   = "127.255.255.255"
+    $script:IP_ZERO    = "0.0.0.0"
+    $script:IP_BCAST   = "255.255.255.255"
+    $script:IP_MASK    = "255.255.255.0"
+    $script:IP_LINK    = "169.254.1.1"
+    $script:IP_MCAST   = "224.0.0.1"
+    $script:IP_MCAST2  = "239.255.255.255"
+
+    # Already-sanitized IPs (111.x range - pass through unchanged)
+    $script:IP_SAN     = "111.50.100.200"
+
+    # Regex pattern matching any sanitized IP
+    $script:RX_SAN     = "111\.\d+\.\d+\.\d+"
+
+    # -------------------------------------------------------------------------
     # Test Helpers
     # -------------------------------------------------------------------------
 
@@ -99,33 +127,33 @@ BeforeAll {
 
 Describe "sanitize-ips" {
     It "sanitizes private ranges: 10.x, 172.16-31.x, 192.168.x" {
-        "111.247.206.175" | & $sanitizer sanitize-ips | Should -Match "^111\.\d+\.\d+\.\d+$"
-        "111.235.144.217 111.238.118.188" | & $sanitizer sanitize-ips | Should -Match "111\.\d+\.\d+\.\d+.*111\.\d+\.\d+\.\d+"
-        "111.38.230.69" | & $sanitizer sanitize-ips | Should -Match "^111\.\d+\.\d+\.\d+$"
+        $IP_10 | & $sanitizer sanitize-ips | Should -Match "^$RX_SAN$"
+        "$IP_172 $IP_172" | & $sanitizer sanitize-ips | Should -Match "$RX_SAN.*$RX_SAN"
+        $IP_192 | & $sanitizer sanitize-ips | Should -Match "^$RX_SAN$"
     }
 
     It "preserves excluded IPs: loopback, broadcast, link-local, multicast, already-sanitized" {
-        "127.0.0.1 127.255.255.255" | & $sanitizer sanitize-ips | Should -Match "127\.0\.0\.1.*127\.255\.255\.255"
-        "0.0.0.0" | & $sanitizer sanitize-ips | Should -Match "0\.0\.0\.0"
-        "255.255.255.0 255.255.255.255" | & $sanitizer sanitize-ips | Should -Match "255\.255\.255\.0.*255\.255\.255\.255"
-        "169.254.1.1" | & $sanitizer sanitize-ips | Should -Match "169\.254\.1\.1"
-        "224.0.0.1 239.255.255.255" | & $sanitizer sanitize-ips | Should -Match "224\.0\.0\.1.*239\.255\.255\.255"
-        "111.50.100.200" | & $sanitizer sanitize-ips | Should -Be "111.50.100.200"
+        "$IP_LOOP $IP_LOOP2" | & $sanitizer sanitize-ips | Should -Match "$IP_LOOP.*$IP_LOOP2"
+        $IP_ZERO | & $sanitizer sanitize-ips | Should -Match $IP_ZERO
+        "$IP_MASK $IP_BCAST" | & $sanitizer sanitize-ips | Should -Match "$IP_MASK.*$IP_BCAST"
+        $IP_LINK | & $sanitizer sanitize-ips | Should -Match $IP_LINK
+        "$IP_MCAST $IP_MCAST2" | & $sanitizer sanitize-ips | Should -Match "$IP_MCAST.*$IP_MCAST2"
+        $IP_SAN | & $sanitizer sanitize-ips | Should -Be $IP_SAN
     }
 
     It "is deterministic (same input = same output)" {
-        $r1 = "111.38.230.69" | & $sanitizer sanitize-ips
-        $r2 = "111.38.230.69" | & $sanitizer sanitize-ips
+        $r1 = $IP_192 | & $sanitizer sanitize-ips
+        $r2 = $IP_192 | & $sanitizer sanitize-ips
         $r1 | Should -Be $r2
     }
 
     It "handles multiple IPs on one line" {
-        $result = "111.38.230.69, 111.247.206.175, 111.235.144.217" | & $sanitizer sanitize-ips
-        ([regex]::Matches($result, "111\.\d+\.\d+\.\d+")).Count | Should -Be 3
+        $result = "$IP_192, $IP_10, $IP_172" | & $sanitizer sanitize-ips
+        ([regex]::Matches($result, $RX_SAN)).Count | Should -Be 3
     }
 
     It "sanitizes public IPs" {
-        "111.170.233.160 111.161.25.82 111.150.208.239" | & $sanitizer sanitize-ips | Should -Not -Match "8\.8\.8\.8|1\.1\.1\.1|208\.67"
+        "8.8.8.8 1.1.1.1 208.67.222.222" | & $sanitizer sanitize-ips | Should -Not -Match "8\.8\.8\.8|1\.1\.1\.1|208\.67"
     }
 }
 
@@ -190,8 +218,8 @@ Describe "hook-file-access" {
 
 Describe "hook-post" {
     It "sanitizes IPs in tool output" {
-        Invoke-SanitizerTest -Name "hook-post" -Config (New-TestConfig -AutoMappings @{ "111.64.135.196" = "111.50.50.50" }) -Test {
-            $result = Invoke-HookPost "Found server at 111.64.135.196" | ConvertFrom-Json
+        Invoke-SanitizerTest -Name "hook-post" -Config (New-TestConfig -AutoMappings @{ $IP_192 = "111.50.50.50" }) -Test {
+            $result = Invoke-HookPost "Found server at $IP_192" | ConvertFrom-Json
             $result.hookSpecificOutput.updatedOutput | Should -Match "111\.50\.50\.50"
         }
     }
@@ -211,22 +239,22 @@ Describe "hook-session-start" {
     It "sanitizes private IP ranges in files" {
         Invoke-SanitizerTest -Name "session-ips" -Config (New-TestConfig) -Test {
             param($dir)
-            Write-TestFile "$dir/config.txt" "server1 = 111.38.230.69`nserver2 = 111.247.206.175`nserver3 = 111.235.144.217"
+            Write-TestFile "$dir/config.txt" "server1 = $IP_192`nserver2 = $IP_10`nserver3 = $IP_172"
             Invoke-Session
             $sanitized = Read-TestFile "$dir/config.txt"
             $sanitized | Should -Not -Match "192\.168\.|^10\.|172\.16\."
-            ([regex]::Matches($sanitized, "111\.\d+\.\d+\.\d+")).Count | Should -Be 3
+            ([regex]::Matches($sanitized, $RX_SAN)).Count | Should -Be 3
         }
     }
 
     It "preserves excluded IPs" {
         Invoke-SanitizerTest -Name "session-excluded" -Config (New-TestConfig) -Test {
             param($dir)
-            Write-TestFile "$dir/config.txt" "localhost = 127.0.0.1`nbind = 0.0.0.0"
+            Write-TestFile "$dir/config.txt" "localhost = $IP_LOOP`nbind = $IP_ZERO"
             Invoke-Session
             $content = Read-TestFile "$dir/config.txt"
-            $content | Should -Match "127\.0\.0\.1"
-            $content | Should -Match "0\.0\.0\.0"
+            $content | Should -Match $IP_LOOP
+            $content | Should -Match $IP_ZERO
         }
     }
 
@@ -234,12 +262,12 @@ Describe "hook-session-start" {
         Invoke-SanitizerTest -Name "session-skip" -Config (New-TestConfig) -Test {
             param($dir)
             [System.IO.Directory]::CreateDirectory("$dir/.git") | Out-Null
-            $gitContent = "secret = 111.11.165.76"
+            $gitContent = "secret = $IP_192"
             Write-TestFile "$dir/.git/config" $gitContent
-            Write-TestFile "$dir/main.go" "ip = 111.131.131.242"
+            Write-TestFile "$dir/main.go" "ip = $IP_192_2"
             Invoke-Session
             Read-TestFile "$dir/.git/config" | Should -Be $gitContent
-            Read-TestFile "$dir/main.go" | Should -Match "111\.\d+\.\d+\.\d+"
+            Read-TestFile "$dir/main.go" | Should -Match $RX_SAN
         }
     }
 
@@ -248,32 +276,30 @@ Describe "hook-session-start" {
             param($dir)
             $bytes = [byte[]]@(0x00, 0x50, 0x4B, 0x03, 0x04)
             [System.IO.File]::WriteAllBytes("$dir/archive.zip", $bytes)
-            Write-TestFile "$dir/main.go" "ip = 111.38.230.69"
+            Write-TestFile "$dir/main.go" "ip = $IP_192"
             Invoke-Session
             [System.IO.File]::ReadAllBytes("$dir/archive.zip") | Should -Be $bytes
-            Read-TestFile "$dir/main.go" | Should -Match "111\.\d+\.\d+\.\d+"
+            Read-TestFile "$dir/main.go" | Should -Match $RX_SAN
         }
     }
 
     It "processes nested directories" {
         Invoke-SanitizerTest -Name "session-nested" -Config (New-TestConfig) -Test {
             param($dir)
-            Write-TestFile "$dir/src/config/db.yaml" "host: 111.38.230.69"
-            Write-TestFile "$dir/src/app/settings.json" '{"ip": "111.247.206.175"}'
+            Write-TestFile "$dir/src/config/db.yaml" "host: $IP_192"
+            Write-TestFile "$dir/src/app/settings.json" "{`"ip`": `"$IP_10`"}"
             Invoke-Session
-            Read-TestFile "$dir/src/config/db.yaml" | Should -Match "111\.\d+\.\d+\.\d+"
-            Read-TestFile "$dir/src/app/settings.json" | Should -Match "111\.\d+\.\d+\.\d+"
+            Read-TestFile "$dir/src/config/db.yaml" | Should -Match $RX_SAN
+            Read-TestFile "$dir/src/app/settings.json" | Should -Match $RX_SAN
         }
     }
 
     It "saves discovered mappings to config" {
         Invoke-SanitizerTest -Name "session-persist" -Config (New-TestConfig) -Test {
             param($dir)
-            # Use a private IP that will be discovered
-            $testIP = "192.168.99.99"
-            Write-TestFile "$dir/app.txt" "server = $testIP"
+            Write-TestFile "$dir/app.txt" "server = $IP_192_99"
             Invoke-Session
-            (Read-TestFile "$dir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json).mappingsAuto.PSObject.Properties.Name | Should -Contain $testIP
+            (Read-TestFile "$dir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json).mappingsAuto.PSObject.Properties.Name | Should -Contain $IP_192_99
         }
     }
 }
@@ -287,16 +313,15 @@ Describe "hook-session-stop" {
         Invoke-SanitizerTest -Name "session-stop" -Config (New-TestConfig) -Test {
             param($dir)
             $projectName = Split-Path $dir -Leaf
-            $originalIP = "111.188.66.239"
-            Write-TestFile "$dir/deploy.ps1" "Connect-Server -IP `"$originalIP`""
+            Write-TestFile "$dir/deploy.ps1" "Connect-Server -IP `"$IP_192`""
 
             Invoke-Session 'hook-session-start'
-            Read-TestFile "$dir/deploy.ps1" | Should -Match "111\.\d+\.\d+\.\d+"
+            Read-TestFile "$dir/deploy.ps1" | Should -Match $RX_SAN
 
             $null = '{"hook_event_name":"Stop"}' | & $script:sanitizer hook-session-stop 2>&1
 
             "$dir/.claude/unsanitized/$projectName/deploy.ps1" | Should -Exist
-            Read-TestFile "$dir/.claude/unsanitized/$projectName/deploy.ps1" | Should -Match $originalIP
+            Read-TestFile "$dir/.claude/unsanitized/$projectName/deploy.ps1" | Should -Match $IP_192
         }
     }
 }
@@ -380,25 +405,23 @@ Describe "hostname-patterns" {
 
 Describe "exec" {
     It "runs command in unsanitized dir with real values, sanitizes output" {
-        Invoke-SanitizerTest -Name "exec-basic" -Config (New-TestConfig -AutoMappings @{ "111.11.165.76" = "111.77.77.77" }) -Test {
+        Invoke-SanitizerTest -Name "exec-basic" -Config (New-TestConfig -AutoMappings @{ $IP_192 = "111.77.77.77" }) -Test {
             param($dir)
-            Write-TestFile "$dir/show-ip.ps1" 'Write-Output "IP: 111.11.165.76"'
+            Write-TestFile "$dir/show-ip.ps1" "Write-Output `"IP: $IP_192`""
             Invoke-Session
             $result = & $script:sanitizer exec 'powershell -NoProfile -File show-ip.ps1' 2>&1
             $result | Should -Match "111\.77\.77\.77"
-            $result | Should -Not -Match "192\.168\.77\.77"
+            $result | Should -Not -Match "192\.168"
         }
     }
 
     It "discovers new IPs from command output" {
         Invoke-SanitizerTest -Name "exec-discover" -Config (New-TestConfig) -Test {
             param($dir)
-            # Use a private IP that will be discovered from output
-            $newIP = "192.168.88.88"
-            Write-TestFile "$dir/new-ip.ps1" "Write-Output `"Found: $newIP`""
+            Write-TestFile "$dir/new-ip.ps1" "Write-Output `"Found: $IP_192_88`""
             Invoke-Session
             $null = & $script:sanitizer exec 'powershell -NoProfile -File new-ip.ps1' 2>&1
-            (Read-TestFile "$dir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json).mappingsAuto.PSObject.Properties.Name | Should -Contain $newIP
+            (Read-TestFile "$dir/.claude/sanitizer/sanitizer.json" | ConvertFrom-Json).mappingsAuto.PSObject.Properties.Name | Should -Contain $IP_192_88
         }
     }
 }
@@ -409,11 +432,10 @@ Describe "exec" {
 
 Describe "manual-mappings" {
     It "takes precedence over auto mappings" {
-        $testIP = "111.212.86.22"
-        $config = New-TestConfig -ManualMappings @{ $testIP = "111.99.99.99" } -AutoMappings @{ $testIP = "111.11.11.11" }
+        $config = New-TestConfig -ManualMappings @{ $IP_192 = "111.99.99.99" } -AutoMappings @{ $IP_192 = "111.11.11.11" }
         Invoke-SanitizerTest -Name "manual-precedence" -Config $config -Test {
             param($dir)
-            Write-TestFile "$dir/test.txt" "server = $testIP"
+            Write-TestFile "$dir/test.txt" "server = $IP_192"
             Invoke-Session
             $sanitized = Read-TestFile "$dir/test.txt"
             $sanitized | Should -Match "111\.99\.99\.99"
@@ -422,9 +444,9 @@ Describe "manual-mappings" {
     }
 
     It "supports custom string replacement" {
-        Invoke-SanitizerTest -Name "manual-custom" -Config (New-TestConfig -ManualMappings @{ 'C:\Users\exampleuser' = 'C:\Users\testuser' }) -Test {
+        Invoke-SanitizerTest -Name "manual-custom" -Config (New-TestConfig -ManualMappings @{ 'C:\Users\realuser' = 'C:\Users\testuser' }) -Test {
             param($dir)
-            Write-TestFile "$dir/config.txt" 'path = C:\Users\exampleuser\data'
+            Write-TestFile "$dir/config.txt" 'path = C:\Users\realuser\data'
             Invoke-Session
             Read-TestFile "$dir/config.txt" | Should -Match 'C:\\Users\\testuser\\data'
         }
@@ -438,10 +460,12 @@ Describe "manual-mappings" {
 Describe "text-transformation" {
     It "replaces longest keys first to avoid partial matches" {
         # Two IPs where one is prefix of the other - longer must be replaced first
-        $config = New-TestConfig -AutoMappings @{ "10.0.0.1" = "111.1.1.1"; "10.0.0.100" = "111.1.1.100" }
+        $short = "10.0.0.1"
+        $long  = "10.0.0.100"
+        $config = New-TestConfig -AutoMappings @{ $short = "111.1.1.1"; $long = "111.1.1.100" }
         Invoke-SanitizerTest -Name "text-longest" -Config $config -Test {
             param($dir)
-            Write-TestFile "$dir/test.txt" "short: 10.0.0.1`nlong: 10.0.0.100"
+            Write-TestFile "$dir/test.txt" "short: $short`nlong: $long"
             Invoke-Session
             $sanitized = Read-TestFile "$dir/test.txt"
             $sanitized | Should -Match "short: 111\.1\.1\.1"
@@ -459,26 +483,25 @@ Describe "file-handling" {
     It "detects null bytes as binary and skips" {
         Invoke-SanitizerTest -Name "file-nullbyte" -Config (New-TestConfig) -Test {
             param($dir)
-            $bytes = [System.Text.Encoding]::UTF8.GetBytes("text") + [byte]0x00 + [System.Text.Encoding]::UTF8.GetBytes("111.38.230.69")
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes("text") + [byte]0x00 + [System.Text.Encoding]::UTF8.GetBytes($IP_192)
             [System.IO.File]::WriteAllBytes("$dir/mixed.bin", $bytes)
-            Write-TestFile "$dir/clean.txt" "111.166.187.122"
+            Write-TestFile "$dir/clean.txt" $IP_192_2
             Invoke-Session
             [System.IO.File]::ReadAllBytes("$dir/mixed.bin") | Should -Be $bytes
-            Read-TestFile "$dir/clean.txt" | Should -Match "111\.\d+\.\d+\.\d+"
+            Read-TestFile "$dir/clean.txt" | Should -Match $RX_SAN
         }
     }
 
     It "skips files larger than 10MB" {
         Invoke-SanitizerTest -Name "file-large" -Config (New-TestConfig) -Test {
             param($dir)
-            # Large file with private IP - should be skipped (untouched)
-            [System.IO.File]::WriteAllText("$dir/large.txt", ("192.168.1.1`n" * 900000))
-            Write-TestFile "$dir/small.txt" "192.168.2.2"
+            [System.IO.File]::WriteAllText("$dir/large.txt", ("$IP_192`n" * 900000))
+            Write-TestFile "$dir/small.txt" $IP_192_2
             Invoke-Session
             # Large file should still have original IP (not sanitized)
-            [System.IO.File]::ReadLines("$dir/large.txt") | Select-Object -First 1 | Should -Match "192\.168\.1\.1"
+            [System.IO.File]::ReadLines("$dir/large.txt") | Select-Object -First 1 | Should -Match $IP_192
             # Small file should be sanitized
-            Read-TestFile "$dir/small.txt" | Should -Match "111\.\d+\.\d+\.\d+"
+            Read-TestFile "$dir/small.txt" | Should -Match $RX_SAN
         }
     }
 
@@ -487,14 +510,14 @@ Describe "file-handling" {
             param($dir)
             [System.IO.Directory]::CreateDirectory("$dir/node_modules/pkg") | Out-Null
             [System.IO.Directory]::CreateDirectory("$dir/src/lib/vendor/pkg") | Out-Null
-            $originalContent = "ip = 111.38.230.69"
+            $originalContent = "ip = $IP_192"
             Write-TestFile "$dir/node_modules/pkg/index.js" $originalContent
             Write-TestFile "$dir/src/lib/vendor/pkg/file.go" $originalContent
-            Write-TestFile "$dir/app.js" "ip = 111.166.187.122"
+            Write-TestFile "$dir/app.js" "ip = $IP_192_2"
             Invoke-Session
             Read-TestFile "$dir/node_modules/pkg/index.js" | Should -Be $originalContent
             Read-TestFile "$dir/src/lib/vendor/pkg/file.go" | Should -Be $originalContent
-            Read-TestFile "$dir/app.js" | Should -Match "111\.\d+\.\d+\.\d+"
+            Read-TestFile "$dir/app.js" | Should -Match $RX_SAN
         }
     }
 }
@@ -508,7 +531,7 @@ Describe "config-handling" {
         Invoke-SanitizerTest -Name "config-default" -Config $null -Test {
             param($dir)
             Remove-Item "$dir/.claude/sanitizer/sanitizer.json" -ErrorAction SilentlyContinue
-            Write-TestFile "$dir/test.txt" "111.38.230.69"
+            Write-TestFile "$dir/test.txt" $IP_192
             Invoke-Session
             "$dir/.claude/sanitizer/sanitizer.json" | Should -Exist
         }
