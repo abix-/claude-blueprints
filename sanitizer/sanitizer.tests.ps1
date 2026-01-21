@@ -210,6 +210,27 @@ Describe "hook-file-access" {
         Invoke-HookFileAccess "C:/code/project/main.go" "Edit" | Should -BeNullOrEmpty
         Invoke-HookFileAccess "C:/code/project/main.go" "Write" | Should -BeNullOrEmpty
     }
+
+    It "sanitizes content on Write tool before writing" {
+        Invoke-SanitizerTest -Name "write-sanitize" -Config (New-TestConfig) -Test {
+            param($dir)
+            # Simulate Write tool with sensitive IP in content
+            $hookInput = @{
+                hook_event_name = "PreToolUse"
+                tool_name       = "Write"
+                tool_input      = @{
+                    file_path = "$dir/newfile.txt"
+                    content   = "server = $IP_192"
+                }
+            } | ConvertTo-Json -Compress
+
+            $result = $hookInput | & $script:sanitizer hook-file-access | ConvertFrom-Json
+
+            # Should return sanitized content
+            $result.hookSpecificOutput.updatedInput.content | Should -Match $RX_SAN
+            $result.hookSpecificOutput.updatedInput.content | Should -Not -Match "192\.168"
+        }
+    }
 }
 
 # ============================================================================
