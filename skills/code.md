@@ -2,7 +2,7 @@
 name: code
 description: Development standards for Ansible, PowerShell, and Golang
 metadata:
-  version: "1.9"
+  version: "2.0"
   updated: "2026-01-21"
 ---
 # Coding Standards
@@ -25,13 +25,26 @@ metadata:
 - Roles contain all logic; playbooks only call roles
 - All variables in `vars/main.yml` (not `defaults/`)
 - Always FQCN (`ansible.builtin.copy`, not `copy`)
+- Always start YAML files with `---`
+- Use `validate_certs: false` not `validate_certs: no`
 - Prefer modules over shell/command when a module exists
 - When shell is required: `ansible.builtin.shell` (Linux) or `ansible.windows.win_shell` (Windows)
+- Inline PowerShell formatting for troubleshooting:
+  - Pipelines → single line (easy to copy/paste)
+  - foreach/for loops → multiline
+  - PSCustomObject → multiline OK
+  - Avoid dense semicolon chains
 
 ## PowerShell
 - Functions only (not scripts); standard Verb-Noun naming
 - Always `[CmdletBinding()]`; output `[PSCustomObject]`
+- Output before action — "Adding disk X" before the call that might fail, not after
 - Use `$()` for expansion (not `${}`), especially with properties or after colons
+
+## PowerShell + VMware
+- `ReconfigVM_Task` returns `ManagedObjectReference`, not Task object
+- Wait for async tasks: `Get-Task -Id "$taskMoRef" | Wait-Task` (vSphere 7+)
+- Scope all queries with `-Server $vc` when multiple vCenters connected
 - Use `-not` instead of `!` when running PowerShell via bash (bash escapes `!` to `\!`)
 - Collection pattern: `$results = foreach ($item in $collection) { ... }` (avoid `+=`)
 - Prefer splatting for cmdlets with 3+ parameters
