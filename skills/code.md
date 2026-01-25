@@ -2,8 +2,8 @@
 name: code
 description: Development standards for Ansible, PowerShell, and Golang
 metadata:
-  version: "2.0"
-  updated: "2026-01-21"
+  version: "2.1"
+  updated: "2026-01-23"
 ---
 # Coding Standards
 
@@ -40,6 +40,9 @@ metadata:
 - Always `[CmdletBinding()]`; output `[PSCustomObject]`
 - Output before action — "Adding disk X" before the call that might fail, not after
 - Use `$()` for expansion (not `${}`), especially with properties or after colons
+- `$var:` is a drive qualifier — `"$source: text"` parses as variable `$source:`, use `"$($source): text"`
+- No empty lines between function parameters
+- Never use automatic variables as iterators (`$event`, `$input`, `$args`, `$this`, `$_` outside pipeline)
 
 ## PowerShell + VMware
 - `ReconfigVM_Task` returns `ManagedObjectReference`, not Task object
