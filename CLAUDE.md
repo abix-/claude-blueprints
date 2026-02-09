@@ -15,3 +15,10 @@ Read and follow `~/.claude/skills/try-harder.md` for every response.
 - For ESXi performance issues, read `~/.claude/skills/vmware-esxi-performance.md` first.
 
 Git commits: no Co-Authored-By, concise, lowercase, always push immediately.
+
+## Token discipline
+- NEVER launch agents to research what you already know. If prior agents returned results, USE them.
+- NEVER launch multiple agents for the same question. One agent, one purpose.
+- In plan mode, write the plan file IMMEDIATELY. Don't launch more agents — the plan is the deliverable.
+- Prefer Glob/Grep/Read directly over Explore agents for targeted searches.
+- Every agent costs real money. Ask: "Do I already have this information?" If yes, don't launch.
