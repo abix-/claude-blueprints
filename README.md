@@ -51,12 +51,18 @@ See [sanitizer/README.md](sanitizer/README.md) for setup.
 
 | Skill | Description |
 |-------|-------------|
+| [ansible](skills/ansible.md) | Ansible playbook and role standards |
+| [bevy](skills/bevy.md) | Bevy 0.18 ECS patterns for the Endless project |
 | [claude-config](skills/claude-config.md) | Skills, hooks, settings, and sync workflow |
-| [code](skills/code.md) | Development standards (Ansible, PowerShell, Golang) |
+| [code](skills/code.md) | Universal development standards |
 | [godot](skills/godot.md) | Godot 4.x game development, GDScript, NPC optimization |
+| [golang](skills/golang.md) | Go development standards |
 | [infrastructure-troubleshooting](skills/infrastructure-troubleshooting.md) | Diagnosing infrastructure problems |
+| [powershell](skills/powershell.md) | PowerShell, VMware, and Pester standards |
+| [rust](skills/rust.md) | Rust development standards |
 | [try-harder](skills/try-harder.md) | Response calibration for accuracy and efficiency |
 | [vmware-esxi-performance](skills/vmware-esxi-performance.md) | ESXi storage/network performance troubleshooting |
+| [wgsl](skills/wgsl.md) | WGSL shader standards |
 
 ### Hooks
 
@@ -68,9 +74,13 @@ See [sanitizer/README.md](sanitizer/README.md) for setup.
 
 | Command | Description |
 |---------|-------------|
-| [/load](commands/load.md) | Pull repo and apply to ~/.claude |
+| [/debug](commands/debug.md) | Check Rust compiler errors and runtime logs |
+| [/done](commands/done.md) | Update docs, changelog, commit, and push |
+| [/endless](commands/endless.md) | Build and run Endless |
 | [/learn](commands/learn.md) | Review conversation and update skills with learnings |
+| [/load](commands/load.md) | Pull repo and apply to ~/.claude |
 | [/rtfm](commands/rtfm.md) | Search for existing solutions before building |
+| [/test](commands/test.md) | Clean build and run Endless |
 
 ### claude-depester
 
