@@ -2,7 +2,10 @@
 
 Read and follow `~/.claude/skills/try-harder.md` for every response.
 
-When writing code (PowerShell, Ansible, Golang), read `~/.claude/skills/code.md` first.
+When writing code, read `~/.claude/skills/code.md` first.
+When writing PowerShell, read `~/.claude/skills/powershell.md` first.
+When writing Golang, read `~/.claude/skills/golang.md` first.
+When writing Ansible, read `~/.claude/skills/ansible.md` first.
 When writing Rust, read `~/.claude/skills/rust.md` first.
 When writing GDScript or Godot, read `~/.claude/skills/godot.md` first.
 When modifying Claude config (skills, hooks, settings, CLAUDE.md), read `~/.claude/skills/claude-config.md` first.
