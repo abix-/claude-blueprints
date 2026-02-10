@@ -6,26 +6,12 @@
       "~/.claude/unsanitized/**"
     ]
   },
+  "spinnerVerbs": {
+    "mode": "replace",
+    "verbs": [""]
+  },
   "hooks": {
     "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "npx claude-depester --all --silent",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-session-start"
-          }
-        ]
-      },
       {
         "matcher": "",
         "hooks": [
@@ -36,36 +22,7 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-bash"
-          }
-        ]
-      },
-      {
-        "matcher": "Read|Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-file-access"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "%USERPROFILE%/.claude/sanitizer/sanitizer.exe hook-session-stop"
-          }
-        ]
-      }
-    ]
+    "PreToolUse": [],
+    "PostToolUse": []
   }
 }
