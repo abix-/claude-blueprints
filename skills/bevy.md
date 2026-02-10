@@ -2,7 +2,7 @@
 name: bevy
 description: Bevy 0.18 ECS patterns for the Endless colony sim. Use when writing Rust/WGSL for this project.
 metadata:
-  version: "1.7"
+  version: "1.8"
   updated: "2026-02-10"
 ---
 # Bevy 0.18 — Endless Project
@@ -98,14 +98,13 @@ Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
 - **Scope compute pass in a block** so it drops before encoder is used for copy commands
 - Per-index dirty tracking on `NpcBufferWrites` — only changed slots get uploaded, not entire buffers
 
-## Instanced Rendering (npc_render.rs)
-- `NpcRenderPlugin` uses `RenderCommand` pattern hooked into `Transparent2d` phase
+## Rendering Architecture
+- **Static terrain/buildings**: `TilemapChunk` (Bevy built-in) — terrain (62K tiles) + buildings as two chunk layers with separate tilesets. Built once from `WorldGrid`, not per-frame. Replaces 62K instanced draw calls with Bevy's optimized tilemap path.
+- **Dynamic NPCs/projectiles**: Custom `RenderCommand` pattern hooked into `Transparent2d` phase. 6 instanced layers (body + 5 overlay: weapon, helmet, armor, item, status/healing).
 - **Render graph nodes are for compute/post-processing, NOT 2D geometry** — use `RenderCommand` + phase items instead
-- Single instanced draw call: 4-vertex quad × instance_count
-- `NpcInstanceData`: position[2] + sprite[2] + color[4] = 32 bytes/NPC
+- `NpcInstanceData`: position[2] + sprite[2] + color[4] + health + flash + scale + atlas_id = per-instance
 - `prepare_npc_buffers` builds instance buffer from `Res<GpuReadState>` (positions) + `NpcBufferWrites` (sprites, colors)
-- `queue_npcs` adds `Transparent2d` phase item at sort_key 0.0
-- Shader: `npc_render.wgsl` — hardcoded camera (known issue), atlas sampling with alpha discard
+- Shader: `npc_render.wgsl` — camera extracted from Bevy `Camera2d` transform, atlas sampling with alpha discard
 
 ## Slot Management
 `SlotAllocator` resource — LIFO free list. `alloc()` returns `Option<usize>`, `free(idx)` returns slot.
@@ -165,6 +164,7 @@ These broke during the migration and were fixed in commits. Reference when touch
 - **Active-only iteration**: Loop over `buffer[..npc_count]` not `buffer[..MAX_NPCS]`. Flash decay, visual sync — only process live slots.
 - **Enums over markers for state**: Archetype churn from insert/remove of marker components is expensive at scale. A single enum component mutated in-place has zero archetype cost.
 - **Async GPU readback**: Use Bevy's `Readback::buffer(handle)` + `ReadbackComplete` observers instead of manual staging buffers + blocking `device.poll(Wait)`. Eliminates frame stalls and staging buffer management.
+- **TilemapChunk for static geometry**: Use Bevy's `TilemapChunk` for terrain/buildings instead of custom instanced rendering. 62K terrain tiles as one chunk vs 62K individual instances — single draw call, Bevy handles batching. Only use custom instanced rendering for dynamic entities (NPCs, projectiles).
 
 ## Common Gotchas
 - **Bevy 0.18 Messages**: `add_message` not `add_event`. `MessageWriter`/`MessageReader` not `EventWriter`/`EventReader`.
