@@ -2,8 +2,8 @@
 name: bevy
 description: Bevy 0.18 ECS patterns for the Endless colony sim. Use when writing Rust/WGSL for this project.
 metadata:
-  version: "1.1"
-  updated: "2026-02-08"
+  version: "1.3"
+  updated: "2026-02-09"
 ---
 # Bevy 0.18 — Endless Project
 
@@ -13,11 +13,33 @@ metadata:
 - Source: `rust/src/`, shaders: `shaders/`, assets: `assets/`
 - Docs: `docs/README.md` (architecture), `docs/roadmap.md` (feature tracking)
 
+## Key Files
+- `rust/src/lib.rs` — `build_app()`, `Step` enum, system scheduling
+- `rust/src/systems/behavior.rs` — decision system, `SystemParam` bundle examples
+- `rust/src/tests/mod.rs` — test framework infrastructure
+- `rust/src/tests/vertical_slice.rs` — 8-phase end-to-end test
+- `rust/src/components.rs` — all ECS components
+- `rust/src/render.rs` — camera, tilemap, sprite loading
+- `rust/src/npc_render.rs` — instanced NPC rendering pipeline
+- `rust/src/gpu.rs` — compute shader dispatch, readback
+
 ## Build & Run
 ```bash
 cd /c/code/endless/rust && cargo build --release 2>&1
 cd /c/code/endless/rust && cargo run --release 2>&1
 ```
+
+## bevy_egui 0.39
+- `EguiPlugin::default()` not `EguiPlugin` (struct with fields, not unit struct)
+- `contexts.ctx_mut()` returns `Result` — use `let Ok(ctx) = contexts.ctx_mut() else { return };` (NOT `.unwrap()` — panics on first frame before fonts load)
+- First-frame panic: fonts aren't loaded until after first render pass. Fix: `Local<bool>` guard to skip frame 1
+- UI systems MUST use `EguiPrimaryContextPass` schedule, NOT `Update`. Systems in `Update` render visually but buttons won't respond to clicks
+- UI system pattern: `fn my_ui(mut contexts: EguiContexts) -> Result { let ctx = contexts.ctx_mut()?; ... Ok(()) }`
+- Don't use `.into()` on string literals when bevy_egui is in scope — ambiguous `From` impls. Pass `&str` directly or use `format!()`
+
+## Bevy 0.18 Limits & States
+- Max 16 system parameters per function. Use `#[derive(SystemParam)]` bundles to group related params (see `systems/behavior.rs`, `tests/mod.rs` CleanupCore/CleanupExtra)
+- States: `#[derive(States, Default)]` with `#[default]` on variant, `app.init_state::<S>()`, `in_state(S::Variant)` run condition, `OnEnter`/`OnExit` for transitions, `ResMut<NextState<S>>` to trigger
 
 ## System Scheduling
 Four ordered phases via `Step` enum:
@@ -89,6 +111,9 @@ New spawns reuse freed slots.
 - `derive_npc_state()` checks markers in priority order to get display name
 - Jobs: `Job::Farmer(0)`, `Job::Guard(1)`, `Job::Raider(2)`, `Job::Fighter(3)`
 - Key components: `NpcIndex(usize)`, `Health(f32)`, `MaxHealth(f32)`, `Energy(f32)`, `Faction(i32)`, `TownId(i32)`
+- **`#[require]` for invariants**: Transit components (GoingToRest, Patrolling, Raiding, Wandering, etc.) use `#[require(HasTarget)]` so the invariant is declarative, not a manual insert you can forget.
+- **Prefer `Option<T>` fields over sibling components for variants**: When two components share 90% of behavior (e.g., Resting vs Recovering), merge into one component with an `Option` field for the variant. Fewer query params, fewer priority levels, one code path.
+- **Single source of truth for camera**: Don't mirror Bevy Transform/Projection into a custom resource. Write inputs directly to Transform+Projection, extract to render world with a dedicated extract system. No sync systems needed.
 
 ## Bevy 0.18 Render API Changes
 These broke during the migration and were fixed in commits. Reference when touching render code:
@@ -110,6 +135,20 @@ These broke during the migration and were fixed in commits. Reference when touch
 
 ### Query Types
 - `ROQueryItem` takes two lifetime params: `ROQueryItem<'w, 'w, ...>` (not one)
+
+## Test Framework (Endless)
+- `AppState::TestMenu` (default) / `AppState::Running` — state machine drives test lifecycle
+- `TestState` resource: shared by all tests, tracks phase, counters, flags, pass/fail
+- `TestRegistry` holds `Vec<TestEntry>` (name, description, phase_count, time_scale)
+- `test_is("name")` run condition gates per-test systems
+- Each test: `setup` (OnEnter Running) + `tick` (Update after Behavior), both gated by `test_is()`
+- Cleanup on `OnExit(Running)`: despawn `NpcIndex` entities, reset all resources
+- Run All: `RunAllState` with queue, `auto_start_next_test` fires on `OnEnter(TestMenu)`
+
+### Test Gotchas
+- **Cleanup must cover ALL spawned entity types**: `cleanup_test_world` despawns `NpcIndex` entities, but if a test spawns other entities (FarmReadyMarker, projectiles, etc.), add a query for them too. Leaked entities break subsequent tests in Run All.
+- **Neutralize orthogonal systems**: When testing behavior X, force-satisfy unrelated needs so the test isn't derailed. E.g., guard patrol test sets `LastAteHour = game_time.total_hours()` each tick to prevent starvation.
+- **Don't double-consume queues**: If a state transition already pops from a queue (e.g., `auto_start_next_test` pops `RunAllState.queue`), the completion handler should only check `is_empty()`, not also pop. Two consumers = skipped entries.
 
 ## Common Gotchas
 - **Bevy 0.18 Messages**: `add_message` not `add_event`. `MessageWriter`/`MessageReader` not `EventWriter`/`EventReader`.
