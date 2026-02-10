@@ -2,7 +2,7 @@
 name: bevy
 description: Bevy 0.18 ECS patterns for the Endless colony sim. Use when writing Rust/WGSL for this project.
 metadata:
-  version: "1.6"
+  version: "1.7"
   updated: "2026-02-10"
 ---
 # Bevy 0.18 — Endless Project
@@ -28,6 +28,8 @@ metadata:
 ```bash
 cd /c/code/endless/rust && cargo build --release 2>&1
 cd /c/code/endless/rust && cargo run --release 2>&1
+# Tracy profiler support (connect with Tracy GUI while running):
+cd /c/code/endless/rust && cargo run --release --features tracy 2>&1
 ```
 
 ## bevy_egui 0.39
