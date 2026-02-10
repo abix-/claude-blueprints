@@ -2,7 +2,7 @@
 name: bevy
 description: Bevy 0.18 ECS patterns for the Endless colony sim. Use when writing Rust/WGSL for this project.
 metadata:
-  version: "1.5"
+  version: "1.6"
   updated: "2026-02-10"
 ---
 # Bevy 0.18 — Endless Project
@@ -73,7 +73,8 @@ Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
 → `write_npc_buffers` uploads only dirty slots via per-index `write_buffer` at byte offsets
 
 ## Data Authority
-- **GPU owns**: positions, spatial grid, combat targets, arrivals
+- **GPU owns**: positions, spatial grid, combat targets
+- **Shared**: arrivals (GPU sets =1 on arrive, CPU clears =0 on new target)
 - **CPU owns**: health, targets/goals, factions, speeds, behavior state
 - **Render only**: sprite indices, colors (not in compute shader)
 - 1-frame staleness budget (1.6px drift max). Never read GPU readback and write back same field in same frame.
