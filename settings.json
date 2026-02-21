@@ -1,14 +1,9 @@
 {
-  "autoUpdatesChannel": "latest",
   "permissions": {
     "deny": [
       "~/.claude/sanitizer/sanitizer.json",
       "~/.claude/unsanitized/**"
     ]
-  },
-  "spinnerVerbs": {
-    "mode": "replace",
-    "verbs": [""]
   },
   "hooks": {
     "SessionStart": [
@@ -17,12 +12,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"%USERPROFILE%/.claude/hooks/Hook-SessionStart-Skills.ps1\""
+            "command": "powershell.exe -ExecutionPolicy Bypass -NoProfile -File \"$USERPROFILE/.claude/hooks/Hook-SessionStart-Skills.ps1\""
           }
         ]
       }
     ],
     "PreToolUse": [],
     "PostToolUse": []
-  }
+  },
+  "spinnerVerbs": {
+    "mode": "replace",
+    "verbs": [
+      ""
+    ]
+  },
+  "autoUpdatesChannel": "latest",
+  "effortLevel": "medium"
 }
