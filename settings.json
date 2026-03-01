@@ -20,6 +20,9 @@
     "PreToolUse": [],
     "PostToolUse": []
   },
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true
+  },
   "spinnerVerbs": {
     "mode": "replace",
     "verbs": [
@@ -27,5 +30,6 @@
     ]
   },
   "autoUpdatesChannel": "latest",
+  "ENABLE_LSP_TOOL": "1",
   "effortLevel": "medium"
 }

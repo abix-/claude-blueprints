@@ -3,7 +3,9 @@ description: Build and run Endless (pure Bevy)
 allowed-tools: Bash
 ---
 
-Stop any running instance, build, and run in one command:
+Stop any running instance, build, and run in one command.
+
+IMPORTANT: NEVER use `run_in_background`. Always run in the foreground.
 
 ```bash
 taskkill //F //IM endless.exe 2>/dev/null; cd /c/code/endless/rust && cargo build --release 2>&1 && cargo run --release 2>&1

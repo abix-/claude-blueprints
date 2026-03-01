@@ -2,7 +2,7 @@
 name: bevy
 description: Bevy 0.18 ECS patterns for the Endless colony sim. Use when writing Rust/WGSL for this project.
 metadata:
-  version: "2.0"
+  version: "2.2"
   updated: "2026-02-21"
 ---
 # Bevy 0.18 — Endless Project
@@ -48,6 +48,7 @@ cd /c/code/endless/rust && cargo run --release --features tracy 2>&1
 ## Bevy 0.18 Limits & States
 - Max 16 system parameters per function. Use `#[derive(SystemParam)]` bundles to group related params (see `systems/behavior.rs`, `tests/mod.rs` CleanupCore/CleanupExtra)
 - States: `#[derive(States, Default)]` with `#[default]` on variant, `app.init_state::<S>()`, `in_state(S::Variant)` run condition, `OnEnter`/`OnExit` for transitions, `ResMut<NextState<S>>` to trigger
+- **0.18 state change**: `NextState::set()` now triggers transitions **even to the same state** (OnEnter/OnExit fire). Use `set_if_neq()` to only transition when the state actually changes.
 
 ## System Scheduling
 Four ordered phases via `Step` enum:
@@ -76,9 +77,9 @@ Register with `.add_message::<T>()` not `.add_event::<T>()`.
 Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
 → `collect_gpu_updates` drains into `GPU_UPDATE_QUEUE` (single Mutex lock)
 → `populate_gpu_state` (PostUpdate) drains into `NpcGpuState` (per-index dirty tracking, compute fields only)
-→ `build_visual_upload` packs ECS + NpcGpuState → `NpcVisualUpload` (sprites, colors, equipment — rebuilt each frame)
+→ `build_visual_upload` updates dirty visual slots in persistent `NpcVisualUpload` (event-driven, not full rebuild)
 → Extract phase reads both via `Extract<Res<T>>` (zero clone, immutable reference)
-→ Compute data: per-dirty-index upload. Visual data: bulk upload.
+→ Compute data: per-dirty-index upload. Visual data: per-dirty-index upload (full rebuild on startup/load).
 
 ## Data Authority
 - **GPU owns**: positions, spatial grid, combat targets
@@ -147,7 +148,13 @@ These broke during the migration and were fixed in commits. Reference when touch
 
 ### Entity Extraction
 - `commands.get_or_spawn(entity).insert(Component)` no longer works
-- Use `commands.spawn((Component, MainEntity::from(entity)))` instead
+- For synced entities: insert on the render entity mapping. For render-only entities: `commands.spawn((Component, MainEntity::from(entity)))` — but these need lifecycle handling (despawn stale copies)
+
+### Per-Phase Draw Functions
+- Generic `MaterialDrawFunction` replaced with phase-specific variants (e.g. `MainPassOpaqueDrawFunction`). Custom render pipelines must use the correct phase draw function.
+
+### Entity Terminology
+- `EntityRow` → `EntityIndex`, `Entity::row()` → `Entity::index()` (0.18 rename)
 
 ### Query Types
 - `ROQueryItem` takes two lifetime params: `ROQueryItem<'w, 'w, ...>` (not one)
@@ -167,29 +174,18 @@ These broke during the migration and were fixed in commits. Reference when touch
 - **Don't double-consume queues**: If a state transition already pops from a queue (e.g., `auto_start_next_test` pops `RunAllState.queue`), the completion handler should only check `is_empty()`, not also pop. Two consumers = skipped entries.
 
 ## Performance Patterns (50K NPCs)
-- **Per-index GPU uploads**: `write_buffer` at byte offsets for only changed slots, not full buffer re-uploads. `position_dirty_indices: Vec<usize>` tracks which NPC indices changed this frame. Critical at 50K scale — uploading 2 changed positions vs 128KB.
-- **Zero-clone extract**: Use `Extract<Res<T>>` for immutable access in render world instead of `ExtractResource` clone. `NpcGpuState` and `NpcVisualUpload` are never cloned.
 - **Single-pass buffer writes**: Write all fields (with defaults) per-entity in one loop iteration. Don't clear-all-then-set (two O(n) passes). Dead NPCs are sentinel-culled by the renderer (x < -9000) so stale data is harmless.
 - **Active-only iteration**: Loop over `buffer[..npc_count]` not `buffer[..MAX_NPCS]`. Flash decay, visual sync — only process live slots.
 - **DirtyFlags resource**: Central `DirtyFlags` resource gates expensive systems (building grid rebuild, patrol routes, squad cleanup, waypoint sync). Set flag when data changes, check flag + clear in the system. Avoids Bevy's `is_changed()` false positives from `ResMut` borrows.
 - **Batch-then-distribute**: Build shared data once per group (e.g. patrol routes per town), then clone to individuals. Not per-entity rebuild. See `rebuild_patrol_routes_system`.
-- **Enums over markers for state**: Archetype churn from insert/remove of marker components is expensive at scale. A single enum component mutated in-place has zero archetype cost.
-- **Async GPU readback**: Use Bevy's `Readback::buffer(handle)` + `ReadbackComplete` observers instead of manual staging buffers + blocking `device.poll(Wait)`. Eliminates frame stalls and staging buffer management.
-- **TilemapChunk for terrain**: Use Bevy's `TilemapChunk` for static terrain. Buildings use GPU instanced pipeline for dynamic collision participation.
-- **Decision throttling**: Three-tier NPC think — Tier 1 (arrival) every frame, Tier 2 (combat flee/leash) every 8 frames, Tier 3 (idle scoring) bucketed by configurable interval. Sub-profiling with zero-cost accumulators when profiler disabled.
+- **Decision throttling**: Three-tier NPC think — Tier 1 (arrival) every frame, Tier 2 (combat flee/leash) every 8 frames, Tier 3 (idle scoring) bucketed by configurable interval.
 - **BuildingSpatialGrid**: O(1) building lookups replacing O(n) linear scans. `find_nearest_location`, `find_nearest_free`, `find_within_radius` all query spatial grid instead of iterating WorldData vecs.
 - **Projectile active_set**: `Vec<usize>` tracks live projectile indices. Render iterates `active_set` instead of scanning 0..proj_count, skipping inactive slots entirely.
-- **GPU threat assessment**: Piggybacks on combat targeting grid scan — counts enemies and allies within `threat_radius` per NPC. Output packed as `(enemies << 16 | allies)` in `threat_counts` buffer. Zero extra grid scans.
 
 ## Common Gotchas
-- **Bevy 0.18 Messages**: `add_message` not `add_event`. `MessageWriter`/`MessageReader` not `EventWriter`/`EventReader`.
 - **Instance count**: Use `NpcGpuData.npc_count`, NOT `positions.len() / 2`. Buffers are pre-allocated to MAX_NPCS.
 - **Sprite size in shader**: `SPRITE_SIZE` must match atlas cell size (16px), not an arbitrary render size.
-- **Per-index dirty tracking**: Push idx to the matching `*_dirty_indices` Vec when writing to `NpcGpuState`. Without it, changed data never reaches the GPU.
-- **Compute pass scoping**: Scope `compute_pass` in a `{}` block so it drops before using `encoder` for copy commands. Borrow checker requires this.
-- **Bash paths on Windows**: Use `/c/code/endless` not `C:\code\endless`
-- **PowerShell error suppression**: `-ErrorAction SilentlyContinue` not `2>$null`
-- **ExtractResource**: Legacy pattern — clones to render world each frame. Prefer `Extract<Res<T>>` for zero-clone immutable access. Render world cannot write back.
+- **ExtractResource**: First-class extraction path — clones to render world only when changed (built-in change detection). Use for straightforward resource extraction. Use custom extract systems (`Extract<Res<T>>`) when you need custom logic or zero-clone ownership patterns. Render world cannot write back.
 - **ApplyDeferred**: Runs between Spawn and Combat to flush entity commands before combat queries.
 - **Static queues**: Only for CPU→GPU update boundaries (GPU_UPDATE_QUEUE, PROJ_GPU_UPDATE_QUEUE). GPU→CPU uses Bevy's async `Readback` + `ReadbackComplete`. Prefer MessageWriter everywhere else.
 - **CPU-side combat validation**: GPU combat targets must be validated CPU-side (entity map + faction + health guards) before applying damage. GPU can return stale/invalid indices.
@@ -209,6 +205,5 @@ These broke during the migration and were fixed in commits. Reference when touch
 - Separation + dodge in single grid scan (avoidance + lateral steering for approaching NPCs)
 - Same-faction NPCs get 1.5x separation push (prevents convoy clumping)
 - Golden angle spread for exactly-overlapping NPCs: `angle = f32(i) * 2.399 + f32(j) * 0.7`
-- Threat assessment piggybacks on combat targeting scan — zero extra grid iterations
 - `dodge_unlocked` param gates projectile dodge behavior (upgrade-driven)
 - Building NPC slots participate in combat grid but have `is_tower` flag for tower auto-attack behavior
