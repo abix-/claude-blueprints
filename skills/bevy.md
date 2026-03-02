@@ -2,8 +2,8 @@
 name: bevy
 description: Bevy 0.18 ECS patterns for the Endless colony sim. Use when writing Rust/WGSL for this project.
 metadata:
-  version: "2.2"
-  updated: "2026-02-21"
+  version: "2.3"
+  updated: "2026-03-01"
 ---
 # Bevy 0.18 — Endless Project
 
@@ -26,7 +26,7 @@ metadata:
 - `rust/src/render.rs` — camera, tilemap, sprite loading, click selection, box select
 - `rust/src/npc_render.rs` — instanced NPC + building rendering pipeline
 - `rust/src/gpu.rs` — compute shader dispatch, readback, `NpcGpuState`, `NpcVisualUpload`
-- `rust/src/world.rs` — `PlacedBuilding`, `WorldData`, `BuildingSpatialGrid`, building placement
+- `rust/src/world.rs` — `WorldData`, `WorldGrid`, building placement, `place_building()` unified
 - `rust/src/save.rs` — save/load with version checking
 
 ## Build & Run
@@ -72,6 +72,7 @@ fn consume(mut reader: MessageReader<DamageMsg>) {
 }
 ```
 Register with `.add_message::<T>()` not `.add_event::<T>()`.
+**Reader/Writer conflict**: A system cannot have both `MessageReader<T>` and `MessageWriter<T>` for the same `T`. Fix: separate drain system that reads into a `Resource` flag, scheduled `.before()` the system that writes.
 
 ## GPU Update Flow (Zero-Clone Architecture)
 Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
@@ -79,12 +80,14 @@ Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
 → `populate_gpu_state` (PostUpdate) drains into `NpcGpuState` (per-index dirty tracking, compute fields only)
 → `build_visual_upload` updates dirty visual slots in persistent `NpcVisualUpload` (event-driven, not full rebuild)
 → Extract phase reads both via `Extract<Res<T>>` (zero clone, immutable reference)
-→ Compute data: per-dirty-index upload. Visual data: per-dirty-index upload (full rebuild on startup/load).
+→ Compute data: per-dirty-index upload with coalescing. Visual data: per-dirty-index upload (full rebuild on startup/load).
+→ **Coalesced uploads**: Adjacent dirty indices merged into single `write_buffer` calls. Two strategies: strict coalescing (exact adjacency only) for GPU-authoritative buffers (positions, arrivals) — no gap merging; gap-based coalescing (merge nearby indices with gap threshold) for CPU-authoritative buffers (targets, speeds, factions, healths). Reduces wgpu call count dramatically.
 
 ## Data Authority
 - **GPU owns**: positions, spatial grid, combat targets
 - **Shared**: arrivals (GPU sets =1 on arrive, CPU clears =0 on new target)
 - **CPU owns**: health, targets/goals, factions, speeds, behavior state
+- **MovementIntents**: Priority arbitration for GPU `SetTarget`. Multiple systems submit intents with `MovementPriority`; `resolve_movement_system` picks highest priority per entity and emits the single `SetTarget`. Prevents competing systems from overwriting each other's movement goals.
 - **Render only**: sprite indices, colors (not in compute shader)
 - 1-frame staleness budget (1.6px drift max). Never read GPU readback and write back same field in same frame.
 
@@ -115,9 +118,14 @@ Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
 - Shader: `npc_render.wgsl` — camera extracted from Bevy `Camera2d` transform, atlas sampling with alpha discard
 
 ## Slot Management
-`SlotAllocator` resource — LIFO free list. `alloc()` returns `Option<usize>`, `free(idx)` returns slot.
-Dead NPCs: `death_cleanup_system` despawns entity, calls `HideNpc` (position = -9999), returns slot.
-New spawns reuse freed slots.
+`GpuSlotPool` — LIFO free list with GPU lifecycle. `alloc_reset()` allocates + queues GPU state wipe, `free()` pushes to free list + queues GPU hide. Max=MAX_ENTITIES=200K (unified NPC+building namespace).
+
+### EntityUid (Stable Identity)
+`EntityUid(u64)` — monotonically increasing, never reused. Solves ABA slot-reuse bugs where a freed slot gets reallocated to a different entity, but old references still point to the slot.
+- All cross-entity references use `EntityUid` (not raw slot): `DamageMsg.target`, `NpcWorkState.occupied_building`, `BuildingInstance.npc_uid`, `Squad.members`
+- `EntityMap` provides: `uid_for_slot(slot)`, `slot_for_uid(uid)`, `entity_for_uid(uid)`
+- Spawners pre-allocate UIDs so `BuildingInstance.npc_uid` is set in the same frame as spawn
+- `NextEntityUid` resource allocates fresh UIDs; save/load preserves+restores the counter
 
 ## Component Patterns
 - **Two-enum state machine**: `Activity` (what they're doing) × `CombatState` (combat overlay). Replaced 13 marker components.
@@ -126,8 +134,9 @@ New spawns reuse freed slots.
   - `activity.is_transit()` → true for movement activities (Patrolling, GoingToWork, GoingToRest, GoingToHeal, Wandering, Raiding, Returning)
   - CombatState is orthogonal — Activity is preserved through combat, NPC resumes when combat ends
 - Jobs: `Job::Farmer(0)`, `Job::Archer(1)`, `Job::Raider(2)`, `Job::Fighter(3)`, `Job::Miner(4)`, `Job::Crossbow(5)`
-- Key components: `NpcIndex(usize)`, `Health(f32)`, `CachedStats` (max_health, damage, range, cooldown, speed, etc.), `Energy(f32)`, `Faction(i32)`, `TownId(i32)`, `BaseAttackType` (Melee/Ranged), `ManualTarget(usize)` (player-forced attack target)
+- Key components: `GpuSlot(usize)`, `Health(f32)`, `CachedStats` (max_health, damage, range, cooldown, speed, etc.), `Energy(f32)`, `Faction(i32)`, `TownId(i32)`, `BaseAttackType` (Melee/Ranged), `ManualTarget` enum (Npc/Building/Position variants — player-forced targets)
 - `Activity::Returning { loot: Vec<(ItemKind, i32)> }` — generic loot vec replaces `has_food`/`gold` fields. `activity.add_loot()` merges matching ItemKind.
+- **NpcWorkState** (always-present component): `occupied_building` + `work_target_building` as `Option<EntityUid>`. UID-based for ABA safety. Replaces old `AssignedFarm`/`WorkPosition` Vec2-based components.
 - **Prefer enums over marker components** for mutually exclusive states. Enum variants avoid archetype churn (every insert/remove of a marker triggers an archetype move in Bevy's table storage). One component change vs N component adds/removes per transition.
 - **`#[require]` for invariants**: When component B must always accompany component A, use `#[require(B)]` on A so the invariant is declarative, not a manual insert you can forget.
 - **Single source of truth for camera**: Don't mirror Bevy Transform/Projection into a custom resource. Write inputs directly to Transform+Projection, extract to render world with a dedicated extract system. No sync systems needed.
@@ -176,11 +185,19 @@ These broke during the migration and were fixed in commits. Reference when touch
 ## Performance Patterns (50K NPCs)
 - **Single-pass buffer writes**: Write all fields (with defaults) per-entity in one loop iteration. Don't clear-all-then-set (two O(n) passes). Dead NPCs are sentinel-culled by the renderer (x < -9000) so stale data is harmless.
 - **Active-only iteration**: Loop over `buffer[..npc_count]` not `buffer[..MAX_NPCS]`. Flash decay, visual sync — only process live slots.
-- **DirtyFlags resource**: Central `DirtyFlags` resource gates expensive systems (building grid rebuild, patrol routes, squad cleanup, waypoint sync). Set flag when data changes, check flag + clear in the system. Avoids Bevy's `is_changed()` false positives from `ResMut` borrows.
+- **Message-driven dirty signals**: Use `MessageWriter<BuildingGridDirtyMsg>` / `MessageReader<BuildingGridDirtyMsg>` to gate expensive systems (building grid rebuild, patrol routes, squad cleanup, terrain sync). Replaced central `DirtyFlags` resource. `DirtyWriters` SystemParam bundles all dirty signal writers. Avoids Bevy's `is_changed()` false positives from `ResMut` borrows.
 - **Batch-then-distribute**: Build shared data once per group (e.g. patrol routes per town), then clone to individuals. Not per-entity rebuild. See `rebuild_patrol_routes_system`.
 - **Decision throttling**: Three-tier NPC think — Tier 1 (arrival) every frame, Tier 2 (combat flee/leash) every 8 frames, Tier 3 (idle scoring) bucketed by configurable interval.
-- **BuildingSpatialGrid**: O(1) building lookups replacing O(n) linear scans. `find_nearest_location`, `find_nearest_free`, `find_within_radius` all query spatial grid instead of iterating WorldData vecs.
+- **EntityMap spatial grid**: O(1) building lookups. Kind-filtered spatial queries via `for_each_nearby_kind_town()` / `find_nearest_worksite()` backed by per-cell `(kind, town, cell)` buckets with `SpatialBucketRef` back-index for O(1) swap-remove. Cell-ring expansion for bounded spatial search.
+- **Query-first iteration**: Hot-path systems iterate ECS queries with `Without<Building>, Without<Dead>` filters instead of `entity_map.iter_npcs()` + `Query.get()`. EntityMap retained only for keyed/spatial/building lookups. Pattern: focused per-system query tuple with only needed columns.
+- **Event-driven visual upload**: `hidden_indices` from `GpuUpdate::Hide` clears stale visual/equip data. No full-array sentinel fill per frame. Building loop uses `iter_instances()` not full slot scan. `resize(-1.0)` initializes new capacity only.
 - **Projectile active_set**: `Vec<usize>` tracks live projectile indices. Render iterates `active_set` instead of scanning 0..proj_count, skipping inactive slots entirely.
+
+## ECS Source-of-Truth Pattern
+- **NpcEntry** (6-field index in EntityMap): slot, entity, job, faction, town_idx, dead. All gameplay state lives in ECS components, not NpcEntry.
+- **ECS components own state**: Health, CombatState, Activity, Energy, Home, Personality, CachedStats, NpcFlags, NpcWorkState, etc. EntityMap is index-only for NPCs (slot↔Entity, grid, kind/town/spatial).
+- **SystemParam bundles** for query groups: `DecisionNpcState`, `NpcDataQueries`, `DeathResources`, `SaveNpcQueries`, `DirtyWriters` — group related queries to stay under 16-param limit while enabling focused per-system access.
+- **Shared test materialization**: `materialize_test_world` hook in `tests/mod.rs` runs on first `Update` in `AppState::Running` before `Step::Behavior`, calls `world::materialize_generated_world()`. All test scenes share this path — no per-test manual building spawns.
 
 ## Common Gotchas
 - **Instance count**: Use `NpcGpuData.npc_count`, NOT `positions.len() / 2`. Buffers are pre-allocated to MAX_NPCS.
@@ -189,17 +206,23 @@ These broke during the migration and were fixed in commits. Reference when touch
 - **ApplyDeferred**: Runs between Spawn and Combat to flush entity commands before combat queries.
 - **Static queues**: Only for CPU→GPU update boundaries (GPU_UPDATE_QUEUE, PROJ_GPU_UPDATE_QUEUE). GPU→CPU uses Bevy's async `Readback` + `ReadbackComplete`. Prefer MessageWriter everywhere else.
 - **CPU-side combat validation**: GPU combat targets must be validated CPU-side (entity map + faction + health guards) before applying damage. GPU can return stale/invalid indices.
+- **Duplicate resource borrows**: If a system has both `Res<Foo>` AND a `SystemParam` bundle that also borrows `Foo`, Bevy silently skips the system (white screen, no error). Fix: remove the standalone `Res<Foo>` and access through the bundle.
 - **Extract entity leak**: Extract systems that `commands.spawn()` batch entities must despawn stale copies first. Without this, render world accumulates duplicate entities every frame.
 - **Readback init sentinels**: Initialize readback buffers with safe defaults (factions = -1, hits = [-1, 0]) so unspawned slots aren't misread as valid data (e.g. faction 0 = player).
 
 ## Registry Architecture
 - **NPC_REGISTRY** (`&[NpcDef]`): Single source of truth for all NPC types. Drives spawner logic, roster UI colors, upgrade categories, squad recruitment, start menu sliders, world gen.
-- **BUILDING_REGISTRY** (`&[BuildingDef]`): Each building type with fn pointers (`get_building`, `town_idx`, `building_pos`), `SpawnBehavior` enum, HP, `is_tower`, tileset index. Drives save/load, placement, healing, destruction, spawner resolution — no match arms needed.
-- **PlacedBuilding**: Unified struct for all building kinds. Kind-specific fields (`patrol_order`, `assigned_mine`, `manual_mine`) default to zero/None. Stored in `WorldData.buildings: BTreeMap<BuildingKind, Vec<PlacedBuilding>>`.
-- **Data-driven build menu**: `BuildKind` enum + `BuildMenuContext` with `selected_build: Option<BuildKind>` for click-to-place mode. Ghost preview sprites in `ghost_sprites: HashMap<BuildKind, Handle<Image>>`.
+- **BUILDING_REGISTRY** (`&[BuildingDef]`): Static definitions with `SpawnBehavior` enum, HP, `tower_stats`, `worksite`, `save_key`, tileset index. Drives save/load, placement, healing, destruction, spawner resolution — no match arms needed.
+- **EntityMap** is sole source of truth for building instances. `BuildingInstance` has kind, position, slot, town_idx, faction, occupants, npc_uid, under_construction, etc. No `WorldData.buildings` — `PlacedBuilding` only in save.rs for backward compat.
+- **Data-driven build menu**: `BuildingKind` enum + `BuildMenuContext` with `selected_build: Option<BuildingKind>` + `build_tab: DisplayCategory` for category tabs (Economy/Military/Tower).
 - Building names: FarmerHome, ArcherHome, MinerHome, Waypoint, CrossbowHome, FighterHome (not House, Barracks, MineShaft, GuardPost)
 - **Upgrade system**: `UpgradeStatDef` per NPC category (Military, Farmer, Miner, Town). `UpgradeStatKind` enum for stat types. Prereqs, multi-resource costs, `EffectDisplay` variants (Percentage, CooldownReduction, Unlock, FlatPixels, Discrete). Stored per-town in `TownUpgrades`.
 - **Loot system**: `NpcDef.loot_drop: LootDrop` (item, min, max). `ItemKind` enum (Food, Gold). Death drops loot, buildings can be looted.
+
+## Building Lifecycle
+- **`place_building()`** (world.rs): Unified function for all building creation (player, AI, world gen, save/load). Validates position, deducts cost, creates `BuildingInstance` in EntityMap, allocates GPU slot, sets HP, fires dirty signals, updates wall auto-tile. Takes `BuildContext` for runtime validation (water/foreign territory rejection). `hp_override` for save/load.
+- **Construction time**: Runtime-placed buildings start at 0.01 HP scaling to full over `BUILDING_CONSTRUCT_SECS` (10s at 1x). `BuildingInstance.under_construction: f32` tracks remaining seconds. `construction_tick_system` in Step::Behavior. Spawners dormant during construction, growth system skips. World-gen buildings are instant.
+- **`destroy_building()`** (world.rs): Grid-only cleanup (combat log + wall auto-tile). Callers send `DamageMsg` for entity death — single Dead writer is `death_system`.
 
 ## GPU Compute Shader Patterns
 - Separation + dodge in single grid scan (avoidance + lateral steering for approaching NPCs)
