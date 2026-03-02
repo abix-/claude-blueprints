@@ -3,7 +3,18 @@
     "deny": [
       "~/.claude/sanitizer/sanitizer.json",
       "~/.claude/unsanitized/**"
-    ]
+    ],
+    "filePermissions": {
+      "denyRules": [
+        ".env",
+        ".env.*",
+        "**/.env",
+        "**/secrets/**",
+        "**/*.key",
+        "**/*.pem",
+        "**/credentials/**"
+      ]
+    }
   },
   "hooks": {
     "SessionStart": [
