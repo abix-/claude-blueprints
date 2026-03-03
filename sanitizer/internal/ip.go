@@ -48,7 +48,7 @@ func NewSanitizedIP() string {
 // NewSanitizedHostname generates a random fake hostname.
 // Caller must save the mapping to mappingsAuto for consistency.
 func NewSanitizedHostname() string {
-	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	const chars = "abcdefghijklmnopqrshost-6gdogpuc.example.test23456789"
 	suffix := make([]byte, 8)
 	for i := range suffix {
 		suffix[i] = chars[rand.Intn(len(chars))]
