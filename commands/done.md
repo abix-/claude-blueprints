@@ -5,19 +5,21 @@ allowed-tools: Bash, Read, Edit, Grep, Write, Glob
 
 ## Steps
 
-1. **Identify changed files**: Run `git diff --name-only` and `git diff --cached --name-only` to see what changed.
+1. **Run clippy**: `cd /c/code/endless/rust && cargo clippy 2>&1`. Fix any warnings before proceeding.
 
-2. **Read docs/README.md**: Find which architecture doc(s) cover the changed systems. Use the System Map and File Map to match changed files to docs.
+2. **Identify changed files**: Run `git diff --name-only` and `git diff --cached --name-only` to see what changed.
 
-3. **Update architecture docs**: For each relevant doc in docs/:
+3. **Read docs/README.md**: Find which architecture doc(s) cover the changed systems. Use the System Map and File Map to match changed files to docs.
+
+4. **Update architecture docs**: For each relevant doc in docs/:
    - Read the current doc
    - Read the changed source code
    - Update the doc to match the new code (data flow, components, known issues, ratings)
    - If a new system was added, create a new doc and add it to the docs/README.md index
 
-4. **Update CHANGELOG.md**: Add entry describing what changed. Follow existing format.
+5. **Update CHANGELOG.md**: Add entry describing what changed. Follow existing format.
 
-5. **Commit and push**: Stage all changed files (source + docs + changelog), write a concise lowercase commit message, push immediately.
+6. **Commit and push**: Stage all changed files (source + docs + changelog), write a concise lowercase commit message, push immediately.
 
 ## Rules
 
