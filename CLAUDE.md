@@ -12,6 +12,7 @@ ALWAYS read the matching skill before starting. NEVER begin work without reading
 - Bevy: `~/.claude/skills/bevy.md`
 - WGSL shaders: `~/.claude/skills/wgsl.md`
 - GDScript/Godot: `~/.claude/skills/godot.md`
+- Python: `~/.claude/skills/python.md`
 - Claude config: `~/.claude/skills/claude-config.md`
 - infrastructure problems: `~/.claude/skills/infrastructure-troubleshooting.md`
 - ESXi performance: `~/.claude/skills/vmware-esxi-performance.md`

@@ -1,5 +1,9 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(curl*localhost:15702*)",
+      "Bash(*llm-player*python*actions.py*)"
+    ],
     "deny": [
       "~/.claude/sanitizer/sanitizer.json",
       "~/.claude/unsanitized/**"

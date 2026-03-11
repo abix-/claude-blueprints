@@ -2,8 +2,8 @@
 name: code
 description: Universal development standards. Use when writing any code.
 metadata:
-  version: "3.1"
-  updated: "2026-02-09"
+  version: "3.2"
+  updated: "2026-03-07"
 ---
 # Coding Standards
 
@@ -36,6 +36,7 @@ metadata:
 - Excessive error handling — simple is fine, overblown is not
 - Variables for single-use values
 - Comments explaining obvious operations
+- Naming destructured tuple fields by position when element types are identical (e.g. `(usize, usize)`). After refactors that swap tuple order, the compiler won't catch it. Name fields to match the source: `let (col, row) = world_to_grid(pos);` not `let (r, c) = ...`.
 
 ## Response Efficiency
 - Single targeted change: describe it, don't output full file

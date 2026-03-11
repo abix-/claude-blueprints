@@ -2,8 +2,8 @@
 name: bevy
 description: Bevy 0.18 ECS patterns for the Endless colony sim. Use when writing Rust/WGSL for this project.
 metadata:
-  version: "2.3"
-  updated: "2026-03-01"
+  version: "2.5"
+  updated: "2026-03-08"
 ---
 # Bevy 0.18 — Endless Project
 
@@ -208,7 +208,10 @@ These broke during the migration and were fixed in commits. Reference when touch
 - **CPU-side combat validation**: GPU combat targets must be validated CPU-side (entity map + faction + health guards) before applying damage. GPU can return stale/invalid indices.
 - **Duplicate resource borrows**: If a system has both `Res<Foo>` AND a `SystemParam` bundle that also borrows `Foo`, Bevy silently skips the system (white screen, no error). Fix: remove the standalone `Res<Foo>` and access through the bundle.
 - **Extract entity leak**: Extract systems that `commands.spawn()` batch entities must despawn stale copies first. Without this, render world accumulates duplicate entities every frame.
+- **Bevy 2D Y-axis**: Y increases upward. In the world grid, higher `row` = higher Y = north on screen. Higher `col` = east.
 - **Readback init sentinels**: Initialize readback buffers with safe defaults (factions = -1, hits = [-1, 0]) so unspawned slots aren't misread as valid data (e.g. faction 0 = player).
+- **Terrain cost 0 = truly impassable**: If GPU boid physics can push NPCs onto a tile, don't make it cost 0 (impassable in A*). Use high-but-nonzero costs (Rock=500, Water=800) so NPCs can slowly pathfind off. Only walls (buildings) should be truly impassable.
+- **Squad intent: always-submit + priority**: Don't conditionally filter squad target writes by activity state — edge cases cause NPCs to scatter to wrong locations. Always submit the intent with `MovementPriority::Squad`; the movement system deduplicates unchanged targets and the priority system resolves conflicts (Survival > Squad > JobRoute).
 
 ## Registry Architecture
 - **NPC_REGISTRY** (`&[NpcDef]`): Single source of truth for all NPC types. Drives spawner logic, roster UI colors, upgrade categories, squad recruitment, start menu sliders, world gen.
@@ -217,12 +220,14 @@ These broke during the migration and were fixed in commits. Reference when touch
 - **Data-driven build menu**: `BuildingKind` enum + `BuildMenuContext` with `selected_build: Option<BuildingKind>` + `build_tab: DisplayCategory` for category tabs (Economy/Military/Tower).
 - Building names: FarmerHome, ArcherHome, MinerHome, Waypoint, CrossbowHome, FighterHome (not House, Barracks, MineShaft, GuardPost)
 - **Upgrade system**: `UpgradeStatDef` per NPC category (Military, Farmer, Miner, Town). `UpgradeStatKind` enum for stat types. Prereqs, multi-resource costs, `EffectDisplay` variants (Percentage, CooldownReduction, Unlock, FlatPixels, Discrete). Stored per-town in `TownUpgrades`.
-- **Loot system**: `NpcDef.loot_drop: LootDrop` (item, min, max). `ItemKind` enum (Food, Gold). Death drops loot, buildings can be looted.
+- **Loot system**: `NpcDef.loot_drop: LootDrop` (item, min, max). `ItemKind` enum (Food, Gold + 9 equipment variants: Helm, Armor, Weapon, Shield, Gloves, Boots, Belt, Amulet, Ring). `ItemDef` registry + `item_def(kind)` lookup. Death drops loot, buildings can be looted. `equipment_drop_rate` only non-zero for Raiders (0.30) — all other NPC types have 0.0. Equipment items: `roll_loot_item()` → killer's `CarriedLoot.equipment` → delivered to `TownInventory` on return home → auto-equip system distributes hourly.
+- **Equipment on death**: `NpcEquipment::all_items()` + `CarriedLoot.equipment` transfer to killer at 50% per-item (deterministic hash roll). NPC killers → CarriedLoot, tower killers → TownInventory directly.
 
 ## Building Lifecycle
 - **`place_building()`** (world.rs): Unified function for all building creation (player, AI, world gen, save/load). Validates position, deducts cost, creates `BuildingInstance` in EntityMap, allocates GPU slot, sets HP, fires dirty signals, updates wall auto-tile. Takes `BuildContext` for runtime validation (water/foreign territory rejection). `hp_override` for save/load.
 - **Construction time**: Runtime-placed buildings start at 0.01 HP scaling to full over `BUILDING_CONSTRUCT_SECS` (10s at 1x). `BuildingInstance.under_construction: f32` tracks remaining seconds. `construction_tick_system` in Step::Behavior. Spawners dormant during construction, growth system skips. World-gen buildings are instant.
 - **`destroy_building()`** (world.rs): Grid-only cleanup (combat log + wall auto-tile). Callers send `DamageMsg` for entity death — single Dead writer is `death_system`.
+- **Silent placement failure**: BRP drain uses `let _ = place_building()`. Placement errors (out of bounds, occupied, water) are silently discarded. Must verify free slots before placing via BRP.
 
 ## GPU Compute Shader Patterns
 - Separation + dodge in single grid scan (avoidance + lateral steering for approaching NPCs)
