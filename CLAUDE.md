@@ -1,21 +1,21 @@
 # CLAUDE.md
 
-ALWAYS read and follow `~/.claude/skills/try-harder.md`. NEVER skip it
+ALWAYS read and follow `~/.claude/skills/try-harder/SKILL.md`. NEVER skip it
 
 ALWAYS read the matching skill before starting. NEVER begin work without reading it first
 
-- code: `~/.claude/skills/code.md`
-- PowerShell: `~/.claude/skills/powershell.md`
-- Golang: `~/.claude/skills/golang.md`
-- Ansible: `~/.claude/skills/ansible.md`
-- Rust: `~/.claude/skills/rust.md`
-- Bevy: `~/.claude/skills/bevy.md`
-- WGSL shaders: `~/.claude/skills/wgsl.md`
-- GDScript/Godot: `~/.claude/skills/godot.md`
-- Python: `~/.claude/skills/python.md`
-- Claude config: `~/.claude/skills/claude-config.md`
-- infrastructure problems: `~/.claude/skills/infrastructure-troubleshooting.md`
-- ESXi performance: `~/.claude/skills/vmware-esxi-performance.md`
+- code: `~/.claude/skills/code/SKILL.md`
+- PowerShell: `~/.claude/skills/powershell/SKILL.md`
+- Golang: `~/.claude/skills/golang/SKILL.md`
+- Ansible: `~/.claude/skills/ansible/SKILL.md`
+- Rust: `~/.claude/skills/rust/SKILL.md`
+- Bevy: `~/.claude/skills/bevy/SKILL.md`
+- WGSL shaders: `~/.claude/skills/wgsl/SKILL.md`
+- GDScript/Godot: `~/.claude/skills/godot/SKILL.md`
+- Python: `~/.claude/skills/python/SKILL.md`
+- Claude config: `~/.claude/skills/claude-config/SKILL.md`
+- infrastructure problems: `~/.claude/skills/infrastructure-troubleshooting/SKILL.md`
+- ESXi performance: `~/.claude/skills/vmware-esxi-performance/SKILL.md`
 
 Git commits: ALWAYS push immediately. ALWAYS use concise, lowercase messages. NEVER include Co-Authored-By
 
