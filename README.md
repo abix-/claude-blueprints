@@ -6,12 +6,12 @@ Personal Claude configuration shared across Claude web and Claude Code instances
 
 ```
 claude-blueprints/
-├── skills/           # Reusable prompts and standards
-├── hooks/            # General-purpose hooks (skill injection, etc.)
-├── commands/         # Slash commands (/load, /learn, etc.)
-├── sanitizer/        # Credential sanitization system
-├── CLAUDE.md         # Global context (copy to ~/.claude/)
-└── settings.json     # Global settings with hooks (copy to ~/.claude/)
+  skills/             # All skills (directory format: skills/<name>/SKILL.md)
+  hooks/              # General-purpose hooks (skill injection, etc.)
+  scripts/            # Supporting scripts referenced by skills
+  sanitizer/          # Credential sanitization system
+  CLAUDE.md           # Global context (copy to ~/.claude/)
+  settings.json       # Global settings with hooks (copy to ~/.claude/)
 ```
 
 ## Quick Setup
@@ -31,8 +31,8 @@ After bootstrap, edit repo directly, commit, push, then `/load` to apply locally
 Go binary that prevents infrastructure details from reaching Anthropic's servers.
 
 **What gets replaced:**
-- IPs → `111.x.x.x` sanitized range
-- Hostnames matching patterns (e.g., `*.domain.local`) → `host-xxxx.example.test`
+- IPs -> `111.x.x.x` sanitized range
+- Hostnames matching patterns (e.g., `*.domain.local`) -> `host-xxxx.example.test`
 - Manual mappings you define (server names, paths, project names)
 
 **How it works:**
@@ -49,38 +49,59 @@ See [sanitizer/README.md](sanitizer/README.md) for setup.
 
 ### Skills
 
+All skills use directory format: `skills/<name>/SKILL.md`
+
+#### Reference Skills (auto-loaded by Claude)
+
 | Skill | Description |
 |-------|-------------|
-| [ansible](skills/ansible.md) | Ansible playbook and role standards |
-| [bevy](skills/bevy.md) | Bevy 0.18 ECS patterns for the Endless project |
-| [claude-config](skills/claude-config.md) | Skills, hooks, settings, and sync workflow |
-| [code](skills/code.md) | Universal development standards |
-| [godot](skills/godot.md) | Godot 4.x game development, GDScript, NPC optimization |
-| [golang](skills/golang.md) | Go development standards |
-| [infrastructure-troubleshooting](skills/infrastructure-troubleshooting.md) | Diagnosing infrastructure problems |
-| [powershell](skills/powershell.md) | PowerShell, VMware, and Pester standards |
-| [rust](skills/rust.md) | Rust development standards |
-| [try-harder](skills/try-harder.md) | Response calibration for accuracy and efficiency |
-| [vmware-esxi-performance](skills/vmware-esxi-performance.md) | ESXi storage/network performance troubleshooting |
-| [wgsl](skills/wgsl.md) | WGSL shader standards |
+| [ansible](skills/ansible/) | Ansible playbook and role standards |
+| [bevy](skills/bevy/) | Bevy 0.18 ECS patterns for the Endless project |
+| [claude-config](skills/claude-config/) | Skills, hooks, settings, and sync workflow |
+| [code](skills/code/) | Universal development standards |
+| [godot](skills/godot/) | Godot 4.x game development, GDScript, NPC optimization |
+| [golang](skills/golang/) | Go development standards |
+| [infrastructure-troubleshooting](skills/infrastructure-troubleshooting/) | Diagnosing infrastructure problems |
+| [linguistic-breakbeats-labyrinth](skills/linguistic-breakbeats-labyrinth/) | Constraint-based rhythmic text system and MUD runtime |
+| [powershell](skills/powershell/) | PowerShell, VMware, and Pester standards |
+| [python](skills/python/) | Python environment and usage on Windows |
+| [rust](skills/rust/) | Rust development standards |
+| [try-harder](skills/try-harder/) | Response calibration for accuracy and efficiency |
+| [vmware-esxi-performance](skills/vmware-esxi-performance/) | ESXi storage/network performance troubleshooting |
+| [vsphere-influxdb](skills/vsphere-influxdb/) | vSphere VM performance investigation via InfluxDB |
+| [wgsl](skills/wgsl/) | WGSL shader standards |
+
+#### Action Skills (user-invoked via /name)
+
+| Skill | Description |
+|-------|-------------|
+| [/1note](skills/1note/) | Read and search OneNote notebooks via COM interop |
+| [/benchmark](skills/benchmark/) | Run Criterion benchmarks and record results |
+| [/debug](skills/debug/) | Check Rust compiler errors and runtime logs |
+| [/deps](skills/deps/) | Check Rust dependencies for updates |
+| [/dev](skills/dev/) | Trigger GitHub Actions dev build |
+| [/dist](skills/dist/) | Build release and package for distribution |
+| [/done](skills/done/) | Update docs, changelog, commit, and push |
+| [/endless](skills/endless/) | Build and run Endless |
+| [/entity](skills/entity/) | Inspect a Bevy entity via BRP endpoint |
+| [/fix-auth](skills/fix-auth/) | Restore .claude.json from auto-backup |
+| [/learn](skills/learn/) | Review conversation and update skills |
+| [/load](skills/load/) | Pull repo and apply to ~/.claude |
+| [/release](skills/release/) | Create GitHub release with notes from CHANGELOG |
+| [/test](skills/test/) | Build, launch with --autostart, verify via BRP |
+
+#### Hybrid Skills (user or Claude-invoked)
+
+| Skill | Description |
+|-------|-------------|
+| [/kovarex](skills/kovarex/) | Brutally honest Factorio-style project review |
+| [/rtfm](skills/rtfm/) | Search for existing solutions before building |
 
 ### Hooks
 
 | Hook | Description |
 |------|-------------|
 | [Hook-SessionStart-Skills](hooks/Hook-SessionStart-Skills.ps1) | Injects skills at session start |
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| [/debug](commands/debug.md) | Check Rust compiler errors and runtime logs |
-| [/done](commands/done.md) | Update docs, changelog, commit, and push |
-| [/endless](commands/endless.md) | Build and run Endless |
-| [/learn](commands/learn.md) | Review conversation and update skills with learnings |
-| [/load](commands/load.md) | Pull repo and apply to ~/.claude |
-| [/rtfm](commands/rtfm.md) | Search for existing solutions before building |
-| [/test](commands/test.md) | Clean build and run Endless |
 
 ### claude-depester
 
@@ -90,4 +111,4 @@ See: https://github.com/ominiverdi/claude-depester
 
 ## Claude Web
 
-Upload skill files via Settings → Capabilities → Skills.
+Upload skill files via Settings > Capabilities > Skills.
