@@ -16,6 +16,7 @@ ALWAYS read the matching skill before starting. NEVER begin work without reading
 - Claude config: `~/.claude/skills/claude-config/SKILL.md`
 - infrastructure problems: `~/.claude/skills/infrastructure-troubleshooting/SKILL.md`
 - ESXi performance: `~/.claude/skills/vmware-esxi-performance/SKILL.md`
+- Windows debloat: `~/.claude/skills/debloat/SKILL.md`
 
 Git commits: ALWAYS push immediately. ALWAYS use concise, lowercase messages. NEVER include Co-Authored-By
 
