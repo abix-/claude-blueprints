@@ -1,7 +1,7 @@
 ---
 name: issue
 description: Create, claim, and work GitHub issues across project repos (abix-/endless, abix-/claude-k3). Use when the user invokes `issue` with an explicit issue number, wants the next eligible issue claimed, or wants to create new issues. For claim/work flows, read and execute `C:/code/endless/docs/ai-collab-workflow.md`.
-argument-hint: "[issue-number | description of issues to create]"
+argument-hint: "[repo issue-number | issue-number | description of issues to create]"
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
 version: "6.0"
@@ -23,9 +23,21 @@ Use `gh issue create -R <owner/repo>` with `--title` and `--body`. The `-R` flag
 
 For batch creation (multiple issues at once), create them sequentially and report all URLs at the end.
 
-### 2. Claim/work mode (`/issue <number>` or `/issue` with no args)
+### 2. Claim/work mode (`/issue [repo] <number>` or `/issue` with no args)
 
-Use this as a thin executor for `C:/code/endless/docs/ai-collab-workflow.md`.
+**Repo detection from arguments:**
+- `/issue 42` -- bare number, repo = `endless` (default)
+- `/issue endless 42` -- explicit repo
+- `/issue claude-k3 8` -- explicit repo
+- `/issue` -- no args, auto-pick from all repos
+
+When repo is specified, add `-R abix-/<repo>` to ALL `gh issue` and `gh pr` commands. This is critical -- without `-R`, gh defaults to the cwd's repo which may be wrong.
+
+**Repo-specific behavior:**
+- **endless**: full workflow with compliance docs, cargo-lock, spec gate, regression tests
+- **claude-k3**: Go project. Use `go build ./...`, `go vet ./...`, `go test ./...` instead of cargo. Skip compliance gate (k8s.md/authority.md/performance.md), skip spec gate, skip feature spec gate. The issue body is the spec for all claude-k3 issues.
+
+For endless issues, use this as a thin executor for `C:/code/endless/docs/ai-collab-workflow.md`.
 
 The workflow doc (endless repo only) is the source of truth for:
 
@@ -74,7 +86,7 @@ After checking out an existing `issue-{N}` branch (whether resuming your own wor
 
 1. Query the PR: `gh pr view --head issue-{N} --json mergeStateStatus,mergeable`
 2. If `mergeable` is `CONFLICTING` or `mergeStateStatus` is `DIRTY`:
-   - Rebase onto dev: `git fetch origin dev && git rebase origin/dev`
+   - Rebase onto base branch: `git fetch origin {base} && git rebase origin/{base}`
    - Resolve any conflicts (prefer the dev side for mechanical conflicts like Cargo.lock; use judgment for code conflicts)
    - Force-push the rebased branch: `git push --force-with-lease origin issue-{N}`
    - Verify the PR is now clean: re-run the `gh pr view` check
@@ -87,18 +99,22 @@ Do not begin implementation or review work on a branch with merge conflicts -- f
 
 Each issue gets its own branch: `issue-{N}`.
 
-- New issue (no existing branch/PR): `git fetch origin && git checkout -b issue-{N} origin/dev`
-- Continuing work: `git checkout issue-{N} && git pull --rebase origin dev`
+The base branch depends on the repo:
+- **endless**: base = `dev`
+- **claude-k3**: base = `master`
+
+- New issue (no existing branch/PR): `git fetch origin && git checkout -b issue-{N} origin/{base}`
+- Continuing work: `git checkout issue-{N} && git pull --rebase origin {base}`
 - Push and verify the remote branch before handoff: `git push -u origin issue-{N}` then `git fetch origin && git rev-parse --verify origin/issue-{N}`
 
 ## Startup (before any other work)
 
-1. Read `C:/code/endless/docs/ai-collab-workflow.md`.
-2. Derive agentId from the current working directory:
-   - Get the folder name of cwd (e.g. `endless-claude-3`)
-   - Strip the `endless-` prefix -> `claude-3` is the agentId
-   - If cwd does not match `endless-{family}-{N}`, stop with an error -- the agent was not launched correctly
-3. Verify the workspace is a git repo on `dev` or an `issue-*` branch. If not, run `git checkout dev`.
+1. Determine repo from `$ARGUMENTS` (first word if it matches a known repo name, otherwise default to `endless`).
+2. If repo is `endless`, read `C:/code/endless/docs/ai-collab-workflow.md`.
+3. Derive agentId from the current working directory:
+   - Get the folder name of cwd (e.g. `endless-claude-3` or `claude-k3-claude-a`)
+   - Strip the repo prefix -> `claude-3` or `claude-a` is the agentId
+4. Verify the workspace is a git repo on the base branch (`dev` for endless, `master` for claude-k3) or an `issue-*` branch. If not, checkout the base branch.
 
 No registration script, no settings.json. The path is the identity.
 
@@ -147,15 +163,23 @@ When an agent claims an issue and discovers the PR is already approved/merged bu
 ## Execution
 
 - If `$ARGUMENTS` is empty, follow the no-argument claim flow from the workflow doc.
-- If `$ARGUMENTS` contains an issue number, follow the explicit-issue flow from the workflow doc.
+- If `$ARGUMENTS` contains `<repo> <number>`, use that repo. If bare `<number>`, default to endless.
 - Use the workflow doc's exact comment formats and label transitions.
 - Include the PR link in handoff comments.
-- Always run `claude-k3 cargo-lock fmt` before committing any code changes.
-- Always run `claude-k3 cargo-lock clippy --release -- -D warnings` before committing. Fix all warnings before commit -- this matches the CI build gate.
-- Use `claude-k3 cargo-lock` for all cargo commands (build, check, clippy, fmt, test) to serialize builds across agents sharing one target dir.
 - Do not hand off, request review, or transition labels until the issue branch is pushed and `origin/issue-{N}` verifies locally.
 - Complete one workflow step end-to-end before stopping: tests or an explicit blocker, GitHub comment, and label transition.
 - Do NOT merge PRs, close issues, or delete remote branches -- human only.
+
+### endless repo execution
+- Always run `claude-k3 cargo-lock fmt` before committing any code changes.
+- Always run `claude-k3 cargo-lock clippy --release -- -D warnings` before committing. Fix all warnings before commit -- this matches the CI build gate.
+- Use `claude-k3 cargo-lock` for all cargo commands (build, check, clippy, fmt, test) to serialize builds across agents sharing one target dir.
+
+### claude-k3 repo execution
+- Use `go build ./...` to build, `go vet ./...` for linting, `go test ./...` for tests.
+- No cargo-lock, no compliance docs, no spec gate.
+- Default branch is `master` (not `dev`). Branch from `origin/master`, rebase onto `origin/master`.
+- After code changes, cross-compile the linux binary: `GOOS=linux GOARCH=amd64 go build -o image/claude-k3 .`
 
 ## Performance issue standards
 
