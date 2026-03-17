@@ -39,23 +39,22 @@ cd /c/code/endless/rust && cargo run --release --features tracy 2>&1
 
 ## BRP (Bevy Remote Protocol)
 
-Game exposes JSON-RPC on `localhost:15702`. Use `~/.claude/skills/bevy/brp.py` for all BRP queries:
+Game exposes JSON-RPC on `localhost:15702`. Use `endless-cli` (in PATH) for all BRP interaction:
 
 ```bash
-# Performance metrics (system timings, fps, entity count)
-python ~/.claude/skills/bevy/brp.py perf
-# Game summary (NPCs, buildings, factions, squads)
-python ~/.claude/skills/bevy/brp.py summary
-# Pause/unpause
-python ~/.claude/skills/bevy/brp.py endless/time '{"paused": true}'
-python ~/.claude/skills/bevy/brp.py endless/time '{"paused": false}'
-# Any custom method
-python ~/.claude/skills/bevy/brp.py endless/debug '{"entity": "489v9"}'
+endless-cli perf                              # system timings, fps, entity count
+endless-cli summary                           # NPCs, buildings, factions, squads
+endless-cli time paused:true                  # pause
+endless-cli time paused:false                 # unpause
+endless-cli debug 489v9                       # inspect entity by UID
+endless-cli build town:0 kind:Farm col:5 row:3
+endless-cli destroy town:0 col:5 row:3
+endless-cli test                              # baseline BRP test suite
 ```
 
-Available methods: `endless/summary`, `endless/perf`, `endless/time`, `endless/debug`, `endless/build`, `endless/destroy`, `endless/upgrade`, `endless/policy`, `endless/squad_target`, `endless/ai_manager`, `endless/chat`.
+Available commands: `summary`, `perf`, `time`, `debug`, `build`, `destroy`, `upgrade`, `policy`, `squad_target`, `ai_manager`, `chat`, `test`, `loop`.
 
-Always use brp.py instead of raw curl for BRP queries.
+Always use endless-cli instead of raw curl for BRP queries.
 
 ## bevy_egui 0.39
 - `EguiPlugin::default()` not `EguiPlugin` (struct with fields, not unit struct)
