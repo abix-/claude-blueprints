@@ -31,7 +31,7 @@ updated: "2026-03-08"
 
 ## Build & Run
 ```bash
-cd /c/code/endless/rust && k3s-claude cargo-lock build --release 2>&1
+cd /c/code/endless/rust && claude-k3 cargo-lock build --release 2>&1
 cd /c/code/endless/rust && cargo run --release 2>&1
 # Tracy profiler support (connect with Tracy GUI while running):
 cd /c/code/endless/rust && cargo run --release --features tracy 2>&1

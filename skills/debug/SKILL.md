@@ -8,7 +8,7 @@ Debug the Endless Bevy project:
 
 1. Check for compiler errors:
 ```bash
-cd /c/code/endless/rust && k3s-claude cargo-lock check 2>&1
+cd /c/code/endless/rust && claude-k3 cargo-lock check 2>&1
 ```
 
 2. If build succeeds, run and capture output:

@@ -1,6 +1,6 @@
 ---
 name: issue
-description: Create, claim, and work GitHub issues across project repos (abix-/endless, abix-/k3s-claude). Use when the user invokes `issue` with an explicit issue number, wants the next eligible issue claimed, or wants to create new issues. For claim/work flows, read and execute `C:/code/endless/docs/ai-collab-workflow.md`.
+description: Create, claim, and work GitHub issues across project repos (abix-/endless, abix-/claude-k3). Use when the user invokes `issue` with an explicit issue number, wants the next eligible issue claimed, or wants to create new issues. For claim/work flows, read and execute `C:/code/endless/docs/ai-collab-workflow.md`.
 argument-hint: "[issue-number | description of issues to create]"
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
@@ -17,7 +17,7 @@ When `$ARGUMENTS` is freeform text (not a bare number), create issues. Determine
 | Repo | When |
 |------|------|
 | `abix-/endless` | Rust/Bevy code, gameplay, ECS, shaders, game features |
-| `abix-/k3s-claude` | Go CLI, k8s manifests, dispatcher, TUI, agent pods, Docker image |
+| `abix-/claude-k3` | Go CLI, k8s manifests, dispatcher, TUI, agent pods, Docker image |
 
 Use `gh issue create -R <owner/repo>` with `--title` and `--body`. The `-R` flag means you can run this from any directory -- do NOT cd to the target repo. Include acceptance criteria as `- [ ]` checkboxes when the scope is clear. Add labels if obvious (bug, feature, etc.).
 
@@ -49,7 +49,7 @@ Agent identity is derived from the worktree path. No registration script, no set
 - Windows agents use numbers: `C:\code\endless-claude-3` -> `claude-3`
 - k3s agents use letters: `/workspaces/endless-claude-a` -> `claude-a`
 - Pattern: `{repo}-{family}-{id}` -> `{family}-{id}`
-- Extract from cwd: folder name minus the repo prefix (e.g. `endless-` or `k3s-claude-`)
+- Extract from cwd: folder name minus the repo prefix (e.g. `endless-` or `claude-k3-`)
 
 Each agent is launched via `claude-next.ps1` (`Ctrl+Shift+N` in WezTerm) into its own worktree. The script checks `wezterm cli list` for occupied slots and picks the next free one.
 
@@ -150,9 +150,9 @@ When an agent claims an issue and discovers the PR is already approved/merged bu
 - If `$ARGUMENTS` contains an issue number, follow the explicit-issue flow from the workflow doc.
 - Use the workflow doc's exact comment formats and label transitions.
 - Include the PR link in handoff comments.
-- Always run `k3s-claude cargo-lock fmt` before committing any code changes.
-- Always run `k3s-claude cargo-lock clippy --release -- -D warnings` before committing. Fix all warnings before commit -- this matches the CI build gate.
-- Use `k3s-claude cargo-lock` for all cargo commands (build, check, clippy, fmt, test) to serialize builds across agents sharing one target dir.
+- Always run `claude-k3 cargo-lock fmt` before committing any code changes.
+- Always run `claude-k3 cargo-lock clippy --release -- -D warnings` before committing. Fix all warnings before commit -- this matches the CI build gate.
+- Use `claude-k3 cargo-lock` for all cargo commands (build, check, clippy, fmt, test) to serialize builds across agents sharing one target dir.
 - Do not hand off, request review, or transition labels until the issue branch is pushed and `origin/issue-{N}` verifies locally.
 - Complete one workflow step end-to-end before stopping: tests or an explicit blocker, GitHub comment, and label transition.
 - Do NOT merge PRs, close issues, or delete remote branches -- human only.

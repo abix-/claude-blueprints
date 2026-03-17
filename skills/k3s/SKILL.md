@@ -4,30 +4,30 @@ description: Manage k3s Claude agent pods for the Endless project. Use when chec
 version: "2.0"
 ---
 
-k3s runs Claude Code agents as Kubernetes pods inside WSL2. Each pod works one GitHub issue using the `/issue` workflow. All tooling is one Go binary: `k3s-claude`.
+k3s runs Claude Code agents as Kubernetes pods inside WSL2. Each pod works one GitHub issue using the `/issue` workflow. All tooling is one Go binary: `claude-k3`.
 
 ## Architecture
 
 - **Dispatcher CronJob**: runs every 3 minutes, checks GitHub for `ready`/`needs-review` issues, creates Jobs
 - **Agent Jobs**: each Job runs one pod with Claude Code working one issue
 - **Slot mapping**: k8s slots 1-26 map to letter-based agent IDs claude-a through claude-z (Windows agents use numbered IDs claude-1+)
-- **Max concurrency**: controlled by `MAX_SLOTS` env var in dispatcher (default 3)
-- **Repo**: `C:\code\k3s-claude`
+- **Max concurrency**: controlled by `MAX_SLOTS` env var in dispatcher (default 5)
+- **Repo**: `C:\code\claude-k3`
 - **Namespace**: `claude-agents`
 
 ## Commands
 
-`k3s-claude` is on PATH. All subcommands:
+`claude-k3` is on PATH. All subcommands:
 
 ```bash
-k3s-claude top              # live TUI dashboard (q/n/p/d/l/r/+/-)
-k3s-claude top --once       # one-shot text output (used by /ctop)
-k3s-claude dispatch         # find issues, create k8s Jobs
-k3s-claude logs             # summary of all pods
-k3s-claude logs 120         # full log for issue 120
-k3s-claude logs -f 120      # follow live
-k3s-claude deploy           # build image + apply manifests
-k3s-claude cargo-lock       # serialize cargo builds (replaces cargo-lock.py)
+claude-k3 top              # live TUI dashboard (q/n/p/d/l/r/+/-)
+claude-k3 top --once       # one-shot text output (used by /ctop)
+claude-k3 dispatch         # find issues, create k8s Jobs
+claude-k3 logs             # summary of all pods
+claude-k3 logs 120         # full log for issue 120
+claude-k3 logs -f 120      # follow live
+claude-k3 deploy           # build image + apply manifests
+claude-k3 cargo-lock       # serialize cargo builds (replaces cargo-lock.py)
 ```
 
 ## TUI hotkeys
@@ -53,22 +53,22 @@ wsl -d Ubuntu-24.04 -- bash -c "sudo k3s kubectl get nodes 2>&1"
 
 After changing Go code:
 ```bash
-cd /c/code/k3s-claude && go build -o k3s-claude.exe .
+cd /c/code/claude-k3 && go build -o claude-k3.exe .
 ```
 
 After changing image or manifests:
 ```bash
-k3s-claude deploy
+claude-k3 deploy
 ```
 
 Cross-compile Linux binary for container:
 ```bash
-cd /c/code/k3s-claude && GOOS=linux GOARCH=amd64 go build -o image/k3s-claude .
+cd /c/code/claude-k3 && GOOS=linux GOARCH=amd64 go build -o image/claude-k3 .
 ```
 
 Update configmap only (after editing manifests/job-template.yaml):
 ```bash
-wsl -d Ubuntu-24.04 -- bash -c "cd /mnt/c/code/k3s-claude && sudo k3s kubectl create configmap dispatcher-scripts -n claude-agents --from-file=job-template.yaml=manifests/job-template.yaml --dry-run=client -o yaml | sudo k3s kubectl apply -f - 2>&1"
+wsl -d Ubuntu-24.04 -- bash -c "cd /mnt/c/code/claude-k3 && sudo k3s kubectl create configmap dispatcher-scripts -n claude-agents --from-file=job-template.yaml=manifests/job-template.yaml --dry-run=client -o yaml | sudo k3s kubectl apply -f - 2>&1"
 ```
 
 ## Killing pods safely

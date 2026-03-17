@@ -44,7 +44,7 @@ cd /c/code/endless && git fetch origin && git checkout {headRefName} && git pull
 ## Step 4: Run unit tests
 
 ```bash
-cd /c/code/endless/rust && k3s-claude cargo-lock test --release 2>&1
+cd /c/code/endless/rust && claude-k3 cargo-lock test --release 2>&1
 ```
 
 Record pass/fail and test count. If tests fail, note failures but continue to build.
@@ -52,7 +52,7 @@ Record pass/fail and test count. If tests fail, note failures but continue to bu
 ## Step 5: Build release
 
 ```bash
-cd /c/code/endless/rust && k3s-claude cargo-lock build --release 2>&1
+cd /c/code/endless/rust && claude-k3 cargo-lock build --release 2>&1
 ```
 
 If build fails, skip BRP steps. Post findings with build failure and stop.
@@ -161,7 +161,7 @@ Print: `Skipped PR #{N} -- left as-is`
 ## Rules
 
 - Always use `endless-cli` for BRP calls -- never raw curl
-- Always use `k3s-claude cargo-lock` for cargo commands (test, build, clippy)
+- Always use `claude-k3 cargo-lock` for cargo commands (test, build, clippy)
 - Always post the PR comment before asking merge/skip
 - Do NOT delete local branches -- only remote via `--delete-branch`
 - Do NOT modify issue labels (agents handle label transitions)

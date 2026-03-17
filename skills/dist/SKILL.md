@@ -7,7 +7,7 @@ version: "1.0"
 Build a release binary and package it with assets/shaders into a zip.
 
 ```bash
-cd /c/code/endless/rust && k3s-claude cargo-lock build --release 2>&1
+cd /c/code/endless/rust && claude-k3 cargo-lock build --release 2>&1
 ```
 
 If build succeeds, package:
