@@ -31,11 +31,31 @@ updated: "2026-03-08"
 
 ## Build & Run
 ```bash
-cd /c/code/endless/rust && cargo build --release 2>&1
+cd /c/code/endless/rust && k3s-claude cargo-lock build --release 2>&1
 cd /c/code/endless/rust && cargo run --release 2>&1
 # Tracy profiler support (connect with Tracy GUI while running):
 cd /c/code/endless/rust && cargo run --release --features tracy 2>&1
 ```
+
+## BRP (Bevy Remote Protocol)
+
+Game exposes JSON-RPC on `localhost:15702`. Use `~/.claude/skills/bevy/brp.py` for all BRP queries:
+
+```bash
+# Performance metrics (system timings, fps, entity count)
+python ~/.claude/skills/bevy/brp.py perf
+# Game summary (NPCs, buildings, factions, squads)
+python ~/.claude/skills/bevy/brp.py summary
+# Pause/unpause
+python ~/.claude/skills/bevy/brp.py endless/time '{"paused": true}'
+python ~/.claude/skills/bevy/brp.py endless/time '{"paused": false}'
+# Any custom method
+python ~/.claude/skills/bevy/brp.py endless/debug '{"entity": "489v9"}'
+```
+
+Available methods: `endless/summary`, `endless/perf`, `endless/time`, `endless/debug`, `endless/build`, `endless/destroy`, `endless/upgrade`, `endless/policy`, `endless/squad_target`, `endless/ai_manager`, `endless/chat`.
+
+Always use brp.py instead of raw curl for BRP queries.
 
 ## bevy_egui 0.39
 - `EguiPlugin::default()` not `EguiPlugin` (struct with fields, not unit struct)

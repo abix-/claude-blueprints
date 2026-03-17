@@ -6,7 +6,7 @@ version: "1.0"
 ---
 ## Steps
 
-1. **Run benchmarks**: Run `cargo bench --bench system_bench 2>&1 | tee /c/code/endless/rust/bench_results.txt` and wait for completion.
+1. **Run benchmarks**: Run `k3s-claude cargo-lock bench --bench system_bench 2>&1 | tee /c/code/endless/rust/bench_results.txt` and wait for completion.
 
 2. **Read results**: Read `rust/bench_results.txt` and extract the timing data for each system at each entity count.
 
@@ -17,12 +17,12 @@ version: "1.0"
 ```
 ### YYYY-MM-DD — <commit hash (short)>
 
-| System | 1K | 5K | 10K | 25K | 50K |
-|--------|----|----|-----|-----|-----|
-| decision | Xµs | Xµs | Xµs | Xµs | Xµs |
-| damage | Xµs | Xµs | Xµs | Xµs | Xµs |
-| healing | Xµs | Xµs | Xµs | Xµs | Xµs |
-| attack | Xµs | Xµs | Xµs | Xµs | Xµs |
+| System | 1K | 50K |
+|--------|-----|-----|
+| decision | Xus | Xus |
+| damage | Xus | Xus |
+| healing | Xus | Xus |
+| attack | Xus | Xus |
 
 Combined 50K: X.Xms (X.X% of 16ms budget)
 ```

@@ -10,7 +10,7 @@ Build and verify the Endless game through BRP (Bevy Remote Protocol).
 
 1. **Build release**:
 ```bash
-cd /c/code/endless/rust && cargo build --release 2>&1
+cd /c/code/endless/rust && k3s-claude cargo-lock build --release 2>&1
 ```
 If build fails, stop and report errors.
 

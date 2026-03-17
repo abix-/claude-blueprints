@@ -23,5 +23,5 @@ cd /c/code/endless/rust && cargo outdated --root-deps-only 2>&1
 5. Ask the user which updates to apply before making changes.
 
 6. For safe updates: run `cargo update -p <crate>` one at a time.
-7. For breaking updates: edit Cargo.toml version, run `cargo check`, fix any compile errors.
-8. After all updates: run `cargo build --release` to verify everything compiles.
+7. For breaking updates: edit Cargo.toml version, run `k3s-claude cargo-lock check`, fix any compile errors.
+8. After all updates: run `k3s-claude cargo-lock build --release` to verify everything compiles.

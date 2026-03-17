@@ -1,8 +1,21 @@
 {
   "permissions": {
     "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Bash(endless-cli *)",
       "Bash(curl*localhost:15702*)",
-      "Bash(*llm-player*python*actions.py*)"
+      "Bash(*llm-player*python*actions.py*)",
+      "Bash(gh *)",
+      "Bash(cd /c/code/*cargo *)",
+      "Bash(cd /c/code/*git *)",
+      "Bash(cd /c/code/*wc *)",
+      "Bash(ls *)",
+      "WebFetch",
+      "WebSearch"
     ],
     "deny": [
       "~/.claude/sanitizer/sanitizer.json",
@@ -44,7 +57,10 @@
       ""
     ]
   },
+  "env": {
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
+  },
+  "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
-  "ENABLE_LSP_TOOL": "1",
-  "effortLevel": "medium"
+  "ENABLE_LSP_TOOL": "1"
 }
