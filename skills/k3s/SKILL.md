@@ -1,107 +1,56 @@
 ---
 name: k3s
-description: Manage k3s Claude agent pods for the Endless project. Use when checking agent status, viewing logs, deploying, rebuilding images, or troubleshooting the k3s-based agent system.
-version: "2.0"
+description: k3s Kubernetes cluster running in WSL2 Ubuntu 24.04. Use when troubleshooting the cluster itself, nodes, networking, storage, or WSL2 integration.
+version: "3.0"
 ---
 
-k3s runs Claude Code agents as Kubernetes pods inside WSL2. Each pod works one GitHub issue using the `/issue` workflow. All tooling is one Go binary: `claude-k3`.
+k3s is a lightweight Kubernetes distribution running inside WSL2 Ubuntu 24.04 on this Windows 10 machine.
 
-## Architecture
+## Access
 
-- **Dispatcher CronJob**: runs every 3 minutes, checks GitHub for `ready`/`needs-review` issues, creates Jobs
-- **Agent Jobs**: each Job runs one pod with Claude Code working one issue
-- **Slot mapping**: k8s slots 1-26 map to letter-based agent IDs claude-a through claude-z (Windows agents use numbered IDs claude-1+)
-- **Max concurrency**: controlled by `MAX_SLOTS` env var in dispatcher (default 5)
-- **Repo**: `C:\code\claude-k3`
-- **Namespace**: `claude-agents`
-
-## Commands
-
-`claude-k3` is on PATH. All subcommands:
-
+kubectl is NOT on Windows PATH. Always use the WSL wrapper:
 ```bash
-claude-k3 top              # live TUI dashboard (q/n/p/d/l/r/+/-)
-claude-k3 top --once       # one-shot text output (used by /ctop)
-claude-k3 dispatch         # find issues, create k8s Jobs
-claude-k3 logs             # summary of all pods
-claude-k3 logs 120         # full log for issue 120
-claude-k3 logs -f 120      # follow live
-claude-k3 deploy           # build image + apply manifests
-claude-k3 cargo-lock       # serialize cargo builds (replaces cargo-lock.py)
+wsl -d Ubuntu-24.04 -- bash -c "sudo k3s kubectl ..."
 ```
 
-## TUI hotkeys
-
-| Key | Action |
-|-----|--------|
-| `q` | quit |
-| `n` | dispatch now |
-| `p` | pause/resume dispatcher |
-| `d` | toggle dispatcher section |
-| `l` | toggle live output |
-| `r` | manual refresh |
-| `+`/`-` | adjust max agents (1-5) |
+`nerdctl` (container builds) also requires the WSL wrapper:
+```bash
+wsl -d Ubuntu-24.04 -- bash -c "sudo nerdctl --address /run/k3s/containerd/containerd.sock --namespace k8s.io ..."
+```
 
 ## WSL2 NAT caveat
 
-The Go binary talks to k3s via the WSL2 NAT IP. If WSL has no active session, the NAT goes stale and k8s data is empty. Fix: wake WSL first:
+The Windows host talks to k3s via the WSL2 NAT IP. If WSL has no active session, the NAT goes stale and k8s API calls return empty/timeout. Fix: wake WSL first:
 ```bash
-wsl -d Ubuntu-24.04 -- bash -c "sudo k3s kubectl get nodes 2>&1"
+wsl -d Ubuntu-24.04 -- bash -c "echo ok"
 ```
 
-## Deploy / rebuild
+## Namespace
 
-After changing Go code:
-```bash
-cd /c/code/claude-k3 && go build -o claude-k3.exe .
-```
+All agent workloads run in `claude-agents` namespace.
 
-After changing image or manifests:
-```bash
-claude-k3 deploy
-```
-
-Cross-compile Linux binary for container:
-```bash
-cd /c/code/claude-k3 && GOOS=linux GOARCH=amd64 go build -o image/claude-k3 .
-```
-
-Update configmap only (after editing manifests/job-template.yaml):
-```bash
-wsl -d Ubuntu-24.04 -- bash -c "cd /mnt/c/code/claude-k3 && sudo k3s kubectl create configmap dispatcher-scripts -n claude-agents --from-file=job-template.yaml=manifests/job-template.yaml --dry-run=client -o yaml | sudo k3s kubectl apply -f - 2>&1"
-```
-
-## Killing pods safely
-
-NEVER delete agent jobs without cleaning up their GitHub issue claims:
-
-```bash
-# find orphaned claims
-gh issue list --repo abix-/endless --state open --label claimed --json number,labels --jq '.[] | "\(.number) \(.labels[] | select(.name | startswith("claude-")) | .name)"'
-
-# reset one issue
-gh issue edit <N> --repo abix-/endless --remove-label claimed --remove-label <owner> --add-label needs-review
-```
-
-## Shared volumes (PVCs)
+## Storage
 
 | PVC | Mount | Purpose |
 |-----|-------|---------|
-| cargo-target | /cargo-target | shared build artifacts (ext4, fast) |
+| cargo-target | /cargo-target | shared Rust build artifacts (ext4) |
 | cargo-home | /cargo-home | crate registry cache |
-| workspaces | /workspaces | persistent git clones per slot |
+| workspaces | /workspaces | persistent git clones per agent slot |
 
 Skills/commands/CLAUDE.md mounted read-only from `~/.claude` via hostPath.
 
-## Auth
+## Image builds
 
-- **Claude Code**: `CLAUDE_CODE_OAUTH_TOKEN` in k8s secret (from `claude setup-token`, valid 1 year)
-- **GitHub**: `~/.gh-token` file mounted read-only into pods via hostPath
+Images are built with nerdctl directly into the k3s containerd namespace (no registry):
+```bash
+wsl -d Ubuntu-24.04 -- bash -c "cd /mnt/c/code/k3sc && sudo nerdctl --address /run/k3s/containerd/containerd.sock --namespace k8s.io build -t claude-agent:latest image/"
+```
+
+Pods use `imagePullPolicy: Never` -- if you see `ErrImageNeverPull`, rebuild with `--namespace k8s.io`.
 
 ## Troubleshooting
 
-- **K8s data empty in TUI**: WSL2 NAT stale. Run `wsl -d Ubuntu-24.04 -- bash -c "echo ok"` to wake it.
-- **Pods not starting**: `ErrImageNeverPull` -- rebuild image with `--namespace k8s.io`
-- **Claude auth fails**: regenerate with `claude setup-token`, update k8s secret
-- **Orphaned claims**: pods killed mid-work leave issues `claimed`. Clean up manually.
-- **Client throttling**: QPS set to 50, should not throttle. If it does, check concurrent pod count.
+- **K8s data empty**: WSL2 NAT stale. Wake WSL.
+- **ErrImageNeverPull**: rebuild image with `--namespace k8s.io`
+- **Node not ready**: `wsl -d Ubuntu-24.04 -- bash -c "sudo k3s kubectl get nodes"`
+- **Pod stuck**: `wsl -d Ubuntu-24.04 -- bash -c "sudo k3s kubectl describe pod <name> -n claude-agents"`

@@ -1,6 +1,6 @@
 ---
 name: issue
-description: Create, claim, and work GitHub issues across project repos (abix-/endless, abix-/claude-k3). Use when the user invokes `issue` with an explicit issue number, wants the next eligible issue claimed, or wants to create new issues. For claim/work flows, read and execute `C:/code/endless/docs/ai-collab-workflow.md`.
+description: Create, claim, and work GitHub issues across project repos (abix-/endless, abix-/k3sc). Use when the user invokes `issue` with an explicit issue number, wants the next eligible issue claimed, or wants to create new issues. For claim/work flows, read and execute `C:/code/endless/docs/ai-collab-workflow.md`.
 argument-hint: "[repo issue-number | issue-number | description of issues to create]"
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
@@ -17,7 +17,7 @@ When `$ARGUMENTS` is freeform text (not a bare number), create issues. Determine
 | Repo | When |
 |------|------|
 | `abix-/endless` | Rust/Bevy code, gameplay, ECS, shaders, game features |
-| `abix-/claude-k3` | Go CLI, k8s manifests, dispatcher, TUI, agent pods, Docker image |
+| `abix-/k3sc` | Go CLI, k8s manifests, operator, TUI, agent pods, Docker image |
 
 Use `gh issue create -R <owner/repo>` with `--title` and `--body`. The `-R` flag means you can run this from any directory -- do NOT cd to the target repo. Include acceptance criteria as `- [ ]` checkboxes when the scope is clear. Add labels if obvious (bug, feature, etc.).
 
@@ -28,14 +28,14 @@ For batch creation (multiple issues at once), create them sequentially and repor
 **Repo detection from arguments:**
 - `/issue 42` -- bare number, repo = `endless` (default)
 - `/issue endless 42` -- explicit repo
-- `/issue claude-k3 8` -- explicit repo
+- `/issue k3sc 8` -- explicit repo
 - `/issue` -- no args, auto-pick from all repos
 
 When repo is specified, add `-R abix-/<repo>` to ALL `gh issue` and `gh pr` commands. This is critical -- without `-R`, gh defaults to the cwd's repo which may be wrong.
 
 **Repo-specific behavior:**
 - **endless**: full workflow with compliance docs, cargo-lock, spec gate, regression tests
-- **claude-k3**: Go project. Use `go build ./...`, `go vet ./...`, `go test ./...` instead of cargo. Skip compliance gate (k8s.md/authority.md/performance.md), skip spec gate, skip feature spec gate. The issue body is the spec for all claude-k3 issues.
+- **k3sc**: Go project. Use `go build ./...`, `go vet ./...`, `go test ./...` instead of cargo. Skip compliance gate (k8s.md/authority.md/performance.md), skip spec gate, skip feature spec gate. The issue body is the spec for all k3sc issues.
 
 For endless issues, use this as a thin executor for `C:/code/endless/docs/ai-collab-workflow.md`.
 
@@ -56,18 +56,18 @@ Operate on exactly one GitHub issue at a time.
 
 ## Workspace and identity
 
-Agent identity is derived from the worktree path. No registration script, no settings.json, no process-tree walking.
+Agent identity is derived from the clone path. No registration script, no settings.json, no process-tree walking.
 
 - Windows agents use numbers: `C:\code\endless-claude-3` -> `claude-3`
 - k3s agents use letters: `/workspaces/endless-claude-a` -> `claude-a`
 - Pattern: `{repo}-{family}-{id}` -> `{family}-{id}`
-- Extract from cwd: folder name minus the repo prefix (e.g. `endless-` or `claude-k3-`)
+- Extract from cwd: folder name minus the repo prefix (e.g. `endless-` or `k3sc-`)
 
-Each agent is launched via `claude-next.ps1` (`Ctrl+Shift+N` in WezTerm) into its own worktree. The script checks `wezterm cli list` for occupied slots and picks the next free one.
+Each agent is launched via `k3sc launch` (`Ctrl+Shift+N` in WezTerm) into its own clone. It uses PID-based lockfiles to find free slots.
 
 If the workspace directory already exists, reuse it. Do not recreate or remove existing workspaces.
 
-All work happens in the agent's workspace, not in `C:\code\endless`. Stay in the worktree for all git, cargo, file read/edit, and grep/glob operations.
+All work happens in the agent's workspace, not in `C:\code\endless`. Stay in the clone for all git, cargo, file read/edit, and grep/glob operations.
 
 ## Branch and PR dedup
 
@@ -101,7 +101,7 @@ Each issue gets its own branch: `issue-{N}`.
 
 The base branch depends on the repo:
 - **endless**: base = `dev`
-- **claude-k3**: base = `master`
+- **k3sc**: base = `master`
 
 - New issue (no existing branch/PR): `git fetch origin && git checkout -b issue-{N} origin/{base}`
 - Continuing work: `git checkout issue-{N} && git pull --rebase origin {base}`
@@ -112,23 +112,17 @@ The base branch depends on the repo:
 1. Determine repo from `$ARGUMENTS` (first word if it matches a known repo name, otherwise default to `endless`).
 2. If repo is `endless`, read `C:/code/endless/docs/ai-collab-workflow.md`.
 3. Derive agentId from the current working directory:
-   - Get the folder name of cwd (e.g. `endless-claude-3` or `claude-k3-claude-a`)
+   - Get the folder name of cwd (e.g. `endless-claude-3` or `k3sc-claude-a`)
    - Strip the repo prefix -> `claude-3` or `claude-a` is the agentId
-4. Verify the workspace is a git repo on the base branch (`dev` for endless, `master` for claude-k3) or an `issue-*` branch. If not, checkout the base branch.
+4. Verify the workspace is a git repo on the base branch (`dev` for endless, `master` for k3sc) or an `issue-*` branch. If not, checkout the base branch.
 
 No registration script, no settings.json. The path is the identity.
 
-## Claim-first rule
+## Assignment
 
-After selecting a target issue, the IMMEDIATE next action must be claiming it on GitHub (label transition + owner label + claim comment). Do not read critical docs, PR diffs, spec docs, or do any other work before the claim is confirmed. Other agents are racing for the same issues -- every second between selection and claim is a window for conflict.
+The k3sc operator assigns issues to agents. By the time you start, the issue is already claimed with your owner label. Just start working.
 
-Order:
-1. Select candidate issue (from `gh issue list` or explicit argument)
-2. Read the issue with comments (one `gh issue view`)
-3. **Immediately claim**: add `claimed` + owner label, remove `ready`/`needs-review`, post claim comment
-4. Confirm claim (re-read labels)
-5. THEN read critical docs (`docs/k8s.md`, `docs/authority.md`, `docs/performance.md`)
-6. THEN read spec docs, PR diffs, and begin work
+If the issue has another agent's owner label, do not act on it.
 
 ## GitHub access discipline
 
@@ -137,28 +131,18 @@ Order:
 - prefer one `gh issue list` to identify a candidate, then one `gh issue view <number> --comments` for the selected issue
 - reuse existing approval if GitHub access is already approved
 
+## Label management -- operator only
+
+**Agents do NOT touch GitHub labels.** The k3sc operator owns all label transitions:
+- Operator adds owner label when dispatching
+- Operator removes owner label and adds `needs-review`/`needs-human` when the pod completes
+- Operator handles orphan cleanup if a pod dies
+
+Agents focus on: writing code, creating branches, pushing commits, creating PRs.
+
 ## Merge prohibition
 
-Agents NEVER merge PRs or close issues. Only the human merges PRs and closes issues after confirming the branch is good.
-
-When a reviewer approves a PR:
-
-1. Run `gh pr review --approve` to approve the PR
-2. Leave the handoff comment with `State: claimed -> needs-human`
-3. Remove `claimed` and the owner label, add `needs-human` label (signals human to merge)
-4. Do NOT add `needs-review` -- that causes the dispatcher to re-assign the issue in a loop
-5. Do NOT run `gh pr merge`, `gh api .../merge`, or `gh issue close`
-6. Do NOT delete remote branches -- the human handles cleanup after merge
-
-When an agent claims an issue and discovers the PR is already approved/merged but the issue is still open:
-
-1. Leave a handoff comment noting the PR is approved/merged and human action is needed
-2. Remove `claimed` and the owner label, add `needs-human` label
-3. Do NOT add `needs-review` or `ready` -- this issue is done from the agent side
-
-`needs-human` vs `needs-review`:
-- `needs-review` = an agent should pick this up (dispatcher eligible)
-- `needs-human` = only the human can act -- merge, close, design decision (dispatcher ignores)
+Agents NEVER merge PRs, close issues, or delete remote branches. Only the human does these.
 
 ## Execution
 
@@ -171,15 +155,15 @@ When an agent claims an issue and discovers the PR is already approved/merged bu
 - Do NOT merge PRs, close issues, or delete remote branches -- human only.
 
 ### endless repo execution
-- Always run `claude-k3 cargo-lock fmt` before committing any code changes.
-- Always run `claude-k3 cargo-lock clippy --release -- -D warnings` before committing. Fix all warnings before commit -- this matches the CI build gate.
-- Use `claude-k3 cargo-lock` for all cargo commands (build, check, clippy, fmt, test) to serialize builds across agents sharing one target dir.
+- Always run `k3sc cargo-lock fmt` before committing any code changes.
+- Always run `k3sc cargo-lock clippy --release -- -D warnings` before committing. Fix all warnings before commit -- this matches the CI build gate.
+- Use `k3sc cargo-lock` for all cargo commands (build, check, clippy, fmt, test) to serialize builds across agents sharing one target dir.
 
-### claude-k3 repo execution
+### k3sc repo execution
 - Use `go build ./...` to build, `go vet ./...` for linting, `go test ./...` for tests.
 - No cargo-lock, no compliance docs, no spec gate.
 - Default branch is `master` (not `dev`). Branch from `origin/master`, rebase onto `origin/master`.
-- After code changes, cross-compile the linux binary: `GOOS=linux GOARCH=amd64 go build -o image/claude-k3 .`
+- After code changes, cross-compile the linux binary: `GOOS=linux GOARCH=amd64 go build -o image/k3sc .`
 
 ## Performance issue standards
 
@@ -277,7 +261,7 @@ NEVER approve, hand off to `needs-review`, or recommend merge unless ALL accepta
 5. **If ALL boxes are checked**, include "Acceptance: all N/N criteria verified and checked" in the handoff comment.
 6. **If the issue has no checkboxes**, state "Acceptance: no checkboxes in issue body" in the handoff comment.
 
-A handoff comment without an explicit Acceptance line is invalid. A `claimed -> close` or `claimed -> approved` transition with unchecked boxes is invalid.
+A handoff comment without an explicit Acceptance line is invalid. An approval or close transition with unchecked boxes is invalid.
 4. **Include a pass/fail table** in the handoff comment showing each acceptance criterion and its status.
 5. An issue with 11/12 acceptance criteria met is NOT ready for merge. 100% or nothing.
 
