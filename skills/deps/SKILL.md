@@ -8,7 +8,7 @@ Check all Endless Rust dependencies for available updates:
 
 1. Run cargo-outdated on direct dependencies only:
 ```bash
-cd /c/code/endless/rust && cargo outdated --root-deps-only 2>&1
+cargo outdated --root-deps-only --manifest-path /c/code/endless/rust/Cargo.toml 2>&1
 ```
 
 2. Present results as a table with columns: Crate, Current, Compatible, Latest, Action Needed.
@@ -23,5 +23,5 @@ cd /c/code/endless/rust && cargo outdated --root-deps-only 2>&1
 5. Ask the user which updates to apply before making changes.
 
 6. For safe updates: run `cargo update -p <crate>` one at a time.
-7. For breaking updates: edit Cargo.toml version, run `claude-k3 cargo-lock check`, fix any compile errors.
-8. After all updates: run `claude-k3 cargo-lock build --release` to verify everything compiles.
+7. For breaking updates: edit Cargo.toml version, run `k3sc cargo-lock check --manifest-path /c/code/endless/rust/Cargo.toml`, fix any compile errors.
+8. After all updates: run `k3sc cargo-lock build --release --manifest-path /c/code/endless/rust/Cargo.toml` to verify everything compiles.

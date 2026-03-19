@@ -20,7 +20,7 @@ Uses `endless-cli` for all BRP interaction (it's in PATH).
 
 Repo mapping (short name -> GitHub owner/repo):
 - `endless` -> `abix-/endless`
-- `claude-k3` -> `abix-/claude-k3`
+- `k3sc` -> `abix-/k3sc`
 
 All `gh` commands must use `--repo {owner/repo}` to target the correct repo.
 
@@ -77,7 +77,7 @@ Record pass/fail and test count. If tests fail, note failures but continue to bu
 
 ## Step 5: Build
 
-- **Rust/Bevy**: `cd {repo}/rust && cargo build --release 2>&1`
+- **Rust/Bevy**: `k3sc cargo-lock build --release --manifest-path /c/code/endless/rust/Cargo.toml 2>&1`
 - **Go**: `cd {repo} && go build ./... 2>&1`
 - **Other**: skip build
 
@@ -105,6 +105,14 @@ endless-cli test
 ```
 
 This prints `PASS` or `FAIL` at the end. Record FPS, NPC count, town state from the output.
+
+### Step 7.5: Check wgpu_errors.log
+
+```bash
+cat /c/code/endless/rust/target/release/wgpu_errors.log 2>/dev/null | tail -20
+```
+
+Check for GPU validation errors (buffer overflows, shader failures). Report any errors in the review comment. These errors may not crash the game but indicate serious bugs (e.g. readback buffer sizing mismatches).
 
 ### Step 8: Issue-aware BRP checks
 

@@ -6,7 +6,7 @@ version: "1.0"
 ---
 ## Steps
 
-1. **Run clippy**: `cd /c/code/endless/rust && claude-k3 cargo-lock clippy 2>&1`. Fix any warnings before proceeding.
+1. **Run clippy**: `k3sc cargo-lock clippy --manifest-path /c/code/endless/rust/Cargo.toml 2>&1`. Fix any warnings before proceeding.
 
 2. **Identify changed files**: Run `git diff --name-only` and `git diff --cached --name-only` to see what changed.
 

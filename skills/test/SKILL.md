@@ -10,13 +10,13 @@ Build and verify the Endless game through endless-cli (BRP wrapper, in PATH).
 
 1. **Build release**:
 ```bash
-cd /c/code/endless/rust && claude-k3 cargo-lock build --release 2>&1
+k3sc cargo-lock build --release --manifest-path /c/code/endless/rust/Cargo.toml 2>&1
 ```
 If build fails, stop and report errors.
 
 2. **Launch game with --autostart** (background + PID):
 ```bash
-cd /c/code/endless/rust && target/release/endless.exe --autostart &
+/c/code/endless/rust/target/release/endless.exe --autostart &
 GAME_PID=$!
 echo "Game PID: $GAME_PID"
 ```

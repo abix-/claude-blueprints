@@ -6,7 +6,7 @@ version: "1.0"
 ---
 ## Steps
 
-1. **Run benchmarks**: Run `claude-k3 cargo-lock bench --bench system_bench 2>&1 | tee /c/code/endless/rust/bench_results.txt` and wait for completion.
+1. **Run benchmarks**: Run `k3sc cargo-lock bench --bench system_bench 2>&1 | tee /c/code/endless/rust/bench_results.txt` and wait for completion.
 
 2. **Read results**: Read `rust/bench_results.txt` and extract the timing data for each system at each entity count.
 

@@ -31,10 +31,10 @@ updated: "2026-03-08"
 
 ## Build & Run
 ```bash
-cd /c/code/endless/rust && claude-k3 cargo-lock build --release 2>&1
-cd /c/code/endless/rust && cargo run --release 2>&1
+# run builds automatically before launching
+k3sc cargo-lock run --release --manifest-path /c/code/endless/rust/Cargo.toml 2>&1
 # Tracy profiler support (connect with Tracy GUI while running):
-cd /c/code/endless/rust && cargo run --release --features tracy 2>&1
+k3sc cargo-lock run --release --manifest-path /c/code/endless/rust/Cargo.toml --features tracy 2>&1
 ```
 
 ## BRP (Bevy Remote Protocol)
@@ -200,6 +200,9 @@ These broke during the migration and were fixed in commits. Reference when touch
 - **Cleanup must cover ALL spawned entity types**: `cleanup_test_world` despawns `NpcIndex` entities, but if a test spawns other entities (FarmReadyMarker, projectiles, etc.), add a query for them too. Leaked entities break subsequent tests in Run All.
 - **Neutralize orthogonal systems**: When testing behavior X, force-satisfy unrelated needs so the test isn't derailed. E.g., start energy high or use fast time_scale so tests complete before energy drains to 0 (starvation).
 - **Don't double-consume queues**: If a state transition already pops from a queue (e.g., `auto_start_next_test` pops `RunAllState.queue`), the completion handler should only check `is_empty()`, not also pop. Two consumers = skipped entries.
+
+## Performance Rules
+- **Perf fixes require bench tests**: Any PR tagged as a performance fix MUST include a Criterion benchmark in `rust/benches/system_bench.rs` for the affected system before merging. No exceptions.
 
 ## Performance Patterns (50K NPCs)
 - **Single-pass buffer writes**: Write all fields (with defaults) per-entity in one loop iteration. Don't clear-all-then-set (two O(n) passes). Dead NPCs are sentinel-culled by the renderer (x < -9000) so stale data is harmless.
