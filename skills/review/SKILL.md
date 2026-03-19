@@ -126,30 +126,7 @@ Based on the issue title and labels, run targeted checks using `endless-cli`:
 - **test** label: unit tests already ran; just confirm build + launch success
 - **Default**: baseline test output is sufficient
 
-Available `endless-cli` commands (verb_noun convention):
-
-**Read:**
-- `endless-cli get_summary` -- full game state
-- `endless-cli get_perf` -- FPS, UPS, entity counts, timings
-- `endless-cli get_entity entity:{id}` -- inspect one NPC or building by entity ID
-- `endless-cli get_squad index:N` -- inspect squad
-- `endless-cli list_buildings town:N` -- list all buildings with entity IDs, growth, claimed/present
-- `endless-cli list_npcs town:N job:Woodcutter` -- list NPCs with entity IDs, filter by town/job
-
-**Create/Delete:**
-- `endless-cli create_building town:N kind:X col:N row:N` -- place building
-- `endless-cli delete_building town:N col:N row:N` -- remove building
-
-**Update:**
-- `endless-cli set_time paused:false time_scale:4.0` -- control time
-- `endless-cli set_policy town:N eat_food:true` -- set town policies
-
-**Actions:**
-- `endless-cli apply_upgrade town:N upgrade_idx:N` -- apply upgrade
-- `endless-cli send_chat town:N to:M message:hello` -- send chat
-- `endless-cli recruit_squad` / `endless-cli dismiss_squad` -- squad management
-
-Adapt test sequence intelligently based on what the PR actually changes.
+See `endless-cli` skill for full command reference. Adapt test sequence based on what the PR changes.
 
 **ALL functionality must be testable through BRP.** If any feature needed for verification is missing from BRP, **fix it immediately** on the branch -- add the missing BRP support to `rust/src/systems/remote.rs`, rebuild, and re-test.
 

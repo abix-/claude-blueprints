@@ -23,7 +23,7 @@ The CLI prepends `endless/` to the command name automatically. The registered Ru
 ```bash
 endless-cli get_summary                              # full game state
 endless-cli get_perf                                 # FPS, UPS, entity counts, system timings
-endless-cli debug <uid>                              # inspect entity by UID (hardcoded to get_entity)
+endless-cli get_entity <uid>                         # inspect entity by UID (positional arg)
 endless-cli get_squad index:0                        # inspect squad
 endless-cli list_buildings town:0                    # list buildings with entity IDs
 endless-cli list_npcs town:0 job:Woodcutter          # list NPCs, filter by town/job
