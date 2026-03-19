@@ -83,9 +83,8 @@ for i in $(seq 1 30); do
 done
 ```
 
-## Known issues
+## Caveats
 
-- **CLI shorthand broken**: The help text shows `summary`, `perf`, `build`, etc. but the Rust BRP registers `get_summary`, `get_perf`, `create_building`, etc. Use the full names.
 - k3s pods have no GPU/display -- endless-cli won't work there.
 - Connection refused = game not running.
 - Silent placement failure: `create_building` may silently fail on occupied/water/OOB cells.
