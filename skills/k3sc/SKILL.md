@@ -84,6 +84,21 @@ Label transitions in `handleCompleted`:
 3. Build image via WSL nerdctl (into k3s containerd namespace)
 4. `kubectl rollout restart deployment k3sc-operator -n claude-agents`
 
+## rotate-auth
+
+`k3sc rotate-auth` updates the `claude-secrets` k8s secret from local auth files. Use when agent pods fail with 401/expired credentials.
+
+Sources:
+- Claude: `~/.claude/.credentials.json` (OAuth token)
+- GitHub: `~/.gh-token`
+- Codex: `~/.codex/auth.json`
+
+Flow when tokens expire:
+1. `claude auth login` (browser OAuth for Claude)
+2. `k3sc rotate-auth` (patches k8s secret, tokens never exposed to agents)
+
+Secrets are passed to kubectl via stdin -- never in process args or shell history.
+
 ## Key patterns
 
 - **cobra** for CLI subcommands
