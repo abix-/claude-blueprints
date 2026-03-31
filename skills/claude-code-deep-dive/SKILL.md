@@ -1,13 +1,38 @@
 ---
 name: claude-code-deep-dive
-description: Deep architectural reference for Claude Code internals -- the query loop, prompt caching ("Groundhog Replay"), tool orchestration, state management, and cost model. Use when reasoning about Claude Code behavior, optimizing token usage, or debugging cache breaks.
+description: Deep architectural reference for Claude Code internals -- the query loop, The Prestige (prompt caching illusion), tool orchestration, state management, and cost model. Use when reasoning about Claude Code behavior, optimizing token usage, or debugging cache breaks.
 user-invocable: true
-version: "1.0"
+version: "1.1"
 updated: "2026-03-31"
 ---
 # Claude Code Deep Dive
 
 Reverse-engineered from Claude Code source (TypeScript/Bun/Ink). This is the actual architecture, not documentation -- verified against the code.
+
+## The Prestige -- How Claude Code Actually Works
+
+Every great magic trick consists of three parts:
+
+**The Pledge** -- the magician shows you something ordinary. A conversation. You type a message, Claude responds. It looks like a continuous session.
+
+**The Turn** -- the magician makes it disappear. After every response, the server-side Claude instance is gone. No memory. No state. No session. The previous instance is dead.
+
+**The Prestige** -- the magician brings it back. A brand new Claude instance appears, fed the entire conversation from the beginning. It replays every token, reconstructs the same mental state, and responds as if it was there the whole time.
+
+The audience (you) sees one continuous conversation. Behind the curtain, it's a new clone every turn. The old one is destroyed. You pay for the cloning.
+
+| The Prestige | Claude Code |
+|---|---|
+| The Pledge | User sees a continuous conversation |
+| The Turn | Server-side instance dies (stateless API) |
+| The Prestige | New instance cloned from full history replay |
+| The cloning machine | Prompt cache (KV tensor checkpoint) |
+| Cost of the machine | Cache read tokens (10% of input price) |
+| Drowning the original | Server discards all state between calls |
+| Angier's diary | Compaction summary (cliff notes for the clone) |
+| The audience | The user, who never sees the swap |
+
+This framing is used throughout this document. "The Prestige" = the per-turn full-history replay. "The cloning machine" = prompt caching. "Angier's diary" = compaction.
 
 ---
 
@@ -224,15 +249,15 @@ Skills found during file operations (e.g., reading a SKILL.md in a project) are 
 
 ---
 
-## 7. The Groundhog Replay -- Prompt Caching
+## 7. The Cloning Machine -- Prompt Caching
 
 ### What it is
 
-The Claude API is **stateless**. Every API call sends the entire conversation from scratch -- system prompt, tool definitions, and every prior message. On turn 50, even a 10-token user message triggers a request containing all 49 previous turns.
+The Claude API is **stateless**. Every API call sends the entire conversation from scratch -- system prompt, tool definitions, and every prior message. On turn 50, even a 10-token user message triggers a request containing all 49 previous turns. This is **The Prestige** -- a new clone, built from the full script of every previous performance.
 
-The "cache" is a **KV tensor checkpoint**, not a result cache. The server recognizes "I've computed attention for this exact token prefix before" and skips the transformer forward pass for those tokens. But it still loads the tensors, allocates GPU memory, and attends over cached positions during generation.
+The "cache" is the **cloning machine** -- a KV tensor checkpoint, not a result cache. The server recognizes "I've computed attention for this exact token prefix before" and skips the transformer forward pass for those tokens. But it still loads the tensors, allocates GPU memory, and attends over cached positions during generation. The clone still needs to be built. The machine just builds it faster.
 
-This is the **Groundhog Replay**: every turn, the server wakes up with no memory and fast-forwards through the entire conversation. The "cache read" discount (90% off) is the fast-forward fee. You still pay for the rewind.
+What Anthropic calls "cache read tokens" is the **cost of the cloning machine**. 90% off full input price. You still pay 10% for every token of every prior turn, every single time. And like Angier's machine, you pay every performance.
 
 ### Pricing reality
 
@@ -346,7 +371,7 @@ Two-phase detection system:
 - Logs `tengu_prompt_cache_break` analytics event with full diagnostic payload
 
 Special cases that are NOT cache breaks:
-- `notifyCompaction()`: Resets baseline after auto-compact (legitimately reduces prefix)
+- `notifyCompaction()`: Resets baseline after compaction / diary rewrite (legitimately reduces prefix -- the clone is reading new cliff notes, not the old script)
 - `notifyCacheDeletion()`: Resets after `cache_edits` deletions (expected drop)
 - Haiku models are excluded (different caching behavior)
 
@@ -461,9 +486,30 @@ Disabled by:
 
 ---
 
-## 10. Auto-Compact
+## 10. Angier's Diary -- Compaction
 
-**File**: `services/compact/autoCompact.ts`
+**Files**: `services/compact/autoCompact.ts`, `services/compact/compact.ts`, `services/compact/prompt.ts`
+
+Compaction is not compression. It is an **amnestic reset** -- controlled memory destruction with a handwritten summary left behind for the next clone.
+
+In The Prestige terms: the diary gets too long to carry. Someone writes cliff notes. The next clone reads the cliff notes instead of the full diary. It never actually lived those events -- it just read the summary and pretends it did.
+
+### What actually happens
+
+1. **Panic**: Context exceeds ~87% of window (configurable)
+2. **One last Prestige**: A forked agent replays the ENTIRE conversation one more time, with a prompt asking it to summarize itself into 9 sections (Primary Request, Key Concepts, Files & Code, Errors & Fixes, Problem Solving, All User Messages, Pending Tasks, Current Work, Next Step)
+3. **Amnesia**: All prior messages are deleted. File state cache is cleared. The conversation before the compact boundary is gone from API calls forever
+4. **Scramble**: The system re-attaches critical context -- recently-read files, current plan, invoked skills, tool schemas, MCP instructions, session hooks -- because the summary won't have captured all of it
+5. **Hope**: The model continues from the summary with no actual memory. If the summary missed a detail, it's gone
+
+### The cost of writing the diary
+
+Compaction is not free. The summary API call is itself a full Prestige:
+- Sends entire conversation as input (cache read rates)
+- Generates ~5-20K tokens of summary output (at output token rates, 5x input)
+- Then post-compact re-reads files (more tokens next turn)
+
+On a 200K context compaction with Opus 4.6: ~$0.15-0.25 per compaction.
 
 ### When it triggers
 
@@ -476,13 +522,17 @@ For 200K context: triggers at ~167K tokens. For 1M context: triggers at ~967K to
 
 Override with `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` (percentage of effective window).
 
+### Partial compaction (the diary addendum)
+
+When a compact boundary already exists, `PARTIAL_COMPACT_PROMPT` only summarizes messages AFTER the last boundary, keeping the previous summary intact. The new clone reads the old cliff notes plus a new addendum, instead of re-summarizing already-summarized content.
+
 ### Circuit breaker
 
-After 3 consecutive autocompact failures, stops retrying. Prevents wasting API calls when context is irrecoverably over limit (e.g., prompt_too_long errors). BQ data showed 1,279 sessions with 50+ consecutive failures.
+After 3 consecutive compaction failures, stops retrying. Prevents wasting API calls when context is irrecoverably over limit (e.g., prompt_too_long errors). BQ data showed 1,279 sessions with 50+ consecutive failures.
 
-### Impact on caching
+### Impact on the cloning machine
 
-Compaction destroys the cached prefix (conversation history is rewritten as a summary). `notifyCompaction()` resets the cache break detection baseline so the expected drop in cache reads isn't flagged as a bug.
+Compaction destroys the cached prefix (conversation history is rewritten as a summary). The next Prestige builds a completely different clone -- different token sequence, no cache hit on the old prefix. `notifyCompaction()` resets the cache break detection baseline so the expected drop in cache reads isn't flagged as a bug.
 
 ---
 
@@ -586,10 +636,23 @@ When `COORDINATOR_MODE` is enabled, the main thread becomes a coordinator that o
 
 ## Key Metrics to Watch
 
-| Metric | Healthy | Unhealthy | Check |
+| Metric | Healthy | Unhealthy | What it means in Prestige terms |
 |---|---|---|---|
-| Cache read ratio | >95% of input tokens | <80% | `/cost` or analytics |
-| Cache breaks per session | 0-2 | >5 | `tengu_prompt_cache_break` events |
-| Auto-compact frequency | 0-3 per session | >10 | Indicates context bloat |
-| Cache write tokens | Small fraction of reads | Approaching read count | Cache is churning |
-| 1h TTL eligibility | Latched true | Flipping mid-session | Check `should1hCacheTTL` |
+| Cache read ratio | >95% of input | <80% | Cloning machine is working (high) or broken (low) |
+| Cache breaks per session | 0-2 | >5 | Cloning machine had to be rebuilt (script changed) |
+| Compaction frequency | 0-3 per session | >10 | Diary rewrites -- each one is a full Prestige + output cost |
+| Cache write tokens | Small fraction of reads | Approaching reads | Machine is rebuilding every show instead of reusing |
+| 1h TTL eligibility | Latched true | Flipping mid-session | Machine's rental agreement is unstable |
+| Total cache reads/week | Context-dependent | Billions | The weekly cost of the illusion -- every clone, every turn |
+
+### Reducing the cost of The Prestige
+
+The cloning machine's cost scales with **script length x number of performances**. To reduce it:
+
+1. **Shorter scripts** (compact earlier): `CLAUDE_CODE_AUTO_COMPACT_WINDOW=80000` and `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=60` -- rewrite the diary when it hits 48K tokens instead of the default ~967K (1M model). Each subsequent clone reads a shorter script.
+
+2. **Thinner scripts** (less context per turn): Trim CLAUDE.md files, remove unused MCP tools, use `Read` with `offset`/`limit`, use `Grep` with `head_limit`. Every token saved compounds across all future performances.
+
+3. **Fewer performances** (shorter sessions): Start fresh conversations more often. A 50-turn session means 50 Prestiges. Five 10-turn sessions mean 50 Prestiges too, but with much shorter scripts at peak.
+
+4. **Cheaper performers** (model choice): Haiku at $0.10/Mtok cache read vs Opus at $0.50/Mtok. But a smarter model that finishes in fewer turns can be cheaper overall -- fewer performances beats cheaper clones.
