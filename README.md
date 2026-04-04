@@ -1,5 +1,7 @@
 # claude-blueprints
 
+**Status: active -- skills and hooks evolve frequently**
+
 Personal Claude configuration shared across Claude web and Claude Code instances.
 
 ## Structure
