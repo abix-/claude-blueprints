@@ -10,7 +10,6 @@ Usage:
     python google_search.py "my query"
     python google_search.py "my query" --num 20
     python google_search.py "my query" --json
-    python google_search.py "my query" --keep-open
 
 Exit codes:
     0  success
@@ -174,8 +173,6 @@ def main():
     ap.add_argument("query", help="search query")
     ap.add_argument("--num", type=int, default=10, help="max results (default 10)")
     ap.add_argument("--json", action="store_true", help="output as JSON")
-    ap.add_argument("--keep-open", action="store_true",
-                    help="leave the result tab open; script waits for Enter before closing it")
     ap.add_argument("--profile", default=DEFAULT_PROFILE,
                     help=f"user-data-dir for auto-launched Chrome (default: {DEFAULT_PROFILE})")
     args = ap.parse_args()
@@ -188,7 +185,6 @@ def main():
 
     driver = None
     search_handle = None
-    reuse_startup_tab = False
     try:
         try:
             driver = sel["webdriver"].Chrome(options=opts)
@@ -200,9 +196,8 @@ def main():
             # Cold launch: reuse Chrome's default tab instead of opening a second one.
             search_handle = driver.window_handles[0]
             driver.switch_to.window(search_handle)
-            reuse_startup_tab = True
         else:
-            # Warm: Chrome already had tabs; open a disposable one for this search.
+            # Warm: open a disposable tab for this search.
             driver.switch_to.new_window("tab")
             search_handle = driver.current_window_handle
 
@@ -244,12 +239,6 @@ def main():
                     print(f"   {r['snippet']}")
                 print()
 
-        if args.keep_open:
-            try:
-                input("Press Enter to continue... ")
-            except EOFError:
-                pass
-
     except KeyboardInterrupt:
         print("interrupted", file=sys.stderr)
         sys.exit(130)
@@ -260,9 +249,7 @@ def main():
         if driver is not None:
             try:
                 should_close = (
-                    not args.keep_open
-                    and not reuse_startup_tab
-                    and search_handle is not None
+                    search_handle is not None
                     and search_handle in driver.window_handles
                 )
                 if should_close:
