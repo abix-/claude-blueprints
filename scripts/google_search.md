@@ -19,24 +19,24 @@ Bedrock provider) or returns nothing useful.
    result wrapper, extracts title, url, and a best-effort snippet.
 6. Prints plain text (default) or JSON (`--json`) to stdout.
 
-Chrome stays running between invocations, so subsequent calls skip the
-startup cost. First call: ~5-6s. Warm calls: ~4s.
+Each search closes its tab when done, so Chrome exits when the last tab
+closes. Every invocation launches a fresh Chrome (~5-6s per call).
 
 ## Tab behavior
 
 - **Cold launch** (Chrome was not running): reuse the default new-tab that
-  Chrome opens at startup. Navigate it to Google. Leave it open after
-  exit. No second tab is created.
+  Chrome opens at startup. Navigate it to Google. Close it when done.
+  Closing the last tab causes Chrome to exit.
 - **Warm call** (Chrome was already running): open a new disposable tab,
-  run the search, close that tab when done. The result of the first cold
-  search stays visible; disposable tabs don't accumulate.
-- **`--keep-open`**: skip the tab close. Useful if you want to keep the
-  result page around to click through manually.
+  run the search, close that tab when done. If it was the only tab, Chrome
+  exits.
+
+Every search closes its tab when done. No tabs are left behind.
 
 ## CLI
 
 ```
-python google_search.py "<query>" [--num N] [--json] [--keep-open] [--profile PATH]
+python google_search.py "<query>" [--num N] [--json] [--profile PATH]
 ```
 
 - `query` (required): the search string.
@@ -44,7 +44,6 @@ python google_search.py "<query>" [--num N] [--json] [--keep-open] [--profile PA
   returns ~10 per page; higher values request a larger page.
 - `--json`: emit a single JSON object `{query, results: [{title, url, snippet}]}`
   instead of the plain-text numbered listing.
-- `--keep-open`: leave the search tab open on exit.
 - `--profile PATH`: override the user-data-dir used when auto-launching
   Chrome. Ignored if Chrome is already running on port 9222 (you get
   whatever profile that Chrome was started with).
