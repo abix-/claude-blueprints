@@ -1,34 +1,38 @@
 #!/usr/bin/env python3
 """
-Google search via a real visible Chrome window, driven by Selenium.
+Google search via a reused visible Chrome, driven by Selenium.
+
+Launches Chrome once (with --remote-debugging-port=9222) and reuses the same
+browser process across subsequent invocations. First call ~5-6s; later calls
+~1-2s because Chrome is already warm.
 
 Usage:
     python google_search.py "my query"
     python google_search.py "my query" --num 20
     python google_search.py "my query" --json
     python google_search.py "my query" --keep-open
-    python google_search.py "my query" --profile "C:/path/to/profile"
-
-Plain text is the default output. Use --json for machine-readable output.
 
 Exit codes:
     0  success
-    1  driver/fetch failure
+    1  driver/chrome failure
     2  google served captcha (/sorry/)
     3  results selector did not match within timeout
     4  selenium not installed
     130 KeyboardInterrupt
-
-Dependency:
-    pip install selenium
-
-ChromeDriver is fetched automatically on first run by Selenium Manager; no
-separate install step is required.
 """
 
 import argparse
 import json
+import os
+import socket
+import subprocess
 import sys
+import time
+
+
+DEBUG_PORT = 9222
+DEFAULT_PROFILE = os.path.expanduser("~/.cache/claude-google-search/profile")
+CHROME_EXE = os.environ.get("CHROME_EXE", r"C:\Program Files\Google\Chrome\Application\chrome.exe")
 
 
 def _import_selenium():
@@ -38,44 +42,65 @@ def _import_selenium():
         from selenium.webdriver.common.by import By
         from selenium.webdriver.support import expected_conditions as EC
         from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.common.exceptions import (
-            TimeoutException,
-            WebDriverException,
-            SessionNotCreatedException,
-        )
+        from selenium.common.exceptions import TimeoutException, WebDriverException
         return {
             "webdriver": webdriver, "Options": Options, "By": By, "EC": EC,
             "WebDriverWait": WebDriverWait,
             "TimeoutException": TimeoutException,
             "WebDriverException": WebDriverException,
-            "SessionNotCreatedException": SessionNotCreatedException,
         }
     except ImportError:
-        print(
-            "selenium not installed. run:\n    pip install selenium",
-            file=sys.stderr,
-        )
+        print("selenium not installed. run:\n    pip install selenium", file=sys.stderr)
         sys.exit(4)
 
 
-def build_options(sel, profile: str | None):
-    opts = sel["Options"]()
-    opts.add_argument("--lang=en-US")
-    opts.add_argument("--disable-blink-features=AutomationControlled")
-    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
-    opts.add_experimental_option("useAutomationExtension", False)
-    if profile:
-        opts.add_argument(f"--user-data-dir={profile}")
-    return opts
+def port_open(port: int, timeout: float = 0.3) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def ensure_chrome_running(profile: str) -> bool:
+    """Returns True if we had to launch Chrome, False if it was already running."""
+    if port_open(DEBUG_PORT):
+        return False
+    os.makedirs(profile, exist_ok=True)
+    if not os.path.exists(CHROME_EXE):
+        print(f"chrome not found at {CHROME_EXE} (set CHROME_EXE env var to override)", file=sys.stderr)
+        sys.exit(1)
+    args = [
+        CHROME_EXE,
+        f"--remote-debugging-port={DEBUG_PORT}",
+        f"--user-data-dir={profile}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-blink-features=AutomationControlled",
+        "--lang=en-US",
+    ]
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    subprocess.Popen(
+        args,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+        close_fds=True, creationflags=creationflags,
+    )
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if port_open(DEBUG_PORT):
+            return True
+        time.sleep(0.1)
+    print(f"chrome did not open port {DEBUG_PORT} within 10s", file=sys.stderr)
+    sys.exit(1)
 
 
 def dismiss_consent(sel, driver):
-    """Click 'Accept all' / 'I agree' if a consent banner appears. Silent on miss."""
     By = sel["By"]
     WebDriverWait = sel["WebDriverWait"]
     EC = sel["EC"]
     TimeoutException = sel["TimeoutException"]
-
     xpath = (
         "//button["
         ".//div[contains(., 'Accept all') or contains(., 'I agree')] "
@@ -84,9 +109,7 @@ def dismiss_consent(sel, driver):
         "]"
     )
     try:
-        btn = WebDriverWait(driver, 3).until(
-            EC.element_to_be_clickable((By.XPATH, xpath))
-        )
+        btn = WebDriverWait(driver, 1).until(EC.element_to_be_clickable((By.XPATH, xpath)))
         btn.click()
     except TimeoutException:
         pass
@@ -95,7 +118,6 @@ def dismiss_consent(sel, driver):
 def extract_results(sel, driver, max_num: int):
     By = sel["By"]
     anchors = driver.find_elements(By.CSS_SELECTOR, "div#search a:has(h3)")
-
     seen = set()
     results = []
     for a in anchors:
@@ -118,8 +140,6 @@ def extract_results(sel, driver, max_num: int):
         if not title:
             continue
 
-        # Snippet: text of the full result wrapper minus the title/URL noise.
-        # Modern SERP wraps each organic hit in div.MjjYud; fall back to any ancestor div.
         snippet = ""
         try:
             container = a.find_element(
@@ -128,7 +148,6 @@ def extract_results(sel, driver, max_num: int):
             )
             full = container.text or ""
             lines = [ln.strip() for ln in full.splitlines() if ln.strip()]
-            # Drop lines that are the title, a URL breadcrumb, or boilerplate
             skip = {"Web results", title}
             filtered = []
             for ln in lines:
@@ -136,7 +155,6 @@ def extract_results(sel, driver, max_num: int):
                     continue
                 if ln.startswith("http://") or ln.startswith("https://"):
                     continue
-                # URL breadcrumb lines contain the domain with "›" separators
                 if " > " in ln or chr(0x203A) in ln:
                     continue
                 filtered.append(ln)
@@ -152,30 +170,42 @@ def extract_results(sel, driver, max_num: int):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Google search via visible Chrome (Selenium)")
+    ap = argparse.ArgumentParser(description="Google search via reused visible Chrome")
     ap.add_argument("query", help="search query")
     ap.add_argument("--num", type=int, default=10, help="max results (default 10)")
     ap.add_argument("--json", action="store_true", help="output as JSON")
     ap.add_argument("--keep-open", action="store_true",
-                    help="leave the browser open; script waits for Enter before closing")
-    ap.add_argument("--profile", default=None,
-                    help="path to a persistent Chrome user-data-dir (optional)")
+                    help="leave the result tab open; script waits for Enter before closing it")
+    ap.add_argument("--profile", default=DEFAULT_PROFILE,
+                    help=f"user-data-dir for auto-launched Chrome (default: {DEFAULT_PROFILE})")
     args = ap.parse_args()
 
     sel = _import_selenium()
-    opts = build_options(sel, args.profile)
+    just_launched = ensure_chrome_running(args.profile)
+
+    opts = sel["Options"]()
+    opts.debugger_address = f"127.0.0.1:{DEBUG_PORT}"
 
     driver = None
+    search_handle = None
+    reuse_startup_tab = False
     try:
-        driver = sel["webdriver"].Chrome(options=opts)
-    except sel["SessionNotCreatedException"] as e:
-        print(f"chrome/driver mismatch: {e}", file=sys.stderr)
-        sys.exit(1)
-    except sel["WebDriverException"] as e:
-        print(f"failed to start chrome: {e}", file=sys.stderr)
-        sys.exit(1)
+        try:
+            driver = sel["webdriver"].Chrome(options=opts)
+        except sel["WebDriverException"] as e:
+            print(f"failed to attach to chrome on port {DEBUG_PORT}: {e}", file=sys.stderr)
+            sys.exit(1)
 
-    try:
+        if just_launched and driver.window_handles:
+            # Cold launch: reuse Chrome's default tab instead of opening a second one.
+            search_handle = driver.window_handles[0]
+            driver.switch_to.window(search_handle)
+            reuse_startup_tab = True
+        else:
+            # Warm: Chrome already had tabs; open a disposable one for this search.
+            driver.switch_to.new_window("tab")
+            search_handle = driver.current_window_handle
+
         import urllib.parse
         qs = urllib.parse.urlencode({
             "q": args.query, "hl": "en", "gl": "us", "num": args.num + 2,
@@ -216,7 +246,7 @@ def main():
 
         if args.keep_open:
             try:
-                input("Press Enter to close the browser... ")
+                input("Press Enter to continue... ")
             except EOFError:
                 pass
 
@@ -228,6 +258,18 @@ def main():
         sys.exit(1)
     finally:
         if driver is not None:
+            try:
+                should_close = (
+                    not args.keep_open
+                    and not reuse_startup_tab
+                    and search_handle is not None
+                    and search_handle in driver.window_handles
+                )
+                if should_close:
+                    driver.switch_to.window(search_handle)
+                    driver.close()
+            except Exception:
+                pass
             try:
                 driver.quit()
             except Exception:
