@@ -19,19 +19,20 @@ Bedrock provider) or returns nothing useful.
    result wrapper, extracts title, url, and a best-effort snippet.
 6. Prints plain text (default) or JSON (`--json`) to stdout.
 
-Each search closes its tab when done, so Chrome exits when the last tab
-closes. Every invocation launches a fresh Chrome (~5-6s per call).
+Each search opens and closes its own tab, leaving the initial new-tab
+page untouched. ~5-6s per call on cold Chrome, ~2-3s on warm Chrome.
 
 ## Tab behavior
 
-- **Cold launch** (Chrome was not running): reuse the default new-tab that
-  Chrome opens at startup. Navigate it to Google. Close it when done.
-  Closing the last tab causes Chrome to exit.
-- **Warm call** (Chrome was already running): open a new disposable tab,
-  run the search, close that tab when done. If it was the only tab, Chrome
-  exits.
+Chrome's initial new-tab page (the one that appears when Chrome launches)
+is never used or closed by this script.
 
-Every search closes its tab when done. No tabs are left behind.
+Every search:
+1. Opens a fresh tab next to whatever tabs already exist.
+2. Navigates that tab to Google and extracts results.
+3. Closes that tab when done.
+
+No tabs are left behind by a search. The initial new-tab page stays untouched.
 
 ## CLI
 
