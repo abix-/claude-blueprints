@@ -178,7 +178,7 @@ def main():
     args = ap.parse_args()
 
     sel = _import_selenium()
-    just_launched = ensure_chrome_running(args.profile)
+    ensure_chrome_running(args.profile)
 
     opts = sel["Options"]()
     opts.debugger_address = f"127.0.0.1:{DEBUG_PORT}"
@@ -192,14 +192,9 @@ def main():
             print(f"failed to attach to chrome on port {DEBUG_PORT}: {e}", file=sys.stderr)
             sys.exit(1)
 
-        if just_launched and driver.window_handles:
-            # Cold launch: reuse Chrome's default tab instead of opening a second one.
-            search_handle = driver.window_handles[0]
-            driver.switch_to.window(search_handle)
-        else:
-            # Warm: open a disposable tab for this search.
-            driver.switch_to.new_window("tab")
-            search_handle = driver.current_window_handle
+        # Always open a fresh tab; never touch Chrome's initial new-tab page.
+        driver.switch_to.new_window("tab")
+        search_handle = driver.current_window_handle
 
         import urllib.parse
         qs = urllib.parse.urlencode({
