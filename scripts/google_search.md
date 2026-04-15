@@ -4,35 +4,21 @@ Google search via a persistent Chrome window, driven by Selenium. Built as a
 fallback for when the built-in `WebSearch` tool is unavailable (e.g. AWS
 Bedrock provider) or returns nothing useful.
 
-## What it does
+## How it works
 
-1. Checks whether Chrome is already listening on `127.0.0.1:9222` (the
-   remote-debugging port).
-2. If not, launches Chrome with a dedicated profile at
-   `~/.cache/claude-google-search/profile` and waits up to 10s for port 9222
-   to open.
-3. Attaches Selenium to that Chrome via `debugger_address`.
-4. Opens or reuses a tab (see "Tab behavior" below), navigates to
-   `https://www.google.com/search?q=<query>`, dismisses the consent banner
-   if present, waits for the results to render.
-5. Parses the DOM for `h3` + parent anchor, walks up to the `div.MjjYud`
-   result wrapper, extracts title, url, and a best-effort snippet.
-6. Prints plain text (default) or JSON (`--json`) to stdout.
+1. If Chrome isn't already listening on `127.0.0.1:9222`, launch it with a
+   dedicated profile at `~/.cache/claude-google-search/profile` and wait up
+   to 10s for the port to open. Chrome's initial new-tab page is left
+   untouched — the script never uses or closes it.
+2. Attach Selenium via `debugger_address`.
+3. Open a fresh tab, navigate to `https://www.google.com/search?q=<query>`,
+   dismiss the consent banner if present, wait for results to render.
+4. Parse the DOM: `h3` + parent anchor, walk up to the `div.MjjYud` result
+   wrapper, extract title, url, and a best-effort snippet.
+5. Print plain text (default) or JSON (`--json`) to stdout.
+6. Close the tab that was opened in step 3.
 
-Each search opens and closes its own tab, leaving the initial new-tab
-page untouched. ~5-6s per call on cold Chrome, ~2-3s on warm Chrome.
-
-## Tab behavior
-
-Chrome's initial new-tab page (the one that appears when Chrome launches)
-is never used or closed by this script.
-
-Every search:
-1. Opens a fresh tab next to whatever tabs already exist.
-2. Navigates that tab to Google and extracts results.
-3. Closes that tab when done.
-
-No tabs are left behind by a search. The initial new-tab page stays untouched.
+~5-6s per call on cold Chrome, ~2-3s on warm Chrome.
 
 ## CLI
 
@@ -85,23 +71,21 @@ Snippet is always a string (`""` if none extracted).
 
 ## Dependencies
 
-- Python 3.8+ (uses `str | None` annotation style).
+- Python 3.8+.
 - `pip install selenium` (Selenium 4.6+). ChromeDriver is auto-downloaded
   by Selenium Manager on first run and cached under `~/.cache/selenium`.
 - Google Chrome. Path defaults to
   `C:\Program Files\Google\Chrome\Application\chrome.exe`; override with
   the `CHROME_EXE` environment variable if installed elsewhere.
 
-## Profile location
+## Profile
 
-`~/.cache/claude-google-search/profile`
+`~/.cache/claude-google-search/profile` — separate from your normal Chrome
+profile, so logging in or accumulating cookies here doesn't pollute
+everyday browsing. Google's consent banner is dismissed once and stays
+dismissed because the cookie persists.
 
-Separate from your normal Chrome profile, so logging in there (or
-accumulating cookies) doesn't pollute your everyday browsing. Google's
-consent banner is dismissed once and stays dismissed because the cookie
-persists in this profile.
-
-## Known caveats
+## Caveats
 
 - Chrome enforces a single-instance lock on a user-data-dir. Two parallel
   invocations against the same profile will fail with a profile-in-use
@@ -109,5 +93,4 @@ persists in this profile.
 - The "Chrome is being controlled by automated test software" banner is
   hidden via `--disable-blink-features=AutomationControlled` +
   `excludeSwitches=enable-automation`.
-- If Chrome is killed externally, the next invocation auto-relaunches
-  (the port-closed path).
+- If Chrome is killed externally, the next invocation auto-relaunches.
