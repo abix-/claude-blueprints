@@ -240,9 +240,41 @@
     } else if (el.className && typeof el.className.baseVal === "string") {
       clsString = el.className.baseVal;
     }
-    const classes = clsString.trim().split(/\s+/).filter(Boolean).slice(0, 3).join(".");
+    const classes = clsString.trim().split(/\s+/).filter(Boolean).slice(0, 2).join(".");
     const id = el.id ? "#" + el.id : "";
-    return tag + (classes ? "." + classes : "") + id;
+    const base = tag + (classes ? "." + classes : "") + id;
+
+    // Distinguishing attributes worth surfacing so the user can tell
+    // apart identically-tagged removals (e.g. Reddit's many RelatedCommunityRec
+    // blocks, or individual feed posts, or <iframe> removals).
+    const interestingAttrs = [
+      "name", "data-testid", "data-post-id", "aria-label",
+      "post-title", "post-type", "subreddit-prefixed-name",
+      "author", "post-id", "data-promoted", "data-ad", "data-ad-type",
+      "src", "href", "title", "alt"
+    ];
+    const attrParts = [];
+    try {
+      for (const attr of interestingAttrs) {
+        if (!el.hasAttribute || !el.hasAttribute(attr)) continue;
+        let v = el.getAttribute(attr);
+        if (!v) continue;
+        if (v.length > 70) v = v.slice(0, 67) + "...";
+        attrParts.push(attr + '="' + v + '"');
+        if (attrParts.length >= 3) break;
+      }
+    } catch (e) { /* ignore */ }
+
+    let textSnippet = "";
+    try {
+      const txt = (el.textContent || "").replace(/\s+/g, " ").trim();
+      if (txt) textSnippet = txt.length > 80 ? txt.slice(0, 77) + "..." : txt;
+    } catch (e) { /* ignore */ }
+
+    const parts = [base];
+    if (attrParts.length) parts.push(attrParts.join(" "));
+    if (textSnippet) parts.push('"' + textSnippet + '"');
+    return parts.join("  |  ");
   }
 
   function applyRemove() {
