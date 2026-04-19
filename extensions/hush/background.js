@@ -486,6 +486,7 @@ function computeSuggestions(state, config) {
   const existingRemove = new Set(Array.isArray(cfg.remove) ? cfg.remove : []);
   const existingHide = new Set(Array.isArray(cfg.hide) ? cfg.hide : []);
   const dismissed = new Set(state.dismissed);
+  log("computeSuggestions:", hostname, "matchedKey", match && match.key, "existingBlock", Array.from(existingBlock), "existingRemove.size", existingRemove.size);
 
   const resources = state.seenResources;
   const out = [];
@@ -501,7 +502,9 @@ function computeSuggestions(state, config) {
   }
   for (const [host, hits] of beaconByHost) {
     const value = "||" + host;
-    if (existingBlock.has(value)) continue;
+    const hasMatch = existingBlock.has(value);
+    log("beacon suggestion candidate:", value, "hits", hits.length, "existingBlock.has", hasMatch);
+    if (hasMatch) continue;
     out.push({
       key: "block::" + value,
       layer: "block",
