@@ -500,6 +500,26 @@ function computeSuggestions(state, config) {
     arr.push(r);
     beaconByHost.set(r.host, arr);
   }
+  // Shared diagnostic attached to every suggestion so the popup can answer
+  // "why is this suggestion here even though I have a rule for it?" without
+  // requiring the user to open the service worker console.
+  const makeDiag = (value, layer) => ({
+    value,
+    layer,
+    hostname,
+    matchedKey: match && match.key,
+    configHasSite: !!match,
+    existingBlockCount: existingBlock.size,
+    existingBlockSample: Array.from(existingBlock).slice(0, 10),
+    dedupResult: layer === "block"
+      ? (existingBlock.has(value) ? "MATCH (should have been filtered)" : "no match")
+      : layer === "remove"
+      ? (existingRemove.has(value) ? "MATCH (should have been filtered)" : "no match")
+      : layer === "hide"
+      ? (existingHide.has(value) ? "MATCH (should have been filtered)" : "no match")
+      : "unknown layer"
+  });
+
   for (const [host, hits] of beaconByHost) {
     const value = "||" + host;
     const hasMatch = existingBlock.has(value);
@@ -512,7 +532,8 @@ function computeSuggestions(state, config) {
       reason: "sendBeacon target (" + hits.length + " beacon" + (hits.length > 1 ? "s" : "") + " sent)",
       confidence: 95,
       count: hits.length,
-      evidence: hits.slice(0, 5).map(h => h.url)
+      evidence: hits.slice(0, 5).map(h => h.url),
+      diag: makeDiag(value, "block")
     });
   }
 
@@ -537,7 +558,8 @@ function computeSuggestions(state, config) {
       reason: "tracking pixels: " + hits.length + " tiny image" + (hits.length > 1 ? "s" : "") + " (median " + med + "b)",
       confidence: 85,
       count: hits.length,
-      evidence: hits.slice(0, 5).map(h => h.url + " (" + h.transferSize + "b)")
+      evidence: hits.slice(0, 5).map(h => h.url + " (" + h.transferSize + "b)"),
+      diag: makeDiag(value, "block")
     });
   }
 
@@ -565,7 +587,8 @@ function computeSuggestions(state, config) {
       reason: "first-party subdomain with " + requests.length + " tiny response" + (requests.length > 1 ? "s" : "") + " (median " + med + "b)",
       confidence: 70,
       count: requests.length,
-      evidence: requests.slice(0, 5).map(r => r.url + " (" + r.transferSize + "b, " + r.initiatorType + ")")
+      evidence: requests.slice(0, 5).map(r => r.url + " (" + r.transferSize + "b, " + r.initiatorType + ")"),
+      diag: makeDiag(value, "block")
     });
   }
 
@@ -598,7 +621,8 @@ function computeSuggestions(state, config) {
       reason: "polled " + info.count + "x over " + Math.round(span / 1000) + "s (median " + med + "b)",
       confidence: 75,
       count: info.count,
-      evidence: [info.sample]
+      evidence: [info.sample],
+      diag: makeDiag(value, "block")
     });
   }
 
@@ -622,7 +646,8 @@ function computeSuggestions(state, config) {
       reason: "hidden iframe: " + Array.from(info.reasons).join(", "),
       confidence: 80,
       count: info.samples.length,
-      evidence: info.samples.slice(0, 3).map(s => s.outerHTMLPreview)
+      evidence: info.samples.slice(0, 3).map(s => s.outerHTMLPreview),
+      diag: makeDiag(selector, "remove")
     });
   }
 
@@ -639,7 +664,8 @@ function computeSuggestions(state, config) {
       reason: "fixed overlay covering " + s.coverage + "% of viewport (z-index " + s.zIndex + ")",
       confidence: 55,
       count: 1,
-      evidence: [s.rect.w + "x" + s.rect.h + " at z-index " + s.zIndex]
+      evidence: [s.rect.w + "x" + s.rect.h + " at z-index " + s.zIndex],
+      diag: makeDiag(s.selector, "hide")
     });
   }
 

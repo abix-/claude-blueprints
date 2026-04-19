@@ -243,6 +243,59 @@ function renderSuggRow(tabId, hostname, s, isMatched) {
   });
   actions.appendChild(dismissBtn);
 
+  // "Why here?" - inline diagnostic explaining the dedup decision,
+  // so the user can see WHY a suggestion appears even when they think
+  // they have a rule for it.
+  if (s.diag) {
+    const whyBtn = document.createElement("button");
+    whyBtn.textContent = "Why?";
+    whyBtn.style.flex = "0 0 auto";
+    whyBtn.title = "Show dedup diagnostic";
+    const whyPanel = document.createElement("div");
+    whyPanel.className = "sugg-evidence";
+    whyPanel.hidden = true;
+    whyBtn.addEventListener("click", () => {
+      whyPanel.hidden = !whyPanel.hidden;
+      whyBtn.textContent = whyPanel.hidden ? "Why?" : "Hide why";
+      if (!whyPanel.hidden) {
+        whyPanel.innerHTML = "";
+        const info = s.diag;
+        const list = document.createElement("ul");
+        list.className = "sugg-evidence-list";
+        const rows = [
+          ["Checked value", info.value],
+          ["Hostname", info.hostname],
+          ["Matched config key", info.matchedKey || "(no site config matched)"],
+          ["Existing " + info.layer + " rules count", String(info.existingBlockCount)],
+          ["Dedup result", info.dedupResult]
+        ];
+        for (const [k, v] of rows) {
+          const li = document.createElement("li");
+          li.innerHTML = "<b>" + escapeHtml(k) + ":</b> " + escapeHtml(String(v));
+          list.appendChild(li);
+        }
+        if (Array.isArray(info.existingBlockSample) && info.existingBlockSample.length) {
+          const li = document.createElement("li");
+          li.innerHTML = "<b>Existing rules sample (first 10):</b>";
+          list.appendChild(li);
+          for (const entry of info.existingBlockSample) {
+            const liE = document.createElement("li");
+            liE.style.paddingLeft = "12px";
+            liE.title = entry;
+            liE.textContent = entry + " (len=" + entry.length + ")";
+            list.appendChild(liE);
+          }
+          const li2 = document.createElement("li");
+          li2.innerHTML = "<b>Candidate value:</b> " + escapeHtml(info.value) + " (len=" + info.value.length + ")";
+          list.appendChild(li2);
+        }
+        whyPanel.appendChild(list);
+      }
+    });
+    actions.appendChild(whyBtn);
+    li.appendChild(whyPanel);
+  }
+
   const evBtn = document.createElement("button");
   evBtn.textContent = "Evidence";
   evBtn.style.flex = "0 0 auto";
