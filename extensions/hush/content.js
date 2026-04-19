@@ -212,6 +212,53 @@
     }
   });
 
+  // --------------------------------------------------------------
+  // Main-world hook bridge.
+  //
+  // mainworld.js (injected into the page's own JS context) monkey-patches
+  // fetch/XHR/sendBeacon/WebSocket and dispatches CustomEvent("__hush_call__")
+  // for every call with URL, method, body preview, and stack trace. Here
+  // in the isolated world we buffer those events and forward them to
+  // background in throttled batches.
+  // --------------------------------------------------------------
+  const jsCallBuffer = [];
+  const MAX_LOCAL_JS_CALLS = 300;
+  let jsCallSendTimer = null;
+
+  document.addEventListener("__hush_call__", (ev) => {
+    if (!detectorEnabled) return; // gate by user's suggestions toggle
+    const d = ev && ev.detail;
+    if (!d || typeof d !== "object") return;
+    jsCallBuffer.push({
+      kind: String(d.kind || "?"),
+      url: String(d.url || ""),
+      method: String(d.method || ""),
+      bodyPreview: d.bodyPreview == null ? null : String(d.bodyPreview),
+      stack: Array.isArray(d.stack) ? d.stack.slice(0, 6) : [],
+      t: String(d.t || new Date().toISOString())
+    });
+    if (jsCallBuffer.length > MAX_LOCAL_JS_CALLS) {
+      jsCallBuffer.splice(0, jsCallBuffer.length - MAX_LOCAL_JS_CALLS);
+    }
+    scheduleJsCallSend();
+  });
+
+  function scheduleJsCallSend() {
+    if (jsCallSendTimer) return;
+    jsCallSendTimer = setTimeout(() => {
+      jsCallSendTimer = null;
+      const batch = jsCallBuffer.splice(0, jsCallBuffer.length);
+      if (!batch.length) return;
+      try {
+        const p = chrome.runtime.sendMessage({
+          type: "hush:js-calls",
+          calls: batch
+        });
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } catch (e) { /* extension context gone */ }
+    }, 500);
+  }
+
   // Continuous scheduled scans only when the feature is enabled.
   if (detectorEnabled) {
     const fireInitial = () => runScan("dom-content-loaded");

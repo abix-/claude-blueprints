@@ -203,6 +203,35 @@ badge on that tab. Clicking it opens the popup with the Suggestions panel ready 
 review. After you've accepted or dismissed everything, the badge reverts to the
 grey activity count (or disappears if no activity).
 
+### Deep inspection via main-world hooks
+
+When behavioral suggestions are enabled, Hush additionally injects a small
+script into the page's own JavaScript context (via `content_scripts` with
+`"world": "MAIN"`) that monkey-patches:
+
+- `window.fetch`
+- `XMLHttpRequest.prototype.open` and `.send`
+- `navigator.sendBeacon`
+- `WebSocket.prototype.send`
+
+For every call the hook captures the URL, method, a truncated body preview,
+and a short JS stack trace (top 6 frames). These observations are forwarded
+to the background service worker and attached to the per-tab behavior
+state. This gives Hush answers to questions the Resource Timing API alone
+can't provide:
+
+- "Which script fired this beacon?" (stack trace shows the calling file)
+- "What data was sent in that POST body?" (body preview)
+- "What messages are being streamed over this WebSocket?" (send hook)
+
+The hook passes through to the original API immediately, so site behavior
+is unchanged. If a hook fails to install or dispatch (strict CSP, etc.),
+the network request still goes through normally.
+
+Hooks also run inside cross-origin iframes (`all_frames: true`), which
+means ad-iframe internal telemetry is visible too. This is the main way
+to see what an ad iframe is actually exfiltrating to its own servers.
+
 ### Privacy posture
 
 - No network calls from Hush for detection (no filter-list fetch, no telemetry

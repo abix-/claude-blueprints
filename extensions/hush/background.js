@@ -6,6 +6,7 @@ const SESSION_BEHAVIOR_KEY = "tabBehavior";
 const MAX_LOG_ENTRIES = 300;
 const MAX_EVIDENCE = 50;
 const MAX_SEEN_RESOURCES = 500;
+const MAX_JS_CALLS = 500;
 
 // Default allowlist - known-legit things the behavioral detector shouldn't
 // surface as suggestions. Seeded into storage on first install; user can
@@ -303,6 +304,7 @@ function emptyBehavior() {
     seenResources: [],
     latestIframes: [],
     latestStickies: [],
+    jsCalls: [],         // deep trace from main-world hooks
     dismissed: [],       // array of suggestion keys
     suggestions: []
   };
@@ -317,6 +319,7 @@ function getBehavior(tabId) {
   if (!Array.isArray(b.seenResources)) b.seenResources = [];
   if (!Array.isArray(b.latestIframes)) b.latestIframes = [];
   if (!Array.isArray(b.latestStickies)) b.latestStickies = [];
+  if (!Array.isArray(b.jsCalls)) b.jsCalls = [];
   if (!Array.isArray(b.dismissed)) b.dismissed = [];
   if (!Array.isArray(b.suggestions)) b.suggestions = [];
   return b;
@@ -780,6 +783,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return;
   }
 
+  if (msg.type === "hush:js-calls") {
+    const tabId = sender.tab && sender.tab.id;
+    if (typeof tabId !== "number") return;
+    if (!Array.isArray(msg.calls) || !msg.calls.length) return;
+    const state = getBehavior(tabId);
+    for (const c of msg.calls) state.jsCalls.push(c);
+    if (state.jsCalls.length > MAX_JS_CALLS) {
+      state.jsCalls.splice(0, state.jsCalls.length - MAX_JS_CALLS);
+    }
+    schedulePersistBehavior();
+    return;
+  }
+
   if (msg.type === "hush:scan") {
     const tabId = sender.tab && sender.tab.id;
     if (typeof tabId !== "number") return;
@@ -928,12 +944,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }));
 
       // Summarize behavior instead of dumping all 500 seen resources.
+      const jsCallsByKind = {};
+      if (behavior && Array.isArray(behavior.jsCalls)) {
+        for (const c of behavior.jsCalls) {
+          jsCallsByKind[c.kind] = (jsCallsByKind[c.kind] || 0) + 1;
+        }
+      }
       const behaviorSummary = behavior ? {
         pageHost: behavior.pageHost,
         seenResourceCount: behavior.seenResources.length,
         uniqueThirdPartyHostCount: new Set(behavior.seenResources.map(r => r.host).filter(h => h && h !== behavior.pageHost)).size,
         latestHiddenIframeCount: behavior.latestIframes.length,
         latestStickyCount: behavior.latestStickies.length,
+        jsCallCount: behavior.jsCalls.length,
+        jsCallsByKind,
+        recentJsCalls: behavior.jsCalls.slice(-10).map(c => ({
+          kind: c.kind,
+          method: c.method,
+          url: (c.url || "").slice(0, 150),
+          bodyPreview: c.bodyPreview && c.bodyPreview.slice(0, 200),
+          stackTop: (c.stack && c.stack[0]) || ""
+        })),
         dismissedKeyCount: behavior.dismissed.length,
         suggestionCount: behavior.suggestions.length,
         suggestions: behavior.suggestions.map(s => ({
