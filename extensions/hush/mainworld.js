@@ -96,7 +96,16 @@
         stack: captureStack()
       });
     } catch (e) { /* hook must never break the site */ }
-    return _fetch.apply(this, arguments);
+    const p = _fetch.apply(this, arguments);
+    // Attach a silent rejection handler to the original promise so
+    // Chrome's unhandled-rejection tracking doesn't attribute site-level
+    // fetch failures (bad URLs, CORS errors, network drops) to THIS frame.
+    // The site still receives the same rejecting promise from `return p`;
+    // if the site doesn't attach its own .catch(), the unhandled-rejection
+    // warning will fire at the site's own `.then()` or `await` site -
+    // accurate to their code, not noise attributed to Hush.
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    return p;
   };
 
   // ===== XMLHttpRequest =====
