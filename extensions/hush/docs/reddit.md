@@ -19,7 +19,8 @@ Paste this block into Hush as-is, or into the raw-JSON editor:
       "faceplate-partial[name^=\"RelatedCommunityRecommendations\"]"
     ],
     "block": [
-      "||w3-reporting.reddit.com^"
+      "||w3-reporting.reddit.com^",
+      "||reddit.com/svc/shreddit/partial/*/related-community-recommendations"
     ]
   }
 }
@@ -105,9 +106,23 @@ User spotted the "Brand Affiliate" text in a post's credit bar and inspected the
 
 **How it was discovered:** inspecting the DOM around a feed post showed that after each post, Reddit inserts a `<faceplate-partial>` pointing to `/svc/shreddit/partial/XXXXX/related-community-recommendations`. Recognizable by the stable `name` attribute prefix.
 
-**Why Remove:** these are SPA-injected after the initial feed load, so we need MutationObserver to catch them as they appear. They also lazy-load their content over the network, so removing the element before it hydrates also cancels the pending request.
+**Why Remove:** these are SPA-injected after the initial feed load, so we need MutationObserver to catch them as they appear.
 
-**What the evidence looks like in the popup:** Reddit injects several of these in a single feed chunk, so the Removed section will show multiple entries at the same timestamp. Each entry carries the unique `name` attribute (e.g. `name="RelatedCommunityRecommendations_qmZmnB"`) so they're distinguishable in the evidence expansion even though the tag + class signature is identical.
+### Companion rule: network block to prevent re-render loop
+
+The `name` attribute suffix (e.g. `_qmZmnB`) is a stable per-session handle, not a per-element random. That means if the element gets removed, Reddit's framework treats it as missing and re-renders the SAME element, which Hush removes again, which Reddit re-renders, etc. In practice this means 20+ remove/re-render cycles in a few seconds - the feature "works" but with wasted CPU on both sides.
+
+The fix is to also block the endpoint that hydrates the element at the network layer:
+
+```
+||reddit.com/svc/shreddit/partial/*/related-community-recommendations
+```
+
+With the fetch blocked, Reddit's framework sees the request fail and gives up rather than looping. The DOM `remove` rule stays as a safety net for any element created before the block registered.
+
+**What the evidence looks like without the block:** the Removed evidence list shows the same `name="RelatedCommunityRecommendations_XXXXX"` entry removed 20+ times with timestamps a second apart. If you see that pattern for any Hush rule, that's the render-loop smell - add a network block targeting the element's `src`.
+
+**What the evidence looks like with the block:** one removal on first render, then silence. The `<faceplate-partial>` element is no longer created by the framework after it sees the fetch keep failing.
 
 ---
 
