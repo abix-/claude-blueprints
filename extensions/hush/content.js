@@ -14,6 +14,7 @@
 
   const STORAGE_KEY = "config";
   const OPTIONS_KEY = "options";
+  const ALLOWLIST_KEY = "allowlist";
   const MAX_LOCAL_REMOVED = 200;
   const MAX_BUFFERED_RESOURCES = 500;
 
@@ -33,10 +34,16 @@
 
   let config;
   let options;
+  let allowlist = { iframes: [], overlays: [] };
   try {
-    const data = await chrome.storage.local.get([STORAGE_KEY, OPTIONS_KEY]);
+    const data = await chrome.storage.local.get([STORAGE_KEY, OPTIONS_KEY, ALLOWLIST_KEY]);
     config = data[STORAGE_KEY];
     options = data[OPTIONS_KEY] || {};
+    const al = data[ALLOWLIST_KEY];
+    if (al && typeof al === "object") {
+      allowlist.iframes = Array.isArray(al.iframes) ? al.iframes : [];
+      allowlist.overlays = Array.isArray(al.overlays) ? al.overlays : [];
+    }
   } catch (e) {
     return;
   }
@@ -125,6 +132,17 @@
     return hits;
   }
 
+  function matchesAllowlist(el, selectors) {
+    if (!selectors || !selectors.length) return false;
+    for (const sel of selectors) {
+      if (!sel || typeof sel !== "string") continue;
+      try {
+        if (el.matches && el.matches(sel)) return true;
+      } catch (e) { /* invalid selector in allowlist, skip */ }
+    }
+    return false;
+  }
+
   function scanStickyOverlays() {
     const hits = [];
     const vw = window.innerWidth, vh = window.innerHeight;
@@ -144,6 +162,10 @@
       const area = rect.width * rect.height;
       const coverage = area / viewportArea;
       if (coverage < 0.25) continue;
+      // User-configurable allowlist of structural containers
+      // (React Portals, modal roots, framework shells) that shouldn't
+      // be surfaced as sticky-overlay suggestions.
+      if (matchesAllowlist(el, allowlist.overlays)) continue;
       const tag = el.tagName.toLowerCase();
       let cls = "";
       if (typeof el.className === "string") cls = el.className;

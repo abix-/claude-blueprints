@@ -499,6 +499,37 @@ iframe[src*="tracker.example.com"]
   </div>
 
   <details class="advanced">
+    <summary>Allowlists (things the behavioral detector ignores)</summary>
+    <p style="color:#666; font-size:12px; margin-top: 8px">
+      When the behavioral-suggestions detector would otherwise flag these as
+      suspicious, it skips them instead. Default entries cover captcha, OAuth,
+      payment iframes, and framework portal containers. Add your own
+      site-specific entries as you encounter false positives.
+    </p>
+
+    <h3 style="font-size: 13px; margin: 14px 0 4px; font-weight: 600;">Iframe allowlist</h3>
+    <p style="color:#666; font-size:12px; margin: 0 0 8px;">
+      One URL substring per line. If a hidden iframe's src contains any entry
+      (case-insensitive), it's allowed through without surfacing as a remove
+      suggestion.
+    </p>
+    <textarea id="allowlist-iframes" spellcheck="false" style="width:100%;height:140px;font-family:ui-monospace,monospace;font-size:12px;padding:10px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"></textarea>
+
+    <h3 style="font-size: 13px; margin: 16px 0 4px; font-weight: 600;">Sticky-overlay allowlist</h3>
+    <p style="color:#666; font-size:12px; margin: 0 0 8px;">
+      One CSS selector per line. If a flagged sticky/fixed element matches any
+      selector, it's allowed through. Used to skip React Portals, modal roots,
+      and framework shells that legitimately cover the viewport.
+    </p>
+    <textarea id="allowlist-overlays" spellcheck="false" style="width:100%;height:140px;font-family:ui-monospace,monospace;font-size:12px;padding:10px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"></textarea>
+
+    <div class="toolbar" style="margin-top:10px;">
+      <button id="allowlist-save" class="primary">Save allowlists</button>
+      <button id="allowlist-reset">Reset to defaults</button>
+    </div>
+  </details>
+
+  <details class="advanced">
     <summary>Advanced: edit raw JSON</summary>
     <p style="color:#666; font-size:12px; margin-top: 8px">
       The UI above and this textarea edit the same underlying config. Use this for bulk changes,

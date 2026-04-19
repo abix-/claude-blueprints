@@ -1,10 +1,59 @@
 const STORAGE_KEY = "config";
 const OPTIONS_KEY = "options";
+const ALLOWLIST_KEY = "allowlist";
 const SESSION_TABSTATS_KEY = "tabStats";
 const SESSION_BEHAVIOR_KEY = "tabBehavior";
 const MAX_LOG_ENTRIES = 300;
 const MAX_EVIDENCE = 50;
 const MAX_SEEN_RESOURCES = 500;
+
+// Default allowlist - known-legit things the behavioral detector shouldn't
+// surface as suggestions. Seeded into storage on first install; user can
+// add/remove entries via the options page.
+//
+// iframes: URL substrings. If an iframe's src contains any entry, skip.
+// overlays: CSS selectors. If a flagged sticky element matches any selector,
+//           skip (covers React Portals, modal roots, framework root elements).
+const DEFAULT_ALLOWLIST = {
+  iframes: [
+    "google.com/recaptcha",
+    "gstatic.com/recaptcha",
+    "hcaptcha.com",
+    "challenges.cloudflare.com",
+    "turnstile.cloudflare.com",
+    "stripe.com",
+    "paypal.com",
+    "paypalobjects.com",
+    "braintreegateway.com",
+    "braintree-api.com",
+    "adyen.com",
+    "squareup.com",
+    "squarecdn.com",
+    "accounts.google.com",
+    "appleid.apple.com",
+    "login.microsoftonline.com",
+    "login.live.com",
+    "firebaseapp.com",
+    "auth0.com",
+    "okta.com"
+  ],
+  overlays: [
+    "#portal",
+    "[id^=\"portal-\"]",
+    "[id^=\"portal_\"]",
+    "#modal-root",
+    "#modal-container",
+    "#overlay-root",
+    "#__next",
+    "#__nuxt",
+    "#root",
+    "#app",
+    ".ReactModalPortal",
+    ".MuiPopover-root",
+    ".MuiModal-root",
+    "[class*=\"radix-\"]"
+  ]
+};
 
 let debugLogging = false;
 const logBuffer = [];
@@ -45,6 +94,26 @@ function logError(...args) {
 async function loadOptions() {
   const data = await chrome.storage.local.get(OPTIONS_KEY);
   return data[OPTIONS_KEY] || {};
+}
+
+// In-memory cache of the allowlist. Updated whenever storage changes so
+// detector paths don't hit async storage on every iframe/overlay check.
+let allowlistCache = { iframes: [], overlays: [] };
+
+async function loadAllowlist() {
+  const data = await chrome.storage.local.get(ALLOWLIST_KEY);
+  const raw = data[ALLOWLIST_KEY] || {};
+  allowlistCache = {
+    iframes: Array.isArray(raw.iframes) ? raw.iframes : [],
+    overlays: Array.isArray(raw.overlays) ? raw.overlays : []
+  };
+  return allowlistCache;
+}
+
+async function seedAllowlistIfEmpty() {
+  const existing = await chrome.storage.local.get(ALLOWLIST_KEY);
+  if (existing[ALLOWLIST_KEY]) return;
+  await chrome.storage.local.set({ [ALLOWLIST_KEY]: DEFAULT_ALLOWLIST });
 }
 
 async function refreshDebugFlag() {
@@ -361,42 +430,18 @@ function isSubdomainOf(candidate, parent) {
   return candidate !== parent && candidate.endsWith("." + parent);
 }
 
-// Hidden iframes that are legitimately hidden by design and should not be
-// surfaced as suggestions. Captcha, OAuth, payment, bot-management, etc.
-// These are security-sensitive embeds that NEED to exist in a hidden state
-// for the feature to work - blocking them breaks login/signup/checkout.
+// Hidden iframes that match the user-configurable allowlist are skipped
+// from suggestions. Each entry is a case-insensitive URL substring - if
+// the iframe's src contains the entry, it's considered legit. Covers
+// captcha, OAuth, payment, bot-management by default.
 function isLegitHiddenIframe(srcUrl) {
-  let u;
-  try { u = new URL(srcUrl); } catch (e) { return false; }
-  const host = u.host;
-  const path = u.pathname;
-
-  // Captcha
-  if (/(^|\.)google\.com$/.test(host) && path.startsWith("/recaptcha")) return true;
-  if (/(^|\.)gstatic\.com$/.test(host) && path.startsWith("/recaptcha")) return true;
-  if (/(^|\.)hcaptcha\.com$/.test(host)) return true;
-  if (host === "challenges.cloudflare.com") return true;
-  if (/(^|\.)turnstile\.cloudflare\.com$/.test(host)) return true;
-
-  // Payment processors
-  if (/(^|\.)stripe\.com$/.test(host)) return true;
-  if (/(^|\.)paypal\.com$/.test(host)) return true;
-  if (/(^|\.)paypalobjects\.com$/.test(host)) return true;
-  if (/(^|\.)braintreegateway\.com$/.test(host)) return true;
-  if (/(^|\.)braintree-api\.com$/.test(host)) return true;
-  if (/(^|\.)adyen\.com$/.test(host)) return true;
-  if (/(^|\.)squareup\.com$/.test(host)) return true;
-  if (/(^|\.)squarecdn\.com$/.test(host)) return true;
-
-  // OAuth / auth flows
-  if (host === "accounts.google.com") return true;
-  if (host === "appleid.apple.com") return true;
-  if (host === "login.microsoftonline.com") return true;
-  if (host === "login.live.com") return true;
-  if (/(^|\.)firebaseapp\.com$/.test(host)) return true;
-  if (/(^|\.)auth0\.com$/.test(host)) return true;
-  if (/(^|\.)okta\.com$/.test(host)) return true;
-
+  if (!srcUrl) return false;
+  const url = String(srcUrl).toLowerCase();
+  const list = (allowlistCache && allowlistCache.iframes) || [];
+  for (const entry of list) {
+    if (!entry || typeof entry !== "string") continue;
+    if (url.includes(entry.toLowerCase())) return true;
+  }
   return false;
 }
 
@@ -594,17 +639,21 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.action.setBadgeBackgroundColor({ color: "#666" }).catch(() => {});
   await refreshDebugFlag();
   await seedIfEmpty();
+  await seedAllowlistIfEmpty();
+  await loadAllowlist();
   await syncDynamicRules();
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   chrome.action.setBadgeBackgroundColor({ color: "#666" }).catch(() => {});
   await refreshDebugFlag();
+  await loadAllowlist();
   syncDynamicRules();
 });
 
 (async () => {
   await refreshDebugFlag();
+  await loadAllowlist();
   await hydrateTabStats();
   await hydrateBehavior();
   await rehydrateRulePatterns();
@@ -643,6 +692,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
   if (STORAGE_KEY in changes) {
     syncDynamicRules();
+  }
+  if (ALLOWLIST_KEY in changes) {
+    loadAllowlist();
+    log("allowlist updated");
   }
 });
 
