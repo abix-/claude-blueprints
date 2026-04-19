@@ -70,6 +70,9 @@ function findConfigEntry(config, host) {
 // Map ruleId -> { pattern, domain } so blocked-URL entries can show which rule matched.
 const rulePatterns = new Map();
 
+// Map ruleId -> fire count. Resets when the config is re-synced (new rule ids).
+const ruleFireCount = new Map();
+
 let syncChain = Promise.resolve();
 function syncDynamicRules() {
   const next = syncChain.then(() => doSyncDynamicRules());
@@ -84,6 +87,7 @@ async function doSyncDynamicRules() {
 
   const addRules = [];
   rulePatterns.clear();
+  ruleFireCount.clear();
   let nextId = 1;
 
   for (const [domain, cfg] of Object.entries(config)) {
@@ -287,6 +291,60 @@ async function hydrateBehavior() {
 
 function hostOf(url) {
   try { return new URL(url).host; } catch (e) { return ""; }
+}
+
+// Given a DNR urlFilter pattern, pull out the longest stable "keyword"
+// substring - the part with no wildcards or anchors. Used to diagnose
+// whether observed URLs LOOK like they should be matched by the pattern,
+// even if DNR itself isn't firing the rule.
+function patternKeyword(pattern) {
+  if (!pattern) return "";
+  // Strip control chars: ||, ^, *, | leaving just the literal parts.
+  const parts = pattern.replace(/[|^*]/g, " ").split(/\s+/).filter(Boolean);
+  if (!parts.length) return "";
+  // Prefer longer, more distinctive parts.
+  parts.sort((a, b) => b.length - a.length);
+  return parts[0];
+}
+
+// For each configured block rule, compute diagnostic info:
+//   - fired: how many times it has matched a request
+//   - observedMatches: URLs in this tab's observed traffic whose text
+//     contains the pattern's keyword (heuristic: if the user requested
+//     something that LOOKS like it should match, but the rule hasn't fired,
+//     the pattern is likely wrong)
+//   - status: "firing" | "no-traffic" | "pattern-broken"
+function computeRuleDiagnostics(tabId) {
+  const behavior = typeof tabId === "number" ? tabBehavior.get(tabId) : null;
+  const observed = behavior ? behavior.seenResources : [];
+
+  const diagnostics = [];
+  for (const [ruleId, meta] of rulePatterns) {
+    const pattern = meta.pattern || "";
+    const keyword = patternKeyword(pattern);
+    const fired = ruleFireCount.get(ruleId) || 0;
+    const matches = keyword
+      ? observed.filter(r => r.url && r.url.includes(keyword)).slice(-5)
+      : [];
+    let status;
+    if (fired > 0) {
+      status = "firing";
+    } else if (matches.length > 0) {
+      status = "pattern-broken";
+    } else {
+      status = "no-traffic";
+    }
+    diagnostics.push({
+      ruleId,
+      pattern,
+      initiator: meta.domain || "",
+      fired,
+      keyword,
+      status,
+      matchingUrls: matches.map(r => r.url)
+    });
+  }
+  return diagnostics;
 }
 
 function isSubdomainOf(candidate, parent) {
@@ -598,6 +656,9 @@ chrome.declarativeNetRequest.onRuleMatchedDebug.addListener(info => {
   const ruleId = info.rule && info.rule.ruleId;
   const url = info.request && info.request.url;
   const ruleMeta = rulePatterns.get(ruleId) || {};
+  if (typeof ruleId === "number") {
+    ruleFireCount.set(ruleId, (ruleFireCount.get(ruleId) || 0) + 1);
+  }
   log("rule matched:", ruleId, "pattern:", ruleMeta.pattern, "url:", url, "tabId:", tabId);
   if (typeof tabId !== "number" || tabId < 0) return;
   const stats = getStats(tabId);
@@ -685,6 +746,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return false;
     }
     sendResponse({ stats: tabStats.get(tabId) || emptyStats() });
+    return false;
+  }
+
+  if (msg.type === "hush:get-rule-diagnostics") {
+    const tabId = typeof msg.tabId === "number" ? msg.tabId : (sender.tab && sender.tab.id);
+    sendResponse({ diagnostics: computeRuleDiagnostics(tabId) });
     return false;
   }
 
