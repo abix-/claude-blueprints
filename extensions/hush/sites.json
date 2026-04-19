@@ -1,0 +1,15 @@
+{
+  "example.com": {
+    "hide": [
+      ".popup",
+      ".newsletter-signup",
+      "[class*=\"AdBanner\"]"
+    ],
+    "remove": [
+      ".modal-overlay"
+    ],
+    "block": [
+      "||ads.example.com^"
+    ]
+  }
+}

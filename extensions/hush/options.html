@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hush - Options</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 20px 40px;
+      color: #222;
+      line-height: 1.5;
+      background: #fafafa;
+    }
+    h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; }
+    .tagline { color: #666; margin: 0 0 20px; }
+
+    /* Two-pane layout */
+    .two-pane {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 16px;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      overflow: hidden;
+      min-height: 400px;
+    }
+    .sidebar {
+      background: #f5f5f5;
+      border-right: 1px solid #e0e0e0;
+      padding: 12px 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #888;
+      margin: 0 14px 8px;
+      font-weight: 600;
+    }
+    .site-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .site-list li {
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      border-left: 3px solid transparent;
+    }
+    .site-list li:hover { background: #eee; }
+    .site-list li.selected {
+      background: #e3ecff;
+      border-left-color: #2b7cff;
+      font-weight: 500;
+    }
+    .site-list li .badges {
+      display: block;
+      font-size: 10px;
+      color: #888;
+      margin-top: 2px;
+      font-family: ui-monospace, monospace;
+    }
+    .site-list-empty {
+      padding: 14px;
+      color: #999;
+      font-size: 12px;
+      font-style: italic;
+    }
+    .sidebar-actions {
+      padding: 12px 14px 4px;
+      border-top: 1px solid #e0e0e0;
+      margin-top: 8px;
+    }
+
+    .detail {
+      padding: 18px 22px;
+      overflow-y: auto;
+    }
+    .detail-empty {
+      color: #999;
+      text-align: center;
+      padding: 60px 20px;
+      font-style: italic;
+    }
+    .domain-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .domain-row input {
+      flex: 1;
+      font-size: 16px;
+      font-weight: 500;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-family: ui-monospace, monospace;
+    }
+
+    .layer-section {
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+    .layer-section legend {
+      padding: 0 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #444;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .layer-help {
+      margin: 0 0 10px;
+      color: #666;
+      font-size: 12px;
+    }
+    .entries {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 10px;
+    }
+    .entries li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+    }
+    .entries li .text {
+      flex: 1;
+      background: #f5f5f5;
+      padding: 4px 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .entries li button.del {
+      background: transparent;
+      border: none;
+      color: #c33;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 4px;
+    }
+    .entries li button.del:hover { background: #fee; border-radius: 3px; }
+    .entries-empty { color: #999; font-style: italic; font-size: 12px; }
+    .add-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .add-row input {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+    }
+    .add-row button {
+      padding: 6px 12px;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .add-row button:hover { background: #e0e0e0; }
+
+    button {
+      padding: 6px 14px;
+      font-size: 13px;
+      border: 1px solid #ccc;
+      background: #fff;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover { background: #f0f0f0; }
+    button.primary {
+      background: #2b7cff;
+      color: #fff;
+      border-color: #2b7cff;
+    }
+    button.primary:hover { background: #1d66e0; }
+    button.danger {
+      color: #c33;
+    }
+    button.danger:hover { background: #fee; border-color: #c33; }
+
+    /* How-it-works section */
+    .how {
+      margin-top: 24px;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 18px 22px;
+    }
+    .how h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .how > p {
+      color: #666;
+      margin: 0 0 14px;
+    }
+    details.layer {
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+    }
+    details.layer summary {
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 13px;
+    }
+    details.layer[open] summary { margin-bottom: 8px; }
+    details.layer .layer-num {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      line-height: 22px;
+      text-align: center;
+      background: #2b7cff;
+      color: #fff;
+      border-radius: 50%;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+    details.layer p, details.layer ul {
+      font-size: 13px;
+      color: #444;
+      margin: 8px 0;
+    }
+    details.layer pre {
+      background: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+      margin: 8px 0;
+    }
+    details.layer code {
+      background: #eef1f6;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 12px;
+      color: #2b4a6f;
+    }
+    details.layer .key {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 8px 12px;
+      margin: 8px 0;
+      font-size: 12px;
+    }
+    details.layer .key .k { font-family: ui-monospace, monospace; color: #666; }
+
+    /* Settings row */
+    .settings-row {
+      margin-top: 20px;
+      padding: 14px 18px;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .settings-row label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+    }
+    .status {
+      padding: 5px 12px;
+      border-radius: 5px;
+      font-size: 12px;
+    }
+    .status.ok { background: #d7f3d7; color: #125a12; }
+    .status.err { background: #fbdada; color: #8a0000; }
+
+    /* Advanced JSON editor */
+    .advanced {
+      margin-top: 20px;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 14px 18px;
+    }
+    .advanced summary { cursor: pointer; font-weight: 500; font-size: 13px; }
+    .advanced textarea {
+      width: 100%;
+      height: 400px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin-top: 10px;
+      resize: vertical;
+    }
+    .advanced .toolbar { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Hush</h1>
+  <p class="tagline">Per-site element hiding, DOM removal, and network blocking.</p>
+
+  <div class="two-pane">
+    <aside class="sidebar">
+      <h2>Configured sites</h2>
+      <ul id="site-list" class="site-list"></ul>
+      <div class="sidebar-actions">
+        <button id="add-site" class="primary" style="width:100%">+ Add site</button>
+      </div>
+    </aside>
+
+    <section id="detail" class="detail">
+      <div class="detail-empty">Select a site on the left, or add a new one.</div>
+    </section>
+  </div>
+
+  <section class="how">
+    <h2>How Hush works</h2>
+    <p>
+      Hush applies up to three independent layers of defense per site. Any single layer would help;
+      combined they're airtight for the rules you've defined. Here's what each layer does and when to
+      use it.
+    </p>
+
+    <details class="layer" open>
+      <summary><span class="layer-num">1</span>Block (network) — request is killed before it leaves the browser</summary>
+      <p>
+        Patterns in the <code>Block</code> list register a rule in Chrome's
+        <code>declarativeNetRequest</code> engine. When any request matches, the browser's network
+        stack refuses it <b>before</b> DNS resolution, TCP connection, or TLS handshake. No bytes are
+        sent to any server. The originating <code>fetch()</code> or iframe load fails locally with
+        <code>net::ERR_BLOCKED_BY_CLIENT</code>.
+      </p>
+      <p>
+        Rules are scoped to the site they're configured under (via <code>initiatorDomains</code>),
+        so a pattern listed under <code>example.com</code> only fires when you're browsing
+        example.com. Blocking is most thorough at this layer — no script runs, no response is parsed,
+        no iframe loads.
+      </p>
+      <p><b>Pattern syntax (uBlock-style):</b></p>
+      <div class="key">
+        <span class="k">||domain.com^</span>
+        <span>match requests to <code>domain.com</code> and any subdomain, across any path/port</span>
+        <span class="k">||ads.example.com^</span>
+        <span>match requests to exactly <code>ads.example.com</code> or its subdomains</span>
+        <span class="k">||tracker.net/pixel</span>
+        <span>match requests whose path starts with <code>/pixel</code></span>
+        <span class="k">*.cdn.example.com^</span>
+        <span>wildcard on subdomain (<code>*</code> = any characters)</span>
+        <span class="k">^</span>
+        <span>matches any URL separator (<code>/</code>, <code>?</code>, <code>:</code>, end-of-URL)</span>
+      </div>
+      <p><b>When to use:</b> whenever the request itself is what you want gone — tracking pixels,
+      ad scripts, telemetry beacons, widget iframes, API calls to unwanted services.</p>
+    </details>
+
+    <details class="layer">
+      <summary><span class="layer-num">2</span>Remove (DOM) — element is physically deleted</summary>
+      <p>
+        Selectors in the <code>Remove</code> list are physically excised from the DOM via
+        <code>element.remove()</code>. A <code>MutationObserver</code> watches every DOM change, so
+        elements inserted later (by the site's SPA router, infinite scroll, modals, etc.) get removed
+        as soon as they appear.
+      </p>
+      <p>
+        This layer frees event listeners, breaks any internal references the element held, and
+        stops anything that depends on the element being in the tree. Some JavaScript libraries
+        voluntarily pause work when their target element is removed.
+      </p>
+      <p><b>Pattern syntax:</b> any valid CSS selector.</p>
+      <pre>.modal-overlay
+[data-role="promo"]
+iframe[src*="tracker.example.com"]
+#footer .subscribe-banner</pre>
+      <p><b>When to use:</b> when you want the element completely gone — freeing listeners/timers
+      tied to it, stopping libraries that animate it, or when the site re-adds the element and
+      <code>display: none</code> isn't enough.</p>
+    </details>
+
+    <details class="layer">
+      <summary><span class="layer-num">3</span>Hide (CSS) — elements still exist but are invisible</summary>
+      <p>
+        Selectors in the <code>Hide</code> list are applied as a user stylesheet with
+        <code>display: none !important</code>. The browser skips layout, paint, compositing, and
+        GPU work for hidden elements. CSS animations and transitions on those elements also stop
+        running (no rendered box = nothing to animate).
+      </p>
+      <p>
+        This is the mildest layer. The element still exists in the DOM and its JavaScript can
+        still execute. If the element's scripts poll a timer or make network requests, those keep
+        running. Use <code>Hide</code> when the page will break if the element is physically
+        missing (some sites crash when their own DOM is mutated) but you don't want it taking up
+        screen space or GPU compositor cycles.
+      </p>
+      <p><b>Pattern syntax:</b> any valid CSS selector (same as Remove).</p>
+      <p><b>When to use:</b> when something visual is annoying but removing the element might break
+      the page (rare), or as a safety net for elements that might exist even after you've blocked
+      their network resources.</p>
+    </details>
+
+    <details class="layer">
+      <summary>Layer interaction and overlap</summary>
+      <ul>
+        <li><b>Hide and Remove the same selector:</b> Remove runs first (on every mutation), so
+        matching elements never stay long enough for Hide to count them. The popup will show such
+        selectors as <code>- (removed)</code> in the Hidden section — that's not a bug, it's the
+        honest story.</li>
+        <li><b>Block plus Hide:</b> the request is killed at the network layer; if the site's JS
+        still builds a DOM element (an iframe with a now-failed <code>src</code>, for example),
+        Hide suppresses its rendering.</li>
+        <li><b>Domain matching for selectors and URL patterns:</b> a site entry for
+        <code>example.com</code> also applies to <code>www.example.com</code>,
+        <code>m.example.com</code>, any subdomain. URL patterns in <code>Block</code> use a
+        different scoping — they match the request URL regardless of subdomain-of-initiator
+        (i.e., <code>||ads.example.com^</code> blocks that host even though the initiator matched
+        <code>example.com</code>).</li>
+      </ul>
+    </details>
+  </section>
+
+  <div class="settings-row">
+    <label>
+      <input type="checkbox" id="debug-toggle">
+      Enable verbose console logging (off by default)
+    </label>
+    <div class="toolbar">
+      <button id="export">Export JSON</button>
+      <button id="reset" class="danger">Reset to defaults</button>
+      <span id="status" class="status" style="display:none"></span>
+    </div>
+  </div>
+
+  <details class="advanced">
+    <summary>Advanced: edit raw JSON</summary>
+    <p style="color:#666; font-size:12px; margin-top: 8px">
+      The UI above and this textarea edit the same underlying config. Use this for bulk changes,
+      copy/paste between machines, or to review the full structure. Click <b>Apply JSON</b> after
+      editing.
+    </p>
+    <textarea id="json-config" spellcheck="false"></textarea>
+    <div class="toolbar">
+      <button id="json-apply" class="primary">Apply JSON</button>
+      <button id="json-refresh">Refresh from storage</button>
+    </div>
+  </details>
+
+  <script src="options.js"></script>
+</body>
+</html>
