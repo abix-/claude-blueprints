@@ -573,7 +573,7 @@ function renderBlockDiagnostics(diagnostics) {
     meta.className = "rule-meta";
     const fired = document.createElement("span");
     fired.className = "rule-fired";
-    fired.textContent = "fired " + d.fired + "x  |  initiator " + (d.initiator || "-");
+    fired.textContent = "fired " + d.fired + "x  |  declared under " + (d.sourceDomain || "-");
     meta.appendChild(fired);
     const statusLabel = {
       "firing": "FIRING",

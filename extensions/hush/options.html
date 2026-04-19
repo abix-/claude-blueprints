@@ -362,9 +362,17 @@
         <code>net::ERR_BLOCKED_BY_CLIENT</code>.
       </p>
       <p>
-        Rules are scoped to the site they're configured under (via <code>initiatorDomains</code>),
-        so a pattern listed under <code>example.com</code> only fires when you're browsing
-        example.com. Blocking is most thorough at this layer — no script runs, no response is parsed,
+        Rules are declared under a site in your config but applied as
+        <b>global URL-pattern matches</b>. A rule under <code>reddit.com</code> blocks
+        its target URL anywhere it's requested &mdash; including from third-party
+        iframes embedded on Reddit (redgifs, YouTube, ad iframes, etc.). Chrome's
+        <code>initiatorDomains</code> condition matches the initiating frame's origin, not the tab
+        you're looking at, so using it would miss cross-origin iframe traffic. Per-site
+        rule-authoring is preserved as your mental model, but execution is global by URL.
+        If you need a URL blocked only on one site, make the pattern itself more specific.
+      </p>
+      <p>
+        Blocking is most thorough at this layer &mdash; no script runs, no response is parsed,
         no iframe loads.
       </p>
       <p><b>Pattern syntax (uBlock-style):</b></p>
@@ -472,12 +480,18 @@ iframe[src*="tracker.example.com"]
         <li><b>Block plus Hide:</b> the request is killed at the network layer; if the site's JS
         still builds a DOM element (an iframe with a now-failed <code>src</code>, for example),
         Hide suppresses its rendering.</li>
-        <li><b>Domain matching for selectors and URL patterns:</b> a site entry for
+        <li><b>Domain matching for Hide/Remove selectors:</b> a site entry for
         <code>example.com</code> also applies to <code>www.example.com</code>,
-        <code>m.example.com</code>, any subdomain. URL patterns in <code>Block</code> use a
-        different scoping — they match the request URL regardless of subdomain-of-initiator
-        (i.e., <code>||ads.example.com</code> blocks that host even though the initiator matched
-        <code>example.com</code>).</li>
+        <code>m.example.com</code>, and any other subdomain. Selectors execute only in frames
+        whose hostname matches the site key (or one of its subdomains).</li>
+        <li><b>Block rules are global URL patterns:</b> a pattern like
+        <code>||ads.example.com</code> under any site entry blocks that host wherever it's
+        requested &mdash; in the top frame, in embedded iframes, from service workers, anywhere.
+        Site-keyed authoring is a convention for organizing your rules, not a runtime scope.</li>
+        <li><b>Iframe-originated traffic is attributed to the tab:</b> when a cross-origin iframe
+        (e.g., an embedded redgifs video on Reddit) initiates a request, Hush reports it as part
+        of the Reddit tab's activity. Your Reddit block rules cover iframe traffic automatically;
+        you don't need per-iframe-domain rules.</li>
       </ul>
     </details>
   </section>

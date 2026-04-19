@@ -423,12 +423,15 @@ function computeRuleDiagnostics(tabId, hostname) {
 
   const diagnostics = [];
   for (const [ruleId, meta] of rulePatterns) {
-    // Only include rules whose initiator-domain applies to this page.
-    // A rule with initiator "example.com" matches hostname "www.example.com"
-    // or any other subdomain.
-    const initiator = meta.domain || "";
-    if (host && initiator) {
-      const hostMatches = host === initiator || host.endsWith("." + initiator);
+    // Rules are now global URL-pattern blocks (no initiatorDomains), but we
+    // still organize the diagnostic view around the CURRENT tab's site config
+    // so users see "the rules I configured for this site" here. Include a
+    // rule if its sourceDomain matches the tab's host (or any ancestor), OR
+    // if the sourceDomain is empty (unattributed). Rules declared under a
+    // different site are hidden from this tab's view but still active globally.
+    const sourceDomain = meta.domain || "";
+    if (host && sourceDomain) {
+      const hostMatches = host === sourceDomain || host.endsWith("." + sourceDomain);
       if (!hostMatches) continue;
     }
 
@@ -449,7 +452,7 @@ function computeRuleDiagnostics(tabId, hostname) {
     diagnostics.push({
       ruleId,
       pattern,
-      initiator,
+      sourceDomain,
       fired,
       keyword,
       status,
@@ -1068,11 +1071,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const behavior = tabId !== null ? tabBehavior.get(tabId) : null;
       const matchedDomain = stats && stats.matchedDomain;
 
-      // Compact network rules: one line per rule.
+      // Compact network rules: one line per rule. Rules are global URL-pattern
+      // matches (no initiatorDomains), so include the sourceDomain from the
+      // in-memory rulePatterns map instead - shows which site config declared
+      // the rule, even though the rule itself applies across all tabs.
       const compactRules = dynamicRules.map(r => ({
         id: r.id,
         pattern: r.condition && r.condition.urlFilter,
-        initiator: r.condition && r.condition.initiatorDomains && r.condition.initiatorDomains[0]
+        sourceDomain: (rulePatterns.get(r.id) || {}).domain || ""
       }));
 
       // Summarize behavior instead of dumping all 500 seen resources.

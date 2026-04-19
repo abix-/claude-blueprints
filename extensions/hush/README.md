@@ -69,12 +69,19 @@ copy-paste between machines. The UI and the JSON view edit the same storage.
 Keys are domain names. Each site has three optional arrays:
 
 - `block` — uBlock-style URL patterns (`||domain.com`, `*.cdn.example.com`,
-  path wildcards, etc.). Scoped to the site key via `initiatorDomains` so a
-  rule under `example.com` only fires when you're browsing example.com.
+  path wildcards, etc.). Rules are declared under a site in your config but
+  applied as **global URL-pattern matches** at the network layer. This means
+  a rule under `reddit.com` blocks its target URL wherever that URL is
+  requested — including from embedded third-party iframes (redgifs, YouTube,
+  etc.) loaded inside Reddit. Chrome's DNR `initiatorDomains` condition only
+  matches the initiating frame's origin, which would fail for cross-origin
+  iframe traffic, so we don't use it. If you need a URL blocked only on a
+  specific site, make the pattern itself more specific.
 - `remove` — CSS selectors. Matching elements are physically deleted from the
-  DOM.
+  DOM. Applied per-frame when the frame's hostname matches the site config
+  (Reddit selectors only touch Reddit's DOM, not embedded iframe contents).
 - `hide` — CSS selectors. Matching elements get `display: none !important`
-  via a user stylesheet.
+  via a user stylesheet. Per-frame application, same as `remove`.
 
 Your personal config lives in `chrome.storage.local` and never lands on disk
 as text. The seeded `sites.json` is a generic example only.
