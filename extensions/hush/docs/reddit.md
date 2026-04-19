@@ -13,10 +13,8 @@ Paste this block into Hush as-is, or into the raw-JSON editor:
 ```json
 {
   "reddit.com": {
-    "hide": [
-      "games-section-badge-controller"
-    ],
     "remove": [
+      "games-section-badge-controller",
       "article[data-post-id]:has(shreddit-brand-affiliate-tag)",
       "article[data-post-id]:has([is-post-commercial-communication])",
       "faceplate-partial[name^=\"RelatedCommunityRecommendations\"]"
@@ -114,13 +112,15 @@ Reddit's site entry covers `reddit.com` and all its subdomains (`www.reddit.com`
 
 ---
 
-## Hide: `games-section-badge-controller`
+## Remove: `games-section-badge-controller`
 
-**Layer:** Hide (CSS)
+**Layer:** Remove (DOM)
 
 **What it catches:** Reddit's "Games" section in the left navigation sidebar. Click-to-expand widget showing featured Reddit games, nudging you to play them.
 
-**Why Hide and not Remove:** the sidebar is a persistent React component. Reddit's framework may crash if you physically remove one of its sidebar children from under it. Hide is safer here - the element stays in the DOM, Reddit's framework sees it exists, but `display: none` means it takes no screen space and its contents don't paint.
+**Why Remove over Hide:** Hide (`display: none`) only stops rendering. The widget's JavaScript is still alive and could be polling for new featured games, fetching badge counts, or firing impression beacons in the background. Remove physically deletes the element, which stops any polling/fetching tied to its lifecycle.
+
+**Framework-re-render concern:** the sidebar is a Lit-based web component and its parent nav might try to re-render the Games widget on state changes. That's fine - Hush's MutationObserver catches each re-add in the next tick and removes it again. No loop, since frameworks don't immediately re-render after arbitrary DOM mutations (they wait for their own state changes).
 
 **How it was discovered:** the user described the pain point ("i don't need games on reddit"), inspected the widget, and found the custom-element tag name in the DOM path. Custom-element tags are far more stable than descendant class chains.
 
@@ -155,7 +155,7 @@ Workflow that found the rules above:
    - Utility-class chains like `.bg-neutral-background.focus-within:bg-neutral-background-hover` - change frequently
    - Random-hash IDs or classes like `.abcdef12345`
    - Long descendant paths like `#left-sidebar > nav > foo > bar > baz` - fragile
-6. Prefer hide for sidebar / nav elements (framework-friendly), remove for feed content (lets MutationObserver handle infinite scroll).
+6. Prefer remove by default. Hide only when removing the element breaks the site's layout (empty flex slots, height collapse on a container that the framework measures). For most unwanted widgets, remove is better because it stops any background polling/telemetry the widget's JS might be doing.
 
 ---
 
