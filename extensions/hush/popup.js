@@ -247,9 +247,16 @@ function renderSuggRow(tabId, hostname, s, isMatched) {
   const ev = document.createElement("div");
   ev.className = "sugg-evidence";
   ev.hidden = true;
+  const evSrc = Array.isArray(s.evidence) ? s.evidence : [];
+  if (evSrc.length) {
+    const evHeader = document.createElement("div");
+    evHeader.style.cssText = "display:flex;justify-content:flex-end;margin:4px 0;";
+    const copyBtn = makeCopyButton(() => evSrc.map(e => String(e)).join("\n"));
+    evHeader.appendChild(copyBtn);
+    ev.appendChild(evHeader);
+  }
   const evList = document.createElement("ul");
   evList.className = "sugg-evidence-list";
-  const evSrc = Array.isArray(s.evidence) ? s.evidence : [];
   if (!evSrc.length) {
     const liE = document.createElement("li");
     liE.style.fontStyle = "italic";
@@ -320,11 +327,22 @@ function renderRemovedEvidence(removedElements) {
   }
   container.hidden = false;
   container.innerHTML = "";
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;align-items:center;gap:8px;";
   const toggle = document.createElement("span");
   toggle.className = "evidence-toggle";
   toggle.textContent = "Show " + removedElements.length + " removed element" +
     (removedElements.length === 1 ? "" : "s");
-  container.appendChild(toggle);
+  header.appendChild(toggle);
+  const copyBtn = makeCopyButton(() =>
+    removedElements
+      .slice()
+      .reverse()
+      .map(ev => timeOnly(ev.t) + "\t" + (ev.el || "?") + "\t(via " + (ev.selector || "?") + ")")
+      .join("\n")
+  );
+  header.appendChild(copyBtn);
+  container.appendChild(header);
   const list = document.createElement("ul");
   list.className = "evidence-list";
   list.hidden = true;
@@ -348,6 +366,27 @@ function renderRemovedEvidence(removedElements) {
       removedElements.length + " removed element" +
       (removedElements.length === 1 ? "" : "s");
   });
+}
+
+// Small "Copy" button that copies the result of getText() to the clipboard
+// and briefly shows "Copied" feedback. Used across evidence sections.
+function makeCopyButton(getText) {
+  const btn = document.createElement("button");
+  btn.textContent = "Copy";
+  btn.title = "Copy evidence to clipboard";
+  btn.style.cssText = "flex:0 0 auto;padding:2px 10px;font-size:10px;cursor:pointer;border:1px solid #ccc;background:#fff;border-radius:4px;";
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const orig = btn.textContent;
+    try {
+      await navigator.clipboard.writeText(getText());
+      btn.textContent = "Copied";
+    } catch (err) {
+      btn.textContent = "Failed";
+    }
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+  return btn;
 }
 
 function renderBlockedList(blockedUrls, blockCount) {
@@ -394,11 +433,22 @@ function renderBlockedList(blockedUrls, blockCount) {
   }
   evidenceEl.hidden = false;
   evidenceEl.innerHTML = "";
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;align-items:center;gap:8px;";
   const toggle = document.createElement("span");
   toggle.className = "evidence-toggle";
   toggle.textContent = "Show " + blockedUrls.length + " blocked URL" +
     (blockedUrls.length === 1 ? "" : "s");
-  evidenceEl.appendChild(toggle);
+  header.appendChild(toggle);
+  const copyBtn = makeCopyButton(() =>
+    blockedUrls
+      .slice()
+      .reverse()
+      .map(b => timeOnly(b.t) + "\t[" + (b.resourceType || "?") + "]\t" + b.url + "\t(pattern: " + (b.pattern || "?") + ")")
+      .join("\n")
+  );
+  header.appendChild(copyBtn);
+  evidenceEl.appendChild(header);
   const list = document.createElement("ul");
   list.className = "evidence-list";
   list.hidden = true;
