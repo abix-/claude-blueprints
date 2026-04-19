@@ -13,6 +13,7 @@ Each case study documents:
 ## Available case studies
 
 - [reddit.md](reddit.md) - Reddit's telemetry beacons, Brand Affiliate posts, algorithmic community recommendations, and sidebar widgets. Demonstrates `:has()` parent selectors, attribute-based matching, and the hide-vs-remove decision for framework components.
+- [amazon.md](amazon.md) - Amazon homepage ad iframes. Narrow scope, only documents what has been observed in Hush's suggestion output on the homepage - no speculation about other Amazon surfaces.
 
 ## Contributing your own
 

@@ -267,6 +267,7 @@ Errors are always logged regardless of the toggle.
 Worked examples with full rule sets and reasoning live under [`docs/`](docs/README.md).
 
 - [Reddit](docs/reddit.md) - telemetry beacons, Brand Affiliate posts, algorithmic community recs, sidebar widgets
+- [Amazon](docs/amazon.md) - homepage ad iframes (narrow scope, observed-only)
 
 ## License
 
