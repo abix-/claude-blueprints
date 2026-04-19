@@ -46,7 +46,20 @@ What the iframe DOM we captured actually tells us:
 Combined with the hidden-iframe behavioral detection (1x1 size,
 `visibility: hidden`) and the above naming, these are ad containers.
 
-## Second observation: CSM telemetry beacons
+## Second observation: programmatic ad iframes
+
+A subsequent scan surfaced another hidden-iframe suggestion:
+
+- **Suggested rule:** `iframe[src*="s.amazon-adsystem.com"]`
+- **Layer:** Remove
+- **Reason:** hidden iframe
+
+Iframes loaded from `s.amazon-adsystem.com` - Amazon's programmatic ad-serving
+subdomain. Distinct from the `m.media-amazon.com` iframes observed earlier;
+both appear as hidden iframe suggestions but load from different CDNs. Keep
+both rules to catch both patterns.
+
+## Third observation: CSM telemetry beacons
 
 A subsequent scan surfaced a second Hush suggestion with this evidence:
 
@@ -81,7 +94,8 @@ Based only on observed Hush suggestions plus DOM confirmation:
 {
   "amazon.com": {
     "remove": [
-      "iframe[id^=\"ape_\"]"
+      "iframe[id^=\"ape_\"]",
+      "iframe[src*=\"s.amazon-adsystem.com\"]"
     ],
     "hide": [],
     "block": [
@@ -93,18 +107,15 @@ Based only on observed Hush suggestions plus DOM confirmation:
 
 ### Remove: `iframe[id^="ape_"]`
 
-Slightly stricter than Hush's suggested `iframe[src*="m.media-amazon.com"]` -
-targets the `ape_` ID convention that both observed iframes share.
-Trade-off:
+Slightly stricter than Hush's original `iframe[src*="m.media-amazon.com"]`
+suggestion - targets the `ape_` ID convention that both observed ad iframes
+shared. Catches the homepage ad slots regardless of which CDN they load from.
 
-- `iframe[src*="m.media-amazon.com"]`: Hush's suggestion. May match any iframe
-  loaded from `m.media-amazon.com` regardless of role. If Amazon ever uses
-  that CDN for non-ad iframes, this rule catches those too (false positives).
-- `iframe[id^="ape_"]`: more surgical. Matches only iframes that follow the
-  `ape_` naming convention (which both observed ad iframes do).
+### Remove: `iframe[src*="s.amazon-adsystem.com"]`
 
-Either is fine. If you see non-ad iframes disappearing, switch to the
-`id^="ape_"` form.
+Catches iframes served from Amazon's programmatic ad-serving subdomain.
+Observed separately from the `ape_`-prefixed iframes - some ad iframes may
+be on a different CDN or carry different IDs, so this rule is the backstop.
 
 ### Block: `||unagi.amazon.com^`
 
