@@ -31,6 +31,7 @@ const DEFAULT_ALLOWLIST = {
     "squareup.com",
     "squarecdn.com",
     "accounts.google.com",
+    "accounts.youtube.com",
     "appleid.apple.com",
     "login.microsoftonline.com",
     "login.live.com",
