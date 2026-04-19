@@ -93,7 +93,7 @@ async function main() {
   const [statsResp, suggResp, diagResp, storedData] = await Promise.all([
     chrome.runtime.sendMessage({ type: "hush:get-tab-stats", tabId }).catch(() => null),
     chrome.runtime.sendMessage({ type: "hush:get-suggestions", tabId }).catch(() => null),
-    chrome.runtime.sendMessage({ type: "hush:get-rule-diagnostics", tabId }).catch(() => null),
+    chrome.runtime.sendMessage({ type: "hush:get-rule-diagnostics", tabId, hostname }).catch(() => null),
     chrome.storage.local.get([OPTIONS_KEY, STORAGE_KEY])
   ]);
 

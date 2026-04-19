@@ -314,12 +314,22 @@ function patternKeyword(pattern) {
 //     something that LOOKS like it should match, but the rule hasn't fired,
 //     the pattern is likely wrong)
 //   - status: "firing" | "no-traffic" | "pattern-broken"
-function computeRuleDiagnostics(tabId) {
+function computeRuleDiagnostics(tabId, hostname) {
   const behavior = typeof tabId === "number" ? tabBehavior.get(tabId) : null;
   const observed = behavior ? behavior.seenResources : [];
+  const host = hostname || (behavior && behavior.pageHost) || null;
 
   const diagnostics = [];
   for (const [ruleId, meta] of rulePatterns) {
+    // Only include rules whose initiator-domain applies to this page.
+    // A rule with initiator "example.com" matches hostname "www.example.com"
+    // or any other subdomain.
+    const initiator = meta.domain || "";
+    if (host && initiator) {
+      const hostMatches = host === initiator || host.endsWith("." + initiator);
+      if (!hostMatches) continue;
+    }
+
     const pattern = meta.pattern || "";
     const keyword = patternKeyword(pattern);
     const fired = ruleFireCount.get(ruleId) || 0;
@@ -337,7 +347,7 @@ function computeRuleDiagnostics(tabId) {
     diagnostics.push({
       ruleId,
       pattern,
-      initiator: meta.domain || "",
+      initiator,
       fired,
       keyword,
       status,
@@ -751,7 +761,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === "hush:get-rule-diagnostics") {
     const tabId = typeof msg.tabId === "number" ? msg.tabId : (sender.tab && sender.tab.id);
-    sendResponse({ diagnostics: computeRuleDiagnostics(tabId) });
+    const hostname = typeof msg.hostname === "string" ? msg.hostname : null;
+    sendResponse({ diagnostics: computeRuleDiagnostics(tabId, hostname) });
     return false;
   }
 
