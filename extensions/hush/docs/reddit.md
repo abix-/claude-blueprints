@@ -19,8 +19,7 @@ Paste this block into Hush as-is, or into the raw-JSON editor:
       "faceplate-partial[name^=\"RelatedCommunityRecommendations\"]"
     ],
     "block": [
-      "||w3-reporting.reddit.com^",
-      "||reddit.com/svc/shreddit/partial/*/related-community-recommendations"
+      "||w3-reporting.reddit.com^"
     ]
   }
 }
@@ -106,23 +105,11 @@ User spotted the "Brand Affiliate" text in a post's credit bar and inspected the
 
 **How it was discovered:** inspecting the DOM around a feed post showed that after each post, Reddit inserts a `<faceplate-partial>` pointing to `/svc/shreddit/partial/XXXXX/related-community-recommendations`. Recognizable by the stable `name` attribute prefix.
 
-**Why Remove:** these are SPA-injected after the initial feed load, so we need MutationObserver to catch them as they appear.
+**Why Remove (and ONLY Remove):** these are SPA-injected after the initial feed load, so we need MutationObserver to catch them as they appear.
 
-### Companion rule: network block to prevent re-render loop
+A network Block rule targeting the `src` URL looks like a natural companion here, but it does nothing for this target. See the caveat section below.
 
-The `name` attribute suffix (e.g. `_qmZmnB`) is a stable per-session handle, not a per-element random. That means if the element gets removed, Reddit's framework treats it as missing and re-renders the SAME element, which Hush removes again, which Reddit re-renders, etc. In practice this means 20+ remove/re-render cycles in a few seconds - the feature "works" but with wasted CPU on both sides.
-
-The fix is to also block the endpoint that hydrates the element at the network layer:
-
-```
-||reddit.com/svc/shreddit/partial/*/related-community-recommendations
-```
-
-With the fetch blocked, Reddit's framework sees the request fail and gives up rather than looping. The DOM `remove` rule stays as a safety net for any element created before the block registered.
-
-**What the evidence looks like without the block:** the Removed evidence list shows the same `name="RelatedCommunityRecommendations_XXXXX"` entry removed 20+ times with timestamps a second apart. If you see that pattern for any Hush rule, that's the render-loop smell - add a network block targeting the element's `src`.
-
-**What the evidence looks like with the block:** one removal on first render, then silence. The `<faceplate-partial>` element is no longer created by the framework after it sees the fetch keep failing.
+**Expected behavior in the popup:** as you scroll Reddit's infinite feed, you'll see `faceplate-partial` entries pile up in the Removed evidence (roughly 5-6 per feed chunk loaded). That's normal per-chunk sweeping, not a render loop. The evidence now includes the `name` attribute so identical-looking rows are distinguishable.
 
 ---
 
@@ -139,6 +126,43 @@ With the fetch blocked, Reddit's framework sees the request fail and gives up ra
 **How it was discovered:** the user described the pain point ("i don't need games on reddit"), inspected the widget, and found the custom-element tag name in the DOM path. Custom-element tags are far more stable than descendant class chains.
 
 ---
+
+## When Block can't help: lazy-loaded custom elements
+
+Early on it's tempting to assume "Block is always better than Remove because it stops the request from happening." Not true for all targets. Reddit's `<faceplate-partial>` is the textbook counter-example.
+
+Its key attribute:
+
+```html
+<faceplate-partial
+    name="RelatedCommunityRecommendations_qmZmnB"
+    src="/svc/shreddit/partial/.../related-community-recommendations"
+    loading="programmatic">
+```
+
+The `loading="programmatic"` means the element does NOT auto-fetch its `src`. It's a lazy container that only fetches when Reddit's JavaScript explicitly calls a method on it (typically when the element scrolls into view via IntersectionObserver). If Hush's DOM Remove catches the element before that method call happens, no fetch is ever initiated.
+
+Which means: a network Block rule targeting that `src` URL will match zero requests. Not because the pattern is wrong, but because there's no request to match in the first place.
+
+The Block layer still shines for:
+
+- `navigator.sendBeacon` targets (called directly by site JS, no intermediate DOM element to remove — Block is the ONLY mechanism)
+- Eager `<iframe src>` that auto-loads on insertion
+- `<img>`, `<script>`, `<link>` tags that trigger fetches immediately
+- Any direct `fetch()` or `XMLHttpRequest` invoked by site code
+
+Reverse case: a network Block rule fires but the corresponding element is still rendered as an empty shell. If you want the element gone too, layer Remove on top.
+
+**Heuristic for picking the layer:**
+
+| Target | Block | Remove |
+|---|---|---|
+| `sendBeacon` / direct `fetch()` in site JS | Yes (only option) | No |
+| Eager `<iframe src>` / `<img src>` | Yes | Yes, if you want no dead shell |
+| Lazy custom elements with `loading="programmatic"` | **No** | **Yes (only option)** |
+| Sidebar widgets, banners, promo components | Limited | Yes |
+
+The Hush popup's Block rules diagnostic panel will tell you at a glance: if your Block rule shows `no traffic` indefinitely while the corresponding Remove rule is clearly working, you're likely in the lazy-element case and Block is redundant — drop it.
 
 ## What uBlock Origin Lite misses, and why Hush catches it
 
