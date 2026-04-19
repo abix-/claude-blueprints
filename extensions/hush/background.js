@@ -775,21 +775,63 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       } catch (e) {
         dynamicRules = [{ error: String(e) }];
       }
+
+      const stats = tabId !== null ? tabStats.get(tabId) : null;
+      const behavior = tabId !== null ? tabBehavior.get(tabId) : null;
+      const matchedDomain = stats && stats.matchedDomain;
+
+      // Compact network rules: one line per rule.
+      const compactRules = dynamicRules.map(r => ({
+        id: r.id,
+        pattern: r.condition && r.condition.urlFilter,
+        initiator: r.condition && r.condition.initiatorDomains && r.condition.initiatorDomains[0]
+      }));
+
+      // Summarize behavior instead of dumping all 500 seen resources.
+      const behaviorSummary = behavior ? {
+        pageHost: behavior.pageHost,
+        seenResourceCount: behavior.seenResources.length,
+        uniqueThirdPartyHostCount: new Set(behavior.seenResources.map(r => r.host).filter(h => h && h !== behavior.pageHost)).size,
+        latestHiddenIframeCount: behavior.latestIframes.length,
+        latestStickyCount: behavior.latestStickies.length,
+        dismissedKeyCount: behavior.dismissed.length,
+        suggestionCount: behavior.suggestions.length,
+        suggestions: behavior.suggestions.map(s => ({
+          layer: s.layer,
+          value: s.value,
+          reason: s.reason,
+          confidence: s.confidence,
+          count: s.count
+        }))
+      } : null;
+
       sendResponse({
         version: manifest.version,
         tabId,
+        timestamp: new Date().toISOString(),
         options,
-        tabStats: tabId !== null ? (tabStats.get(tabId) || null) : null,
-        tabBehavior: tabId !== null ? (tabBehavior.get(tabId) || null) : null,
-        allTabStatsCount: tabStats.size,
         configSiteCount: Object.keys(config).length,
         configSites: Object.keys(config),
-        tabMatchConfig: tabId !== null && tabStats.get(tabId) && tabStats.get(tabId).matchedDomain
-          ? config[tabStats.get(tabId).matchedDomain] || null
-          : null,
-        dynamicRules,
-        logs: logBuffer.slice(),
-        timestamp: new Date().toISOString()
+        matchedDomain,
+        matchedConfig: matchedDomain ? (config[matchedDomain] || null) : null,
+        tabActivity: stats ? {
+          totalBlocks: stats.block,
+          totalHide: Object.values(stats.hide).reduce((a, b) => a + b, 0),
+          totalRemove: Object.values(stats.remove).reduce((a, b) => a + b, 0),
+          hide: stats.hide,
+          remove: stats.remove,
+          recentBlockedUrls: (stats.blockedUrls || []).slice(-10).map(b => ({
+            t: b.t,
+            url: (b.url || "").slice(0, 200),
+            pattern: b.pattern,
+            type: b.resourceType
+          })),
+          recentRemovedElements: (stats.removedElements || []).slice(-10)
+        } : null,
+        behavior: behaviorSummary,
+        dynamicRules: compactRules,
+        dynamicRuleCount: compactRules.length,
+        recentLogs: logBuffer.slice(-40)
       });
     })();
     return true;
