@@ -156,4 +156,168 @@
     } catch (e) {}
     return _wsSend.apply(this, arguments);
   };
+
+  // =====================================================================
+  // Tier 1: Fingerprinting API hooks
+  //
+  // These APIs are overwhelmingly used for device fingerprinting when called
+  // in rapid succession with no corresponding UI. We hook them and emit
+  // observation events that the content script forwards to background; the
+  // background side counts hits per origin and surfaces a block suggestion
+  // when thresholds are exceeded.
+  // =====================================================================
+
+  // --- Canvas fingerprinting: toDataURL, toBlob, getImageData ---
+  try {
+    const _toDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function hushToDataURL() {
+      try { emit("canvas-fp", { method: "toDataURL", stack: captureStack() }); } catch (e) {}
+      return _toDataURL.apply(this, arguments);
+    };
+  } catch (e) {}
+  try {
+    const _toBlob = HTMLCanvasElement.prototype.toBlob;
+    if (_toBlob) {
+      HTMLCanvasElement.prototype.toBlob = function hushToBlob() {
+        try { emit("canvas-fp", { method: "toBlob", stack: captureStack() }); } catch (e) {}
+        return _toBlob.apply(this, arguments);
+      };
+    }
+  } catch (e) {}
+  try {
+    if (typeof CanvasRenderingContext2D !== "undefined") {
+      const _getImageData = CanvasRenderingContext2D.prototype.getImageData;
+      CanvasRenderingContext2D.prototype.getImageData = function hushGetImageData() {
+        try { emit("canvas-fp", { method: "getImageData", stack: captureStack() }); } catch (e) {}
+        return _getImageData.apply(this, arguments);
+      };
+
+      // Font-enumeration heuristic: measureText repeatedly called with
+      // different font-family values indicates a site testing which fonts
+      // are installed.
+      const _measureText = CanvasRenderingContext2D.prototype.measureText;
+      CanvasRenderingContext2D.prototype.measureText = function hushMeasureText(text) {
+        try {
+          emit("font-fp", {
+            font: this.font || "",
+            text: text ? String(text).slice(0, 20) : "",
+            stack: captureStack()
+          });
+        } catch (e) {}
+        return _measureText.apply(this, arguments);
+      };
+    }
+  } catch (e) {}
+
+  // --- WebGL fingerprinting: getParameter on WebGL1 and WebGL2 ---
+  const wrapGLGetParameter = (proto) => {
+    if (!proto || !proto.getParameter) return;
+    const orig = proto.getParameter;
+    proto.getParameter = function hushGLGetParameter(param) {
+      try {
+        // 37445 = UNMASKED_VENDOR_WEBGL, 37446 = UNMASKED_RENDERER_WEBGL.
+        // These two are the classic hardware-identifying reads; anything
+        // else is probably benign but we still count it for density signals.
+        const hotParam = param === 37445 || param === 37446;
+        emit("webgl-fp", {
+          param: String(param),
+          hotParam: hotParam,
+          stack: captureStack()
+        });
+      } catch (e) {}
+      return orig.apply(this, arguments);
+    };
+  };
+  try { if (typeof WebGLRenderingContext !== "undefined") wrapGLGetParameter(WebGLRenderingContext.prototype); } catch (e) {}
+  try { if (typeof WebGL2RenderingContext !== "undefined") wrapGLGetParameter(WebGL2RenderingContext.prototype); } catch (e) {}
+
+  // --- Audio fingerprinting: OfflineAudioContext construction ---
+  try {
+    if (typeof OfflineAudioContext !== "undefined") {
+      const OrigOAC = OfflineAudioContext;
+      const HushOAC = function hushOAC() {
+        try { emit("audio-fp", { method: "OfflineAudioContext", stack: captureStack() }); } catch (e) {}
+        return Reflect.construct(OrigOAC, arguments, HushOAC);
+      };
+      HushOAC.prototype = OrigOAC.prototype;
+      HushOAC.prototype.constructor = HushOAC;
+      window.OfflineAudioContext = HushOAC;
+    }
+  } catch (e) {}
+
+  // =====================================================================
+  // Tier 2: Session replay detection
+  // =====================================================================
+
+  // --- Listener density: count mousemove/keydown/click/input/scroll
+  //     listeners attached to document/window/body. Normal sites attach
+  //     1-3; session replay tools attach 12+. ---
+  try {
+    const _addEventListener = EventTarget.prototype.addEventListener;
+    const REPLAY_EVENT_TYPES = new Set([
+      "mousemove", "mousedown", "mouseup", "click",
+      "keydown", "keyup", "keypress", "input",
+      "scroll", "touchmove", "touchstart", "touchend"
+    ]);
+    EventTarget.prototype.addEventListener = function hushAddEventListener(type) {
+      try {
+        if (typeof type === "string" && REPLAY_EVENT_TYPES.has(type)) {
+          const onDocLike = (this === document || this === window ||
+                             (typeof document !== "undefined" && this === document.body));
+          if (onDocLike) {
+            emit("listener-added", {
+              eventType: type,
+              stack: captureStack()
+            });
+          }
+        }
+      } catch (e) {}
+      return _addEventListener.apply(this, arguments);
+    };
+  } catch (e) {}
+
+  // --- Known session-replay vendor globals: periodic poll for well-known
+  //     sentinel names (Hotjar, FullStory, Clarity, LogRocket, Smartlook,
+  //     Mouseflow). Dictionary lives here as seed defaults; could be made
+  //     user-editable if false positives ever appear. ---
+  const REPLAY_GLOBALS = [
+    ["_hjSettings", "Hotjar"],
+    ["_hjid", "Hotjar"],
+    ["hj", "Hotjar"],
+    ["FS", "FullStory"],
+    ["_fs_debug", "FullStory"],
+    ["clarity", "Microsoft Clarity"],
+    ["LogRocket", "LogRocket"],
+    ["_lr_loaded", "LogRocket"],
+    ["smartlook", "Smartlook"],
+    ["mouseflow", "Mouseflow"],
+    ["__posthog", "PostHog"]
+  ];
+  function pollReplayGlobals() {
+    const found = [];
+    for (const [key, vendor] of REPLAY_GLOBALS) {
+      try {
+        const v = window[key];
+        if (typeof v !== "undefined" && v !== null) {
+          found.push({ key, vendor });
+        }
+      } catch (e) {}
+    }
+    if (found.length) {
+      try { emit("replay-global", { vendors: found }); } catch (e) {}
+    }
+  }
+  try {
+    // Check twice: once shortly after DOMContentLoaded (catches most),
+    // once later for lazy-loaded session replay tools.
+    const scheduleReplayCheck = () => {
+      setTimeout(pollReplayGlobals, 2000);
+      setTimeout(pollReplayGlobals, 8000);
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", scheduleReplayCheck, { once: true });
+    } else {
+      scheduleReplayCheck();
+    }
+  } catch (e) {}
 })();

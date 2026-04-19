@@ -166,6 +166,26 @@ fetched; no observations leave the machine.
   hidden iframes are filtered out automatically (see allowlist below).
 - **Sticky overlays** — fixed/sticky-position elements with z-index ≥ 100 covering
   ≥ 25 % of the viewport get a hide suggestion.
+- **Canvas fingerprinting** — `HTMLCanvasElement.toDataURL` / `toBlob` /
+  `getImageData` hooks. 3+ calls from one script origin produces a block
+  suggestion for that script. Confidence 90.
+- **WebGL fingerprinting** — `WebGLRenderingContext.getParameter` hook.
+  Reading `UNMASKED_RENDERER_WEBGL` or `UNMASKED_VENDOR_WEBGL` (the
+  GPU-model-identifying parameters) produces a block suggestion at
+  confidence 95. General getParameter flurry (8+) at confidence 75.
+- **Audio fingerprinting** — any `OfflineAudioContext` construction is
+  flagged (it has essentially no legitimate non-fingerprinting use).
+  Confidence 90.
+- **Font enumeration** — `measureText` with 20+ distinct font families in
+  one session indicates installed-font probing. Confidence 85.
+- **Session replay tools** — known vendor globals polled (`window._hjSettings`,
+  `window.FS`, `window.clarity`, `window.LogRocket`, `window.smartlook`,
+  `window.mouseflow`, `window.__posthog`). Presence produces a block
+  suggestion for the vendor's canonical domain at confidence 95.
+- **Session replay listener density** — 12+ `mousemove`/`keydown`/`click`/
+  `scroll`/etc listeners attached to document/window/body in the first
+  minute from a single script origin suggests replay-style capture.
+  Confidence 80.
 
 Each suggestion carries a confidence score (sendBeacon = 95, pixels = 85, polling =
 75, first-party telemetry = 70, sticky overlays = 55) and lists the raw evidence

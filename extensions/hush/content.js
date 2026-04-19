@@ -229,14 +229,25 @@
     if (!detectorEnabled) return; // gate by user's suggestions toggle
     const d = ev && ev.detail;
     if (!d || typeof d !== "object") return;
-    jsCallBuffer.push({
+    // Preserve kind-specific fields alongside the common ones so background
+    // can process fingerprinting/replay observations with full context.
+    const entry = {
       kind: String(d.kind || "?"),
-      url: String(d.url || ""),
-      method: String(d.method || ""),
-      bodyPreview: d.bodyPreview == null ? null : String(d.bodyPreview),
-      stack: Array.isArray(d.stack) ? d.stack.slice(0, 6) : [],
-      t: String(d.t || new Date().toISOString())
-    });
+      t: String(d.t || new Date().toISOString()),
+      stack: Array.isArray(d.stack) ? d.stack.slice(0, 6) : []
+    };
+    // Common fetch/xhr/beacon/ws fields
+    if ("url" in d) entry.url = String(d.url || "");
+    if ("method" in d) entry.method = String(d.method || "");
+    if ("bodyPreview" in d) entry.bodyPreview = d.bodyPreview == null ? null : String(d.bodyPreview);
+    // Fingerprinting/replay-specific fields
+    if ("param" in d) entry.param = String(d.param);
+    if ("hotParam" in d) entry.hotParam = !!d.hotParam;
+    if ("font" in d) entry.font = String(d.font || "");
+    if ("text" in d) entry.text = String(d.text || "");
+    if ("eventType" in d) entry.eventType = String(d.eventType || "");
+    if (Array.isArray(d.vendors)) entry.vendors = d.vendors.slice(0, 20);
+    jsCallBuffer.push(entry);
     if (jsCallBuffer.length > MAX_LOCAL_JS_CALLS) {
       jsCallBuffer.splice(0, jsCallBuffer.length - MAX_LOCAL_JS_CALLS);
     }

@@ -371,6 +371,24 @@ function hostOf(url) {
   try { return new URL(url).host; } catch (e) { return ""; }
 }
 
+// Walk a stack-trace array (strings like "foo (https://example.com/a.js:10:20)")
+// and return the hostname of the first non-Hush script frame. The first frame
+// inside our own mainworld.js is skipped so we see who CALLED our hook, not
+// our hook itself. Returns "" if no external script origin can be extracted.
+function scriptOriginFromStack(stack) {
+  if (!Array.isArray(stack)) return "";
+  for (const frame of stack) {
+    if (typeof frame !== "string") continue;
+    if (frame.includes("mainworld.js")) continue;
+    const m = frame.match(/https?:\/\/[^\s:)]+/);
+    if (!m) continue;
+    try {
+      return new URL(m[0]).host;
+    } catch (e) { /* not a parseable URL, skip frame */ }
+  }
+  return "";
+}
+
 // Extract the TAB's top-frame hostname from a runtime message sender.
 // Used so we can attribute iframe-originated observations to the tab the
 // user is actually looking at, not the iframe's own hostname.
@@ -707,6 +725,168 @@ function computeSuggestions(state, config) {
       frameHostname: fromFrame,
       diag: makeDiag(selector, "remove", fromFrame)
     });
+  }
+
+  // =====================================================================
+  // Fingerprinting detection (Tier 1 from docs/heuristic-roadmap.md)
+  // =====================================================================
+  const jsCalls = Array.isArray(state.jsCalls) ? state.jsCalls : [];
+  const nowTs = Date.now();
+  const firstTs = jsCalls.length ? Date.parse(jsCalls[0].t) || nowTs : nowTs;
+  const secondsSinceFirst = Math.max(1, Math.round((nowTs - firstTs) / 1000));
+
+  // Aggregate calls by kind and by stack origin for each kind.
+  const kindCounts = {};
+  const originsByKind = {};
+  const hotParamsByOrigin = {};
+  const distinctFontsByOrigin = {};
+  const listenerTypesByOrigin = {};
+  const replayVendors = new Map();
+  for (const c of jsCalls) {
+    const k = c.kind || "?";
+    kindCounts[k] = (kindCounts[k] || 0) + 1;
+    const origin = scriptOriginFromStack(c.stack) || "(unknown script)";
+    if (!originsByKind[k]) originsByKind[k] = new Map();
+    originsByKind[k].set(origin, (originsByKind[k].get(origin) || 0) + 1);
+
+    if (k === "webgl-fp" && c.hotParam) {
+      if (!hotParamsByOrigin[origin]) hotParamsByOrigin[origin] = 0;
+      hotParamsByOrigin[origin] += 1;
+    }
+    if (k === "font-fp" && c.font) {
+      if (!distinctFontsByOrigin[origin]) distinctFontsByOrigin[origin] = new Set();
+      distinctFontsByOrigin[origin].add(c.font);
+    }
+    if (k === "listener-added" && c.eventType) {
+      if (!listenerTypesByOrigin[origin]) listenerTypesByOrigin[origin] = { count: 0, types: new Set() };
+      listenerTypesByOrigin[origin].count += 1;
+      listenerTypesByOrigin[origin].types.add(c.eventType);
+    }
+    if (k === "replay-global" && Array.isArray(c.vendors)) {
+      for (const v of c.vendors) {
+        if (v && v.vendor) replayVendors.set(v.vendor, (replayVendors.get(v.vendor) || 0) + 1);
+      }
+    }
+  }
+
+  // Emit a block suggestion targeting a script origin with a given reason.
+  // Shared helper for fingerprinting/replay suggestions since they all result
+  // in "block this script's origin" recommendations with varying confidence.
+  const emitOriginBlock = (origin, reason, confidence, kind) => {
+    if (!origin || origin === "(unknown script)") return;
+    const value = "||" + origin;
+    if (existingBlock.has(value)) return;
+    const suggKey = "block::" + value + "::" + kind;
+    out.push({
+      key: suggKey,
+      layer: "block",
+      value,
+      reason,
+      confidence,
+      count: 1,
+      evidence: [],
+      fromIframe: false,
+      frameHostname: null,
+      diag: makeDiag(value, "block", null)
+    });
+  };
+
+  // Canvas fingerprinting: 3+ toDataURL/toBlob/getImageData calls is the
+  // classic signature. measureText hits don't count here (they're handled by
+  // the font-enum detector below).
+  if (originsByKind["canvas-fp"]) {
+    for (const [origin, cnt] of originsByKind["canvas-fp"]) {
+      if (cnt >= 3) {
+        emitOriginBlock(origin, "canvas fingerprinting (" + cnt + " toDataURL/getImageData reads)", 90, "canvas-fp");
+      }
+    }
+  }
+
+  // WebGL fingerprinting: reading UNMASKED_RENDERER_WEBGL / UNMASKED_VENDOR_WEBGL
+  // is nearly definitional; any hit is very high confidence. General
+  // getParameter flurry (5+) also flagged at lower confidence.
+  for (const [origin, hotCount] of Object.entries(hotParamsByOrigin)) {
+    if (hotCount >= 1) {
+      emitOriginBlock(origin, "WebGL fingerprinting (read UNMASKED_RENDERER_WEBGL or _VENDOR_WEBGL)", 95, "webgl-fp-hot");
+    }
+  }
+  if (originsByKind["webgl-fp"]) {
+    for (const [origin, cnt] of originsByKind["webgl-fp"]) {
+      if (cnt >= 8 && !(hotParamsByOrigin[origin] >= 1)) {
+        emitOriginBlock(origin, "WebGL fingerprinting (" + cnt + " getParameter reads)", 75, "webgl-fp");
+      }
+    }
+  }
+
+  // Audio fingerprinting: constructing OfflineAudioContext has effectively
+  // zero legit non-fingerprinting use. Any hit warrants flagging.
+  if (originsByKind["audio-fp"]) {
+    for (const [origin, cnt] of originsByKind["audio-fp"]) {
+      emitOriginBlock(origin, "audio fingerprinting (OfflineAudioContext constructed " + cnt + "x)", 90, "audio-fp");
+    }
+  }
+
+  // Font enumeration: many measureText calls with many distinct font-family
+  // values. Threshold chosen so it won't fire for a chart library that uses
+  // one font across many measurements.
+  for (const [origin, fontSet] of Object.entries(distinctFontsByOrigin)) {
+    if (fontSet.size >= 20) {
+      emitOriginBlock(origin, "font enumeration fingerprinting (" + fontSet.size + " distinct fonts probed)", 85, "font-fp");
+    }
+  }
+
+  // =====================================================================
+  // Session replay detection (Tier 2 from docs/heuristic-roadmap.md)
+  // =====================================================================
+
+  // Vendor-global detection: presence of Hotjar/FullStory/Clarity/etc globals.
+  // Near-definitional, very high confidence. We can't attribute to a script
+  // origin from this signal alone, so we use the vendor name in the reason
+  // but leave the block target to the user's discretion via evidence.
+  for (const [vendor, cnt] of replayVendors) {
+    // Map vendor to a canonical domain for the block suggestion
+    const vendorHost = {
+      "Hotjar": "hotjar.com",
+      "FullStory": "fullstory.com",
+      "Microsoft Clarity": "clarity.ms",
+      "LogRocket": "logrocket.com",
+      "Smartlook": "smartlook.com",
+      "Mouseflow": "mouseflow.com",
+      "PostHog": "posthog.com"
+    }[vendor];
+    if (!vendorHost) continue;
+    const value = "||" + vendorHost;
+    if (existingBlock.has(value)) continue;
+    out.push({
+      key: "block::" + value + "::replay-" + vendor,
+      layer: "block",
+      value,
+      reason: vendor + " session replay detected (captures clicks, keystrokes, scrolls)",
+      confidence: 95,
+      count: cnt,
+      evidence: ["Global sentinel found in page: window." +
+                 (vendor === "Hotjar" ? "_hjSettings" :
+                  vendor === "FullStory" ? "FS" :
+                  vendor === "Microsoft Clarity" ? "clarity" :
+                  vendor === "LogRocket" ? "LogRocket" :
+                  vendor === "Smartlook" ? "smartlook" :
+                  vendor === "Mouseflow" ? "mouseflow" :
+                  vendor === "PostHog" ? "__posthog" : "?")],
+      fromIframe: false,
+      frameHostname: null,
+      diag: makeDiag(value, "block", null)
+    });
+  }
+
+  // Listener density: heavy attachment of mousemove/keydown/click/etc
+  // listeners on document/window/body from a single origin, in a short
+  // time window after load. Classic session-replay startup pattern.
+  for (const [origin, info] of Object.entries(listenerTypesByOrigin)) {
+    if (info.count >= 12 && info.types.size >= 3 && secondsSinceFirst < 60) {
+      emitOriginBlock(origin,
+        "session replay pattern (" + info.count + " interaction listeners attached: " + Array.from(info.types).join(", ") + ")",
+        80, "listener-density");
+    }
   }
 
   // 6. Sticky overlays -> hide (medium)
