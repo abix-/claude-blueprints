@@ -46,9 +46,36 @@ What the iframe DOM we captured actually tells us:
 Combined with the hidden-iframe behavioral detection (1x1 size,
 `visibility: hidden`) and the above naming, these are ad containers.
 
-## Rule
+## Second observation: CSM telemetry beacons
 
-Based only on what Hush suggested and what the DOM confirms:
+A subsequent scan surfaced a second Hush suggestion with this evidence:
+
+- **Suggested rule:** `||unagi.amazon.com^`
+- **Layer:** Block
+- **Reason:** sendBeacon target (5 beacons sent)
+
+Observed URLs:
+
+```
+https://unagi.amazon.com/1/events/com.amazon.csm.csa.prod
+https://unagi.amazon.com/1/events/com.amazon.csm.customsg.prod
+https://unagi.amazon.com/1/events/com.amazon.csm.nexusclient.prod
+```
+
+What the evidence confirms:
+
+- Host `unagi.amazon.com` is Amazon's Client-Side Monitoring (CSM) telemetry ingest.
+  The path segment `com.amazon.csm.*` is Amazon's internal event-namespace convention.
+- All five requests used `navigator.sendBeacon`, which exists only to send
+  fire-and-forget telemetry. No feature behavior depends on the response.
+- `nexusclient` is one of Amazon's telemetry channels; `csa`/`customsg` are
+  others. All `.prod` environments.
+
+Safe to block. Same class of target as Reddit's `w3-reporting.reddit.com`.
+
+## Rules
+
+Based only on observed Hush suggestions plus DOM confirmation:
 
 ```json
 {
@@ -57,14 +84,18 @@ Based only on what Hush suggested and what the DOM confirms:
       "iframe[id^=\"ape_\"]"
     ],
     "hide": [],
-    "block": []
+    "block": [
+      "||unagi.amazon.com^"
+    ]
   }
 }
 ```
 
-The `iframe[id^="ape_"]` rule is slightly stricter than Hush's suggested
-`iframe[src*="m.media-amazon.com"]` - it targets the `ape_` ID convention
-that both observed iframes share. Trade-off:
+### Remove: `iframe[id^="ape_"]`
+
+Slightly stricter than Hush's suggested `iframe[src*="m.media-amazon.com"]` -
+targets the `ape_` ID convention that both observed iframes share.
+Trade-off:
 
 - `iframe[src*="m.media-amazon.com"]`: Hush's suggestion. May match any iframe
   loaded from `m.media-amazon.com` regardless of role. If Amazon ever uses
@@ -72,8 +103,15 @@ that both observed iframes share. Trade-off:
 - `iframe[id^="ape_"]`: more surgical. Matches only iframes that follow the
   `ape_` naming convention (which both observed ad iframes do).
 
-Either is fine for starting out. If you see non-ad iframes disappearing,
-switch to the `id^="ape_"` form.
+Either is fine. If you see non-ad iframes disappearing, switch to the
+`id^="ape_"` form.
+
+### Block: `||unagi.amazon.com^`
+
+Kills the CSM telemetry ingest at the network layer. Since these are
+`sendBeacon` calls fired by Amazon's page JS (not a removable DOM element),
+network-block is the only mechanism that can stop them - Remove wouldn't
+help.
 
 ## What this doc does NOT claim
 
