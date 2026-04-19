@@ -86,7 +86,10 @@ Clicking the toolbar icon opens a compact popup showing, for the current tab:
 - Matched site (or "no config matched" if none applies)
 - Counts and per-pattern detail for each of the three layers
 - An expandable list of every blocked URL with timestamp and resource type
-- An expandable list of every removed element with tag + class signature
+- An expandable list of every removed element with tag + class signature,
+  distinguishing attributes (`name`, `data-testid`, `post-title`, etc.), and a
+  short text-content preview — enough context to see *what* was killed, not
+  just that something was killed
 - Badge on the icon:
     - **Yellow `!`** when the current tab has pending behavioral suggestions (needs your review)
     - **Grey `N`** when no suggestions pending but Hush is actively blocking, removing, or hiding things
@@ -152,7 +155,8 @@ fetched; no observations leave the machine.
 - **Polling endpoints** — the same canonical URL (with noise query params stripped)
   fetched four or more times within seconds, with tiny responses.
 - **Hidden iframes** — iframes with `display:none`, `visibility:hidden`, 1x1 size,
-  opacity 0, or positioned off-screen get a remove suggestion.
+  opacity 0, or positioned off-screen get a remove suggestion. Known-legit
+  hidden iframes are filtered out automatically (see allowlist below).
 - **Sticky overlays** — fixed/sticky-position elements with z-index ≥ 100 covering
   ≥ 25 % of the viewport get a hide suggestion.
 
@@ -160,6 +164,24 @@ Each suggestion carries a confidence score (sendBeacon = 95, pixels = 85, pollin
 75, first-party telemetry = 70, sticky overlays = 55) and lists the raw evidence
 (URLs, sizes, timestamps, outerHTML snippets) so the user can verify before
 accepting.
+
+### Hidden-iframe allowlist
+
+Many legitimate features run in hidden iframes by design — captcha challenges,
+OAuth popups, payment processor widgets. Hush skips these automatically so
+they never surface as remove suggestions. Current allowlist:
+
+- **Captcha:** `google.com/recaptcha`, `gstatic.com/recaptcha`, `hcaptcha.com`,
+  `challenges.cloudflare.com`, `turnstile.cloudflare.com`
+- **Payment:** `stripe.com`, `paypal.com`, `paypalobjects.com`, `braintreegateway.com`,
+  `braintree-api.com`, `adyen.com`, `squareup.com`, `squarecdn.com`
+- **OAuth / auth:** `accounts.google.com`, `appleid.apple.com`,
+  `login.microsoftonline.com`, `login.live.com`, `*.firebaseapp.com`, `auth0.com`, `okta.com`
+
+If Hush ever does surface an iframe you believe is legit (e.g., a new
+captcha provider we haven't allowlisted), just **Dismiss** the suggestion.
+Dismissals persist for the current tab session; a fresh page load restarts
+detection.
 
 ### Scan timing
 

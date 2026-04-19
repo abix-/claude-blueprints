@@ -107,6 +107,8 @@ User spotted the "Brand Affiliate" text in a post's credit bar and inspected the
 
 **Why Remove:** these are SPA-injected after the initial feed load, so we need MutationObserver to catch them as they appear. They also lazy-load their content over the network, so removing the element before it hydrates also cancels the pending request.
 
+**What the evidence looks like in the popup:** Reddit injects several of these in a single feed chunk, so the Removed section will show multiple entries at the same timestamp. Each entry carries the unique `name` attribute (e.g. `name="RelatedCommunityRecommendations_qmZmnB"`) so they're distinguishable in the evidence expansion even though the tag + class signature is identical.
+
 ---
 
 ## Remove: `games-section-badge-controller`
