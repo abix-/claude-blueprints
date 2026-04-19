@@ -15,7 +15,6 @@ Paste this block into Hush as-is, or into the raw-JSON editor:
   "reddit.com": {
     "remove": [
       "games-section-badge-controller",
-      "article[data-post-id]:has(shreddit-brand-affiliate-tag)",
       "article[data-post-id]:has([is-post-commercial-communication])",
       "faceplate-partial[name^=\"RelatedCommunityRecommendations\"]"
     ],
@@ -60,38 +59,36 @@ Reddit's site entry covers `reddit.com` and all its subdomains (`www.reddit.com`
 
 ---
 
-## Remove: `article[data-post-id]:has(shreddit-brand-affiliate-tag)`
+## Remove: commercial posts
 
-**Layer:** Remove (DOM)
+Pick ONE of these two rules - they overlap, so using both is redundant (the second would try to match elements the first already removed).
 
-**What it catches:** any Reddit feed post marked as a "Brand Affiliate" post - sponsored content posing as organic posts, where a real user posts about a product they're paid to promote. Reddit tags these with a dedicated custom element (`<shreddit-brand-affiliate-tag>`) that shows up in the credit bar as "Brand Affiliate".
+### Aggressive (recommended): `article[data-post-id]:has([is-post-commercial-communication])`
 
-**The selector, piece by piece:**
+**What it catches:** every feed post Reddit flags as commercial. `is-post-commercial-communication` is an attribute Reddit sets on `<shreddit-post-overflow-menu>` for promoted posts, Brand Affiliate posts, in-feed ads, and any new commercial variant Reddit ships.
 
-- `article[data-post-id]` - every feed row is wrapped in `<article data-post-id="t3_...">`. The attribute-exists selector confines us to real post rows, not stray `<article>` elements elsewhere.
-- `:has(shreddit-brand-affiliate-tag)` - parent selector. CSS `:has()` matches the article only if it contains a `<shreddit-brand-affiliate-tag>` descendant somewhere.
+**Risk:** broader rule = broader blast radius if Reddit ever repurposes the attribute (unlikely but possible). If you see legitimate posts disappearing, swap to the conservative rule below.
 
-**How it was discovered:** the user spotted the "Brand Affiliate" text in a post's credit bar and inspected the element. Inside the outer `<article>` was `<shreddit-post>` containing an unambiguously-named custom element `<shreddit-brand-affiliate-tag>`. Tag-name selectors are far more stable than utility-class chains (which change with every framework update).
+### Conservative: `article[data-post-id]:has(shreddit-brand-affiliate-tag)`
 
-**Why Remove over Hide:**
+**What it catches:** only "Brand Affiliate" posts - where a real user is paid to promote something. Reddit tags these with a dedicated custom element `<shreddit-brand-affiliate-tag>` that renders as "Brand Affiliate" in the credit bar. Regular promoted ads are NOT caught by this rule.
+
+**Risk:** low. The custom element's tag name is unambiguously named and dedicated to this one feature. If you want narrow, proven-safe behavior at the cost of leaving regular ads alone, use this.
+
+### Selector anatomy (applies to both)
+
+- `article[data-post-id]` - every feed row is wrapped in `<article data-post-id="t3_...">`. The attribute-exists selector confines us to real post rows, not stray `<article>` elements elsewhere on the page.
+- `:has(...)` - parent selector. CSS `:has()` matches the article only if it contains a matching descendant.
+
+### How they were discovered
+
+User spotted the "Brand Affiliate" text in a post's credit bar and inspected the element. Walking up the DOM tree found `<shreddit-brand-affiliate-tag>` as a dedicated custom element, and noticed `is-post-commercial-communication` as an attribute on a sibling element of the same post. Tag-name selectors and attribute-existence selectors are far more stable than utility-class chains (which change with every framework update).
+
+### Why Remove over Hide
 
 - Reddit wraps posts in `<faceplate-tracker>` which fires view/impression events as soon as a post enters the viewport. `display: none` does NOT always prevent that - some trackers fire on intersection, some on hydration. `.remove()` guarantees the element never exists to have its tracker fire.
-- Infinite scroll: Hush's MutationObserver catches each newly-loaded post as it appears. Brand-affiliate posts never flash on screen; they're removed in the same tick they're added.
+- Infinite scroll: Hush's MutationObserver catches each newly-loaded post as it appears. Commercial posts never flash on screen; they're removed in the same tick they're added.
 - Removing the element also frees any event listeners Reddit's framework attached to it.
-
----
-
-## Remove: `article[data-post-id]:has([is-post-commercial-communication])`
-
-**Layer:** Remove (DOM)
-
-**What it catches:** a broader net than Brand Affiliate. The `is-post-commercial-communication` attribute appears on `<shreddit-post-overflow-menu>` for any post Reddit classifies as commercial - regular promoted posts, Brand Affiliate, in-feed ads, and whatever new commercial variants Reddit ships.
-
-**Relationship to the Brand Affiliate rule:** this one is a superset. If you want the safe, conservative version, use only the Brand Affiliate rule. If you want everything commercial gone, use this one and delete the Brand Affiliate rule (the commercial rule already covers it).
-
-**Why use both:** the Brand Affiliate rule is proven safe. The commercial-communication rule is safe-looking but broader - it depends on Reddit continuing to set that attribute on genuine ads only. If Reddit ever repurposes the attribute (say, to mark content from verified-creator accounts), this rule could start removing legitimate posts. Keeping both means if you ever want to roll back the broader one, the narrower one still works.
-
-**Why Remove over Hide:** same reasoning as Brand Affiliate.
 
 ---
 
