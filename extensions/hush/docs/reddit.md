@@ -164,6 +164,16 @@ Reverse case: a network Block rule fires but the corresponding element is still 
 
 The Hush popup's Block rules diagnostic panel will tell you at a glance: if your Block rule shows `no traffic` indefinitely while the corresponding Remove rule is clearly working, you're likely in the lazy-element case and Block is redundant — drop it.
 
+## Iframes and per-tab rules
+
+Reddit embeds third-party iframes aggressively - redgifs videos, YouTube clips, ad iframes, etc. Each of those iframes has its own hostname (`www.redgifs.com`, `www.youtube.com`, etc.) and initiates its own network requests with its own origin.
+
+Hush attributes iframe-originated observations to the TAB you're looking at, not the iframe's hostname. So when you're on `www.reddit.com` and an embedded `www.redgifs.com` iframe fires a `w3-reporting.reddit.com` beacon, Hush sees it as part of your reddit.com tab - meaning your `reddit.com` block rule catches it. You do NOT need to add separate rules per third-party iframe Reddit embeds.
+
+The `Why?` panel on each suggestion shows both the tab hostname (used for config matching and dedup) and the frame hostname (where the request actually fired from). A small `from iframe <host>` chip appears on iframe-originated suggestions so you can see what's running where, but rule-authoring stays at the tab level.
+
+DOM `hide` and `remove` selectors still apply per-frame because they describe DOM structures specific to that frame's site. Your `shreddit-post` selector only matches elements on Reddit's own DOM, not inside a redgifs iframe.
+
 ## What uBlock Origin Lite misses, and why Hush catches it
 
 All three of the remove rules above target Reddit's own custom elements (`shreddit-brand-affiliate-tag`, `faceplate-partial`). Curated filter lists like EasyList and EasyPrivacy don't have entries for these because they're:

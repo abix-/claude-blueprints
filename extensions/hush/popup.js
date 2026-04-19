@@ -185,6 +185,15 @@ function renderSuggRow(tabId, hostname, s, isMatched) {
   layer.className = "sugg-layer " + s.layer;
   layer.textContent = s.layer;
   top.appendChild(layer);
+  if (s.fromIframe && s.frameHostname) {
+    const iframeChip = document.createElement("span");
+    iframeChip.className = "sugg-iframe";
+    iframeChip.textContent = "from iframe " + s.frameHostname;
+    iframeChip.title = "This request came from an embedded " + s.frameHostname +
+      " iframe on the current tab. Hush checks your tab's site config for dedup, " +
+      "so your existing rules still cover it.";
+    top.appendChild(iframeChip);
+  }
   const conf = document.createElement("span");
   conf.className = "sugg-conf";
   conf.textContent = "conf " + (s.confidence || 0) + "  |  count " + (s.count || 1);
@@ -264,7 +273,9 @@ function renderSuggRow(tabId, hostname, s, isMatched) {
         list.className = "sugg-evidence-list";
         const rows = [
           ["Checked value", info.value],
-          ["Hostname", info.hostname],
+          ["Tab hostname (used for config match)", info.tabHostname || "(unknown)"],
+          ["Observed from frame", info.frameHostname || info.tabHostname || "(unknown)"],
+          ["From iframe?", info.isFromIframe ? "yes" : "no"],
           ["Matched config key", info.matchedKey || "(no site config matched)"],
           ["Existing " + info.layer + " rules count", String(info.existingBlockCount)],
           ["Dedup result", info.dedupResult]

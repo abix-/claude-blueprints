@@ -166,14 +166,19 @@ async function doSyncDynamicRules() {
     for (const pattern of cfg.block) {
       if (typeof pattern !== "string" || !pattern.trim()) continue;
       const id = nextId++;
+      // Track sourceDomain in-memory for display ("this rule came from reddit.com config"),
+      // but don't enforce it at the DNR layer - rules should fire wherever the URL appears,
+      // so iframe-originated requests on the tab get caught too. Chrome DNR's
+      // initiatorDomains only matches the initiating FRAME's origin, not the tab's
+      // top-level URL, so an initiatorDomains restriction would miss cross-origin
+      // iframe traffic (e.g., redgifs iframes on reddit tabs).
       rulePatterns.set(id, { pattern, domain });
       addRules.push({
         id,
         priority: 1,
         action: { type: "block" },
         condition: {
-          urlFilter: pattern,
-          initiatorDomains: [domain]
+          urlFilter: pattern
         }
       });
     }
@@ -366,6 +371,30 @@ function hostOf(url) {
   try { return new URL(url).host; } catch (e) { return ""; }
 }
 
+// Extract the TAB's top-frame hostname from a runtime message sender.
+// Used so we can attribute iframe-originated observations to the tab the
+// user is actually looking at, not the iframe's own hostname.
+function tabHostnameOf(sender) {
+  try {
+    if (sender && sender.tab && sender.tab.url) {
+      return new URL(sender.tab.url).hostname;
+    }
+  } catch (e) {}
+  return "";
+}
+
+// Extract the FRAME's hostname from the sender - this is whichever frame
+// (top or iframe) sent the message. Lets us tag observations with their
+// originating frame for diagnostic display.
+function frameHostnameOf(sender) {
+  try {
+    if (sender && sender.url) {
+      return new URL(sender.url).hostname;
+    }
+  } catch (e) {}
+  return "";
+}
+
 // Given a DNR urlFilter pattern, pull out the longest stable "keyword"
 // substring - the part with no wildcards or anchors. Used to diagnose
 // whether observed URLs LOOK like they should be matched by the pattern,
@@ -500,13 +529,25 @@ function computeSuggestions(state, config) {
     arr.push(r);
     beaconByHost.set(r.host, arr);
   }
+  // Pull the unique set of frames that contributed observations to each
+  // host-grouped category so suggestions can be tagged with the frame
+  // that originated them (iframe vs top-frame).
+  const firstNonTopFrame = (records) => {
+    for (const r of records) {
+      if (r && r.reporterFrame && r.reporterFrame !== hostname) return r.reporterFrame;
+    }
+    return null;
+  };
+
   // Shared diagnostic attached to every suggestion so the popup can answer
   // "why is this suggestion here even though I have a rule for it?" without
   // requiring the user to open the service worker console.
-  const makeDiag = (value, layer) => ({
+  const makeDiag = (value, layer, frameHostname) => ({
     value,
     layer,
-    hostname,
+    tabHostname: hostname,
+    frameHostname: frameHostname || hostname,
+    isFromIframe: !!(frameHostname && frameHostname !== hostname),
     matchedKey: match && match.key,
     configHasSite: !!match,
     existingBlockCount: existingBlock.size,
@@ -525,6 +566,7 @@ function computeSuggestions(state, config) {
     const hasMatch = existingBlock.has(value);
     log("beacon suggestion candidate:", value, "hits", hits.length, "existingBlock.has", hasMatch);
     if (hasMatch) continue;
+    const fromFrame = firstNonTopFrame(hits);
     out.push({
       key: "block::" + value,
       layer: "block",
@@ -533,7 +575,9 @@ function computeSuggestions(state, config) {
       confidence: 95,
       count: hits.length,
       evidence: hits.slice(0, 5).map(h => h.url),
-      diag: makeDiag(value, "block")
+      fromIframe: !!fromFrame,
+      frameHostname: fromFrame,
+      diag: makeDiag(value, "block", fromFrame)
     });
   }
 
@@ -551,6 +595,7 @@ function computeSuggestions(state, config) {
     const value = "||" + host;
     if (existingBlock.has(value)) continue;
     const med = median(hits.map(h => h.transferSize));
+    const fromFrame = firstNonTopFrame(hits);
     out.push({
       key: "block::" + value,
       layer: "block",
@@ -559,7 +604,9 @@ function computeSuggestions(state, config) {
       confidence: 85,
       count: hits.length,
       evidence: hits.slice(0, 5).map(h => h.url + " (" + h.transferSize + "b)"),
-      diag: makeDiag(value, "block")
+      fromIframe: !!fromFrame,
+      frameHostname: fromFrame,
+      diag: makeDiag(value, "block", fromFrame)
     });
   }
 
@@ -580,6 +627,7 @@ function computeSuggestions(state, config) {
     if (med >= 1024 || max >= 5120) continue;
     const value = "||" + host;
     if (existingBlock.has(value)) continue;
+    const fromFrame = firstNonTopFrame(requests);
     out.push({
       key: "block::" + value,
       layer: "block",
@@ -588,7 +636,9 @@ function computeSuggestions(state, config) {
       confidence: 70,
       count: requests.length,
       evidence: requests.slice(0, 5).map(r => r.url + " (" + r.transferSize + "b, " + r.initiatorType + ")"),
-      diag: makeDiag(value, "block")
+      fromIframe: !!fromFrame,
+      frameHostname: fromFrame,
+      diag: makeDiag(value, "block", fromFrame)
     });
   }
 
@@ -622,7 +672,9 @@ function computeSuggestions(state, config) {
       confidence: 75,
       count: info.count,
       evidence: [info.sample],
-      diag: makeDiag(value, "block")
+      fromIframe: false,
+      frameHostname: null,
+      diag: makeDiag(value, "block", null)
     });
   }
 
@@ -639,6 +691,7 @@ function computeSuggestions(state, config) {
   for (const [host, info] of iframeByHost) {
     const selector = 'iframe[src*="' + host + '"]';
     if (existingRemove.has(selector)) continue;
+    const fromFrame = firstNonTopFrame(info.samples);
     out.push({
       key: "remove::" + selector,
       layer: "remove",
@@ -647,7 +700,9 @@ function computeSuggestions(state, config) {
       confidence: 80,
       count: info.samples.length,
       evidence: info.samples.slice(0, 3).map(s => s.outerHTMLPreview),
-      diag: makeDiag(selector, "remove")
+      fromIframe: !!fromFrame,
+      frameHostname: fromFrame,
+      diag: makeDiag(selector, "remove", fromFrame)
     });
   }
 
@@ -657,6 +712,7 @@ function computeSuggestions(state, config) {
     if (!s.selector || stickySeen.has(s.selector)) continue;
     stickySeen.add(s.selector);
     if (existingHide.has(s.selector)) continue;
+    const stickyFrame = s.reporterFrame && s.reporterFrame !== hostname ? s.reporterFrame : null;
     out.push({
       key: "hide::" + s.selector,
       layer: "hide",
@@ -665,7 +721,9 @@ function computeSuggestions(state, config) {
       confidence: 55,
       count: 1,
       evidence: [s.rect.w + "x" + s.rect.h + " at z-index " + s.zIndex],
-      diag: makeDiag(s.selector, "hide")
+      fromIframe: !!stickyFrame,
+      frameHostname: stickyFrame,
+      diag: makeDiag(s.selector, "hide", stickyFrame)
     });
   }
 
@@ -709,14 +767,29 @@ chrome.runtime.onStartup.addListener(async () => {
 // and the popup's Blocked section shows "(unknown rule)".
 async function rehydrateRulePatterns() {
   try {
-    const existing = await chrome.declarativeNetRequest.getDynamicRules();
+    const [existing, config] = await Promise.all([
+      chrome.declarativeNetRequest.getDynamicRules(),
+      loadConfig()
+    ]);
     rulePatterns.clear();
+    // Build reverse-lookup so we can associate each DNR rule back to the
+    // site-config section that declared it (for UI display). The DNR rule
+    // itself no longer carries initiatorDomains metadata after the iframe-
+    // attribution fix, so we recover the "source domain" from config.
+    const patternToSource = new Map();
+    for (const [domain, cfg] of Object.entries(config)) {
+      if (!cfg || !Array.isArray(cfg.block)) continue;
+      for (const raw of cfg.block) {
+        if (typeof raw !== "string") continue;
+        const normalized = raw.endsWith("^") ? raw.slice(0, -1) : raw;
+        if (!patternToSource.has(normalized)) patternToSource.set(normalized, domain);
+      }
+    }
     for (const rule of existing) {
       const pattern = rule.condition && rule.condition.urlFilter;
-      const domains = rule.condition && rule.condition.initiatorDomains;
       rulePatterns.set(rule.id, {
         pattern: pattern || "",
-        domain: (domains && domains[0]) || ""
+        domain: patternToSource.get(pattern) || ""
       });
     }
     log("rehydrated rulePatterns for", rulePatterns.size, "rule(s)");
@@ -818,10 +891,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (typeof tabId !== "number") return;
     if (!Array.isArray(msg.calls) || !msg.calls.length) return;
     const state = getBehavior(tabId);
-    for (const c of msg.calls) state.jsCalls.push(c);
+    const frame = frameHostnameOf(sender);
+    for (const c of msg.calls) {
+      c.reporterFrame = frame || c.reporterFrame || null;
+      state.jsCalls.push(c);
+    }
     if (state.jsCalls.length > MAX_JS_CALLS) {
       state.jsCalls.splice(0, state.jsCalls.length - MAX_JS_CALLS);
     }
+    // Ensure state.pageHost reflects the TAB's top-frame hostname, not whichever
+    // frame most recently sent a message. The tab URL is authoritative.
+    const tabHost = tabHostnameOf(sender);
+    if (tabHost) state.pageHost = tabHost;
     schedulePersistBehavior();
     return;
   }
@@ -831,28 +912,49 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (typeof tabId !== "number") return;
     (async () => {
       const state = getBehavior(tabId);
-      state.pageHost = msg.hostname || state.pageHost;
-      // Merge resources (dedupe by url + startTime)
+      // Always prefer the tab's top-frame hostname over whatever the (possibly
+      // iframe) scan reports. This is critical for correct config matching:
+      // rules stored under "reddit.com" should apply to the reddit.com tab
+      // even when a redgifs.com iframe on that tab is what produced the scan.
+      const tabHost = tabHostnameOf(sender);
+      if (tabHost) state.pageHost = tabHost;
+      else if (msg.hostname && !state.pageHost) state.pageHost = msg.hostname;
+
+      const reporterFrame = frameHostnameOf(sender) || msg.hostname || null;
+
+      // Merge resources (dedupe by url + startTime). Tag each with the reporting
+      // frame's hostname so suggestion attribution can distinguish top-frame
+      // observations from iframe observations.
       if (Array.isArray(msg.resources)) {
         const seen = new Set(state.seenResources.map(r => r.url + "@" + r.startTime));
         for (const r of msg.resources) {
           const k = r.url + "@" + r.startTime;
           if (seen.has(k)) continue;
           seen.add(k);
+          r.reporterFrame = reporterFrame;
           state.seenResources.push(r);
         }
         if (state.seenResources.length > MAX_SEEN_RESOURCES) {
           state.seenResources.splice(0, state.seenResources.length - MAX_SEEN_RESOURCES);
         }
       }
-      if (Array.isArray(msg.iframes)) state.latestIframes = msg.iframes;
-      if (Array.isArray(msg.stickies)) state.latestStickies = msg.stickies;
+      // latestIframes/latestStickies are per-frame snapshots - keep only the
+      // most recent from each frame to avoid losing visibility when multiple
+      // frames report.
+      if (Array.isArray(msg.iframes)) {
+        for (const f of msg.iframes) f.reporterFrame = reporterFrame;
+        state.latestIframes = msg.iframes;
+      }
+      if (Array.isArray(msg.stickies)) {
+        for (const s of msg.stickies) s.reporterFrame = reporterFrame;
+        state.latestStickies = msg.stickies;
+      }
 
       const config = await loadConfig();
       state.suggestions = computeSuggestions(state, config);
       schedulePersistBehavior();
       updateBadge(tabId);
-      log("scan merged for tab", tabId, "- suggestions:", state.suggestions.length);
+      log("scan merged for tab", tabId, "from frame", reporterFrame, "- suggestions:", state.suggestions.length);
     })();
     return;
   }
