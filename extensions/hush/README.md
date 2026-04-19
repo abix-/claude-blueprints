@@ -59,7 +59,7 @@ copy-paste between machines. The UI and the JSON view edit the same storage.
 ```json
 {
   "example.com": {
-    "block":  ["||ads.example.com^"],
+    "block":  ["||ads.example.com"],
     "remove": [".modal-overlay"],
     "hide":   [".popup", ".newsletter-signup", "[class*=\"AdBanner\"]"]
   }
@@ -68,7 +68,7 @@ copy-paste between machines. The UI and the JSON view edit the same storage.
 
 Keys are domain names. Each site has three optional arrays:
 
-- `block` — uBlock-style URL patterns (`||domain.com^`, `*.cdn.example.com^`,
+- `block` — uBlock-style URL patterns (`||domain.com`, `*.cdn.example.com`,
   path wildcards, etc.). Scoped to the site key via `initiatorDomains` so a
   rule under `example.com` only fires when you're browsing example.com.
 - `remove` — CSS selectors. Matching elements are physically deleted from the

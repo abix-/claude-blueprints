@@ -369,16 +369,16 @@
       </p>
       <p><b>Pattern syntax (uBlock-style):</b></p>
       <div class="key">
-        <span class="k">||domain.com^</span>
+        <span class="k">||domain.com</span>
         <span>match requests to <code>domain.com</code> and any subdomain, across any path/port</span>
-        <span class="k">||ads.example.com^</span>
+        <span class="k">||ads.example.com</span>
         <span>match requests to exactly <code>ads.example.com</code> or its subdomains</span>
         <span class="k">||tracker.net/pixel</span>
         <span>match requests whose path starts with <code>/pixel</code></span>
-        <span class="k">*.cdn.example.com^</span>
+        <span class="k">*.cdn.example.com</span>
         <span>wildcard on subdomain (<code>*</code> = any characters)</span>
         <span class="k">^</span>
-        <span>matches any URL separator (<code>/</code>, <code>?</code>, <code>:</code>, end-of-URL)</span>
+        <span>separator anchor. Rarely needed after <code>||domain</code> (the domain anchor already handles it) and can be problematic with hyphenated subdomains.</span>
       </div>
       <p><b>When to use:</b> whenever the request itself is what you want gone — tracking pixels,
       ad scripts, telemetry beacons, widget iframes, API calls to unwanted services.</p>
@@ -476,7 +476,7 @@ iframe[src*="tracker.example.com"]
         <code>example.com</code> also applies to <code>www.example.com</code>,
         <code>m.example.com</code>, any subdomain. URL patterns in <code>Block</code> use a
         different scoping — they match the request URL regardless of subdomain-of-initiator
-        (i.e., <code>||ads.example.com^</code> blocks that host even though the initiator matched
+        (i.e., <code>||ads.example.com</code> blocks that host even though the initiator matched
         <code>example.com</code>).</li>
       </ul>
     </details>

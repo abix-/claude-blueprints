@@ -9,7 +9,7 @@
       ".modal-overlay"
     ],
     "block": [
-      "||ads.example.com^"
+      "||ads.example.com"
     ]
   }
 }

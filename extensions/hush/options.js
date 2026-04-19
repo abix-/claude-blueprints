@@ -191,7 +191,7 @@ function renderDetail() {
   detailEl.appendChild(renderLayerSection(
     entry, "block", "Block (network)",
     "URL patterns blocked at the network layer. Matching requests never leave the browser.",
-    "Add URL pattern like ||ads.example.com^"
+    "Add URL pattern like ||ads.example.com"
   ));
   detailEl.appendChild(renderLayerSection(
     entry, "remove", "Remove (DOM)",

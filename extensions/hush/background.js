@@ -469,7 +469,16 @@ function computeSuggestions(state, config) {
   if (!hostname) return [];
   const match = findConfigEntry(config, hostname);
   const cfg = match ? match.cfg : {};
-  const existingBlock = new Set(Array.isArray(cfg.block) ? cfg.block : []);
+  // Normalize existing block patterns by stripping the optional trailing ^.
+  // Suggestions are always generated without trailing ^ (the ^ is functionally
+  // redundant after a ||domain anchor and can cause match failures on
+  // hyphenated subdomains in Chrome's DNR), so dedup needs to compare
+  // normalized forms to recognize existing rules written either way.
+  const existingBlock = new Set(
+    (Array.isArray(cfg.block) ? cfg.block : []).map(p =>
+      typeof p === "string" && p.endsWith("^") ? p.slice(0, -1) : p
+    )
+  );
   const existingRemove = new Set(Array.isArray(cfg.remove) ? cfg.remove : []);
   const existingHide = new Set(Array.isArray(cfg.hide) ? cfg.hide : []);
   const dismissed = new Set(state.dismissed);
@@ -487,7 +496,7 @@ function computeSuggestions(state, config) {
     beaconByHost.set(r.host, arr);
   }
   for (const [host, hits] of beaconByHost) {
-    const value = "||" + host + "^";
+    const value = "||" + host;
     if (existingBlock.has(value)) continue;
     out.push({
       key: "block::" + value,
@@ -511,7 +520,7 @@ function computeSuggestions(state, config) {
     pixelByHost.set(r.host, arr);
   }
   for (const [host, hits] of pixelByHost) {
-    const value = "||" + host + "^";
+    const value = "||" + host;
     if (existingBlock.has(value)) continue;
     const med = median(hits.map(h => h.transferSize));
     out.push({
@@ -540,7 +549,7 @@ function computeSuggestions(state, config) {
     const med = median(sizes);
     const max = Math.max(...sizes);
     if (med >= 1024 || max >= 5120) continue;
-    const value = "||" + host + "^";
+    const value = "||" + host;
     if (existingBlock.has(value)) continue;
     out.push({
       key: "block::" + value,

@@ -19,7 +19,7 @@ Paste this block into Hush as-is, or into the raw-JSON editor:
       "faceplate-partial[name^=\"RelatedCommunityRecommendations\"]"
     ],
     "block": [
-      "||w3-reporting.reddit.com^"
+      "||w3-reporting.reddit.com"
     ]
   }
 }
@@ -29,7 +29,7 @@ Reddit's site entry covers `reddit.com` and all its subdomains (`www.reddit.com`
 
 ---
 
-## Block: `||w3-reporting.reddit.com^`
+## Block: `||w3-reporting.reddit.com`
 
 **Layer:** Block (network)
 

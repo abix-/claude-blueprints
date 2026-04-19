@@ -63,7 +63,7 @@ both rules to catch both patterns.
 
 A subsequent scan surfaced a second Hush suggestion with this evidence:
 
-- **Suggested rule:** `||unagi.amazon.com^`
+- **Suggested rule:** `||unagi.amazon.com`
 - **Layer:** Block
 - **Reason:** sendBeacon target (5 beacons sent)
 
