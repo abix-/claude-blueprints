@@ -10,7 +10,7 @@
       font-size: 13px;
       margin: 0;
       padding: 0;
-      width: 420px;
+      width: 440px;
     }
     header {
       padding: 12px 14px;
@@ -28,18 +28,23 @@
       word-break: break-all;
     }
     .unmatched {
-      padding: 20px 14px;
+      padding: 12px 14px;
       color: #666;
       text-align: center;
+      background: #fafafa;
+      border-bottom: 1px solid #eee;
     }
-    .sections {
+    .unmatched button {
+      margin-top: 8px;
+    }
+    .sections, .suggestions-block {
       padding: 4px 0;
     }
-    .section {
+    .section, .sugg-section {
       padding: 10px 14px;
       border-bottom: 1px solid #f0f0f0;
     }
-    .section:last-child {
+    .section:last-child, .sugg-section:last-child {
       border-bottom: none;
     }
     .section-head {
@@ -64,6 +69,10 @@
     .count.zero {
       background: #f0f0f0;
       color: #999;
+    }
+    .count.sugg {
+      background: #ffe8a8;
+      color: #6b4a00;
     }
     details ul {
       list-style: none;
@@ -134,6 +143,127 @@
       color: #aaa;
       margin-right: 6px;
     }
+    /* Suggestions specific */
+    .sugg-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: #fff9e8;
+      border-bottom: 1px solid #f0e4b8;
+      font-weight: 500;
+    }
+    .sugg-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .sugg-list li {
+      padding: 10px 14px;
+      border-bottom: 1px solid #f6f6f6;
+    }
+    .sugg-list li:last-child {
+      border-bottom: none;
+    }
+    .sugg-row-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .sugg-layer {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .sugg-layer.block  { background: #ffd6d6; color: #8a0000; }
+    .sugg-layer.remove { background: #ffe4c4; color: #7a4000; }
+    .sugg-layer.hide   { background: #dce7ff; color: #1a3a7a; }
+    .sugg-conf {
+      font-size: 10px;
+      color: #888;
+      margin-left: auto;
+      font-family: ui-monospace, monospace;
+    }
+    .sugg-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      color: #333;
+      background: #f5f5f5;
+      padding: 3px 6px;
+      border-radius: 4px;
+      margin: 2px 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sugg-reason {
+      font-size: 11px;
+      color: #666;
+      margin: 3px 0;
+    }
+    .sugg-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .sugg-actions button {
+      flex: 0 0 auto;
+      padding: 4px 10px;
+      font-size: 11px;
+    }
+    .sugg-actions .add {
+      background: #2b7cff;
+      color: white;
+      border-color: #2b7cff;
+    }
+    .sugg-actions .add:hover { background: #1d66e0; }
+    .sugg-actions .dismiss { color: #999; }
+    .sugg-evidence {
+      margin-top: 6px;
+    }
+    .sugg-evidence-list {
+      list-style: none;
+      padding: 6px 8px;
+      margin: 6px 0 0;
+      background: #fafafa;
+      border-left: 2px solid #e0e0e0;
+      border-radius: 3px;
+    }
+    .sugg-evidence-list li {
+      padding: 2px 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px;
+      color: #555;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sugg-disabled {
+      padding: 14px;
+      color: #666;
+      text-align: center;
+      font-size: 12px;
+    }
+    .sugg-disabled .hint {
+      margin-bottom: 10px;
+    }
+    .sugg-disabled .btnrow {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+    .rescan-row {
+      padding: 8px 14px;
+      border-top: 1px solid #f6f6f6;
+      background: #fafafa;
+      display: flex;
+      justify-content: flex-end;
+    }
     footer {
       display: flex;
       gap: 8px;
@@ -150,9 +280,8 @@
       border-radius: 5px;
       cursor: pointer;
     }
-    button:hover {
-      background: #f0f0f0;
-    }
+    button:hover { background: #f0f0f0; }
+    .rescan-row button { flex: 0 0 auto; }
   </style>
 </head>
 <body>
@@ -160,6 +289,29 @@
     <h1>Hush</h1>
     <div id="match" class="match">Loading...</div>
   </header>
+
+  <div id="unmatched" class="unmatched" hidden>
+    No config matched for this site.
+    <div><button id="create-site" style="display:none; flex:none; padding:6px 14px;">Create config for this site</button></div>
+  </div>
+
+  <div id="suggestions-block" class="suggestions-block" hidden>
+    <div class="sugg-header">
+      <span><span id="sugg-title">Suggestions</span> <span id="sugg-count" class="count sugg">0</span></span>
+      <span id="sugg-sub" style="font-size:11px;color:#8a6500;"></span>
+    </div>
+    <div id="sugg-disabled" class="sugg-disabled" hidden>
+      <div class="hint">Behavioral suggestions are off (zero CPU cost).</div>
+      <div class="btnrow">
+        <button id="sugg-enable">Enable</button>
+        <button id="sugg-scan-once">Scan this tab now</button>
+      </div>
+    </div>
+    <ul id="sugg-list" class="sugg-list"></ul>
+    <div id="rescan-row" class="rescan-row" hidden>
+      <button id="sugg-rescan" style="flex:none;">Rescan now</button>
+    </div>
+  </div>
 
   <div id="sections" class="sections" hidden>
     <details class="section" open>
@@ -185,10 +337,6 @@
       </summary>
       <ul id="hide-list"></ul>
     </details>
-  </div>
-
-  <div id="unmatched" class="unmatched" hidden>
-    No config matched for this site.
   </div>
 
   <footer>

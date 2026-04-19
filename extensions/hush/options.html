@@ -429,6 +429,40 @@ iframe[src*="tracker.example.com"]
     </details>
 
     <details class="layer">
+      <summary>Behavioral suggestions (opt-in)</summary>
+      <p>
+        Hush can watch a tab and suggest rules based on what the page does, surfacing the results
+        in the popup for one-click acceptance. Turned off by default because it costs a small amount
+        of per-scan CPU.
+      </p>
+      <p><b>What signals it uses</b> (all observed locally in the current tab, no lists fetched):</p>
+      <ul>
+        <li><b>sendBeacon targets</b> - the <code>navigator.sendBeacon</code> API is purpose-built
+        for telemetry. Any third-party host receiving beacons gets suggested as a block.</li>
+        <li><b>Tracking pixels</b> - third-party <code>&lt;img&gt;</code> responses smaller than 200 bytes
+        are the classic 1x1 tracking-pixel pattern.</li>
+        <li><b>First-party telemetry subdomains</b> - subdomains of the current site whose responses
+        are all tiny (&lt; 1 KB) are almost always internal tracking/widget endpoints that curated
+        lists can't catch (they're company-specific).</li>
+        <li><b>Polling endpoints</b> - the same canonical URL fetched repeatedly in a short window
+        with tiny responses is a heartbeat or telemetry loop.</li>
+        <li><b>Hidden iframes</b> - iframes with <code>display:none</code>, <code>visibility:hidden</code>,
+        1x1 size, or positioned off-screen have no legitimate user-facing reason to render.</li>
+        <li><b>Sticky overlays</b> - fixed-position elements with high z-index covering a significant
+        portion of the viewport are usually nag popups or cookie banners.</li>
+      </ul>
+      <p><b>Why this catches what uBlock Origin Lite / AdGuard / Privacy Badger can't:</b>
+      curated blocklists only know about publicly-documented trackers. Hush looks at what
+      <em>this</em> page is actually doing and flags per-site behaviors the lists have no way
+      to know about (first-party telemetry subdomains, widget iframes, polling endpoints).</p>
+      <p><b>Data egress:</b> none. Hush does not fetch filter lists, does not send observations
+      anywhere, and all analysis runs in the current tab's process. Suggestions are held in memory
+      per-tab and cleared on navigation.</p>
+      <p><b>Manual override:</b> even with the feature off, the popup's <b>Scan this tab now</b>
+      button runs a single scan on demand without enabling continuous scanning.</p>
+    </details>
+
+    <details class="layer">
       <summary>Layer interaction and overlap</summary>
       <ul>
         <li><b>Hide and Remove the same selector:</b> Remove runs first (on every mutation), so
@@ -448,12 +482,16 @@ iframe[src*="tracker.example.com"]
     </details>
   </section>
 
-  <div class="settings-row">
+  <div class="settings-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
+    <label>
+      <input type="checkbox" id="suggestions-toggle">
+      Enable behavioral suggestions <span style="color:#888; font-size:12px;">(opt-in; adds a small per-scan CPU cost; see "How Hush works" above)</span>
+    </label>
     <label>
       <input type="checkbox" id="debug-toggle">
-      Enable verbose console logging (off by default)
+      Enable verbose console logging <span style="color:#888; font-size:12px;">(off by default)</span>
     </label>
-    <div class="toolbar">
+    <div class="toolbar" style="margin-top: 4px;">
       <button id="export">Export JSON</button>
       <button id="reset" class="danger">Reset to defaults</button>
       <span id="status" class="status" style="display:none"></span>

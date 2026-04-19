@@ -87,7 +87,10 @@ Clicking the toolbar icon opens a compact popup showing, for the current tab:
 - Counts and per-pattern detail for each of the three layers
 - An expandable list of every blocked URL with timestamp and resource type
 - An expandable list of every removed element with tag + class signature
-- Badge on the icon with the running total
+- Badge on the icon:
+    - **Yellow `!`** when the current tab has pending behavioral suggestions (needs your review)
+    - **Grey `N`** when no suggestions pending but Hush is actively blocking, removing, or hiding things
+    - No badge when nothing is happening
 
 The popup footer has:
 
@@ -121,6 +124,70 @@ hush/
                     only; loaded into chrome.storage.local on first install.
   README.md         This file.
 ```
+
+## Behavioral suggestions (opt-in)
+
+Hush can observe what a page is doing and suggest rules to kill anti-user behavior
+that curated blocklists (uBlock Origin, AdGuard, Privacy Badger) can't catch because
+it's site-specific. **Off by default** — the user opts in knowing there's a small
+per-scan CPU cost.
+
+Enable the feature at the bottom of the options page. On the next tab reload, Hush
+begins scanning. Findings appear in the popup's **Suggestions** panel with inline
+`+ Add` / `Dismiss` / `Evidence` buttons. Adding a suggestion writes it straight to
+the matched site's config. Nothing is applied automatically.
+
+### Signals used
+
+All observations come from APIs the browser already exposes. No filter list is
+fetched; no observations leave the machine.
+
+- **`sendBeacon` targets** — `navigator.sendBeacon` is purpose-built for telemetry;
+  any third-party host receiving beacons gets a block suggestion.
+- **Tracking pixels** — third-party `<img>` responses smaller than 200 bytes are
+  the classic 1x1 pixel-tracker pattern.
+- **First-party telemetry subdomains** — subdomains of the current site whose
+  observed responses are all tiny (median < 1 KB) are almost always internal
+  tracking/widget endpoints that public lists can't know about.
+- **Polling endpoints** — the same canonical URL (with noise query params stripped)
+  fetched four or more times within seconds, with tiny responses.
+- **Hidden iframes** — iframes with `display:none`, `visibility:hidden`, 1x1 size,
+  opacity 0, or positioned off-screen get a remove suggestion.
+- **Sticky overlays** — fixed/sticky-position elements with z-index ≥ 100 covering
+  ≥ 25 % of the viewport get a hide suggestion.
+
+Each suggestion carries a confidence score (sendBeacon = 95, pixels = 85, polling =
+75, first-party telemetry = 70, sticky overlays = 55) and lists the raw evidence
+(URLs, sizes, timestamps, outerHTML snippets) so the user can verify before
+accepting.
+
+### Scan timing
+
+When the feature is on, Hush scans:
+
+- Once at `DOMContentLoaded`
+- Once 5 s after load (SPAs deferred-load)
+- On explicit **Rescan now** click in the popup
+
+When the feature is off, the detector code is not installed. No listeners, no
+timers, no DOM walks. The **Scan this tab now** button in the popup's Suggestions
+panel runs a single one-shot scan without enabling the feature — useful for ad-hoc
+inspection.
+
+### Badge signal
+
+When any tab has pending suggestions, the Hush toolbar icon shows a **yellow `!`**
+badge on that tab. Clicking it opens the popup with the Suggestions panel ready to
+review. After you've accepted or dismissed everything, the badge reverts to the
+grey activity count (or disappears if no activity).
+
+### Privacy posture
+
+- No network calls from Hush for detection (no filter-list fetch, no telemetry
+  back to anyone)
+- Behavioral state is stored only in `chrome.storage.session` (cleared on browser
+  restart) and is scoped per-tab
+- Tab's behavioral state is wiped on full-page navigation (`webNavigation.onCommitted`)
 
 ## Debug logging
 

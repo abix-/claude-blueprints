@@ -1,8 +1,10 @@
 const STORAGE_KEY = "config";
 const OPTIONS_KEY = "options";
 const SESSION_TABSTATS_KEY = "tabStats";
+const SESSION_BEHAVIOR_KEY = "tabBehavior";
 const MAX_LOG_ENTRIES = 300;
 const MAX_EVIDENCE = 50;
+const MAX_SEEN_RESOURCES = 500;
 
 let debugLogging = false;
 const logBuffer = [];
@@ -53,6 +55,16 @@ async function refreshDebugFlag() {
 async function loadConfig() {
   const data = await chrome.storage.local.get(STORAGE_KEY);
   return data[STORAGE_KEY] || {};
+}
+
+function findConfigEntry(config, host) {
+  if (config[host]) return { key: host, cfg: config[host] };
+  for (const key of Object.keys(config)) {
+    if (host === key || host.endsWith("." + key)) {
+      return { key, cfg: config[key] };
+    }
+  }
+  return null;
 }
 
 // Map ruleId -> { pattern, domain } so blocked-URL entries can show which rule matched.
@@ -137,7 +149,6 @@ function getStats(tabId) {
     s = emptyStats();
     tabStats.set(tabId, s);
   }
-  // Back-compat: hydrate any missing evidence arrays on older stats objects.
   if (!Array.isArray(s.blockedUrls)) s.blockedUrls = [];
   if (!Array.isArray(s.removedElements)) s.removedElements = [];
   return s;
@@ -157,9 +168,21 @@ function totalActivity(stats) {
 
 function updateBadge(tabId) {
   const stats = tabStats.get(tabId);
+  const behavior = tabBehavior.get(tabId);
+  const suggCount = behavior && Array.isArray(behavior.suggestions) ? behavior.suggestions.length : 0;
   const total = stats ? totalActivity(stats) : 0;
+
+  // Suggestion warning takes priority - user needs to address those.
+  if (suggCount > 0) {
+    chrome.action.setBadgeText({ tabId, text: "!" }).catch(() => {});
+    chrome.action.setBadgeBackgroundColor({ tabId, color: "#e8a200" }).catch(() => {});
+    return;
+  }
+
+  // No suggestions - fall back to activity count in the default grey.
   const text = total > 0 ? String(total) : "";
   chrome.action.setBadgeText({ tabId, text }).catch(() => {});
+  chrome.action.setBadgeBackgroundColor({ tabId, color: "#666" }).catch(() => {});
 }
 
 let persistTimer = null;
@@ -197,6 +220,266 @@ function capList(arr, max) {
   if (arr.length > max) arr.splice(0, arr.length - max);
 }
 
+// ================= Per-tab behavioral state + suggestions =================
+
+const tabBehavior = new Map();
+
+function emptyBehavior() {
+  return {
+    pageHost: null,
+    seenResources: [],
+    latestIframes: [],
+    latestStickies: [],
+    dismissed: [],       // array of suggestion keys
+    suggestions: []
+  };
+}
+
+function getBehavior(tabId) {
+  let b = tabBehavior.get(tabId);
+  if (!b) {
+    b = emptyBehavior();
+    tabBehavior.set(tabId, b);
+  }
+  if (!Array.isArray(b.seenResources)) b.seenResources = [];
+  if (!Array.isArray(b.latestIframes)) b.latestIframes = [];
+  if (!Array.isArray(b.latestStickies)) b.latestStickies = [];
+  if (!Array.isArray(b.dismissed)) b.dismissed = [];
+  if (!Array.isArray(b.suggestions)) b.suggestions = [];
+  return b;
+}
+
+function resetBehavior(tabId) {
+  tabBehavior.set(tabId, emptyBehavior());
+  schedulePersistBehavior();
+}
+
+let persistBehaviorTimer = null;
+function schedulePersistBehavior() {
+  if (persistBehaviorTimer) return;
+  persistBehaviorTimer = setTimeout(async () => {
+    persistBehaviorTimer = null;
+    const obj = {};
+    for (const [tabId, state] of tabBehavior) obj[tabId] = state;
+    try {
+      await chrome.storage.session.set({ [SESSION_BEHAVIOR_KEY]: obj });
+    } catch (e) {
+      logError("persist behavior failed", e);
+    }
+  }, 500);
+}
+
+async function hydrateBehavior() {
+  try {
+    const data = await chrome.storage.session.get(SESSION_BEHAVIOR_KEY);
+    const obj = data[SESSION_BEHAVIOR_KEY];
+    if (obj && typeof obj === "object") {
+      for (const [tabIdStr, state] of Object.entries(obj)) {
+        const tabId = parseInt(tabIdStr, 10);
+        if (!Number.isNaN(tabId)) tabBehavior.set(tabId, state);
+      }
+      log("hydrated behavior for", tabBehavior.size, "tab(s)");
+    }
+  } catch (e) {
+    logError("hydrate behavior failed", e);
+  }
+}
+
+function hostOf(url) {
+  try { return new URL(url).host; } catch (e) { return ""; }
+}
+
+function isSubdomainOf(candidate, parent) {
+  return candidate !== parent && candidate.endsWith("." + parent);
+}
+
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = arr.slice().sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+function canonicalizeUrl(url) {
+  const noiseParams = ["t", "ts", "_", "nonce", "cb", "callback", "v", "_t", "rand"];
+  try {
+    const u = new URL(url);
+    for (const key of [...u.searchParams.keys()]) {
+      if (noiseParams.includes(key.toLowerCase())) u.searchParams.delete(key);
+    }
+    return u.origin + u.pathname + (u.searchParams.toString() ? "?" + u.searchParams.toString() : "");
+  } catch (e) {
+    return url;
+  }
+}
+
+function computeSuggestions(state, config) {
+  const hostname = state.pageHost || "";
+  if (!hostname) return [];
+  const match = findConfigEntry(config, hostname);
+  const cfg = match ? match.cfg : {};
+  const existingBlock = new Set(Array.isArray(cfg.block) ? cfg.block : []);
+  const existingRemove = new Set(Array.isArray(cfg.remove) ? cfg.remove : []);
+  const existingHide = new Set(Array.isArray(cfg.hide) ? cfg.hide : []);
+  const dismissed = new Set(state.dismissed);
+
+  const resources = state.seenResources;
+  const out = [];
+
+  // 1. sendBeacon targets -> block (very high confidence)
+  const beaconByHost = new Map();
+  for (const r of resources) {
+    if (r.initiatorType !== "beacon") continue;
+    if (!r.host || r.host === hostname) continue;
+    const arr = beaconByHost.get(r.host) || [];
+    arr.push(r);
+    beaconByHost.set(r.host, arr);
+  }
+  for (const [host, hits] of beaconByHost) {
+    const value = "||" + host + "^";
+    if (existingBlock.has(value)) continue;
+    out.push({
+      key: "block::" + value,
+      layer: "block",
+      value,
+      reason: "sendBeacon target (" + hits.length + " beacon" + (hits.length > 1 ? "s" : "") + " sent)",
+      confidence: 95,
+      count: hits.length,
+      evidence: hits.slice(0, 5).map(h => h.url)
+    });
+  }
+
+  // 2. Tracking pixels -> block (high)
+  const pixelByHost = new Map();
+  for (const r of resources) {
+    if (r.initiatorType !== "img") continue;
+    if (!r.host || r.host === hostname) continue;
+    if (r.transferSize <= 0 || r.transferSize >= 200) continue;
+    const arr = pixelByHost.get(r.host) || [];
+    arr.push(r);
+    pixelByHost.set(r.host, arr);
+  }
+  for (const [host, hits] of pixelByHost) {
+    const value = "||" + host + "^";
+    if (existingBlock.has(value)) continue;
+    const med = median(hits.map(h => h.transferSize));
+    out.push({
+      key: "block::" + value,
+      layer: "block",
+      value,
+      reason: "tracking pixels: " + hits.length + " tiny image" + (hits.length > 1 ? "s" : "") + " (median " + med + "b)",
+      confidence: 85,
+      count: hits.length,
+      evidence: hits.slice(0, 5).map(h => h.url + " (" + h.transferSize + "b)")
+    });
+  }
+
+  // 3. First-party telemetry subdomains -> block (medium)
+  const subByHost = new Map();
+  for (const r of resources) {
+    if (!r.host || r.host === hostname) continue;
+    if (!isSubdomainOf(r.host, hostname)) continue;
+    const arr = subByHost.get(r.host) || [];
+    arr.push(r);
+    subByHost.set(r.host, arr);
+  }
+  for (const [host, requests] of subByHost) {
+    const sizes = requests.filter(r => r.transferSize > 0).map(r => r.transferSize);
+    if (!sizes.length) continue;
+    const med = median(sizes);
+    const max = Math.max(...sizes);
+    if (med >= 1024 || max >= 5120) continue;
+    const value = "||" + host + "^";
+    if (existingBlock.has(value)) continue;
+    out.push({
+      key: "block::" + value,
+      layer: "block",
+      value,
+      reason: "first-party subdomain with " + requests.length + " tiny response" + (requests.length > 1 ? "s" : "") + " (median " + med + "b)",
+      confidence: 70,
+      count: requests.length,
+      evidence: requests.slice(0, 5).map(r => r.url + " (" + r.transferSize + "b, " + r.initiatorType + ")")
+    });
+  }
+
+  // 4. Polling -> block (medium-high)
+  const byCanon = new Map();
+  for (const r of resources) {
+    if (!r.host || r.host === hostname) continue;
+    const canon = canonicalizeUrl(r.url);
+    const entry = byCanon.get(canon) || { count: 0, sizes: [], firstSeen: r.startTime, lastSeen: r.startTime, host: r.host, sample: r.url };
+    entry.count++;
+    entry.sizes.push(r.transferSize);
+    if (r.startTime < entry.firstSeen) entry.firstSeen = r.startTime;
+    if (r.startTime > entry.lastSeen) entry.lastSeen = r.startTime;
+    byCanon.set(canon, entry);
+  }
+  for (const [canon, info] of byCanon) {
+    if (info.count < 4) continue;
+    const span = info.lastSeen - info.firstSeen;
+    if (span < 5000 || span > 600000) continue;
+    const med = median(info.sizes);
+    if (med >= 2048) continue;
+    const value = "||" + info.host + "^";
+    const key = "block::" + value;
+    if (existingBlock.has(value)) continue;
+    if (out.find(s => s.key === key)) continue; // already added via another signal
+    out.push({
+      key,
+      layer: "block",
+      value,
+      reason: "polled " + info.count + "x over " + Math.round(span / 1000) + "s (median " + med + "b)",
+      confidence: 75,
+      count: info.count,
+      evidence: [info.sample]
+    });
+  }
+
+  // 5. Hidden iframes -> remove (high)
+  const iframeByHost = new Map();
+  for (const f of state.latestIframes) {
+    if (!f.src || !f.host) continue;
+    const entry = iframeByHost.get(f.host) || { host: f.host, reasons: new Set(), samples: [] };
+    for (const r of f.reasons || []) entry.reasons.add(r);
+    entry.samples.push(f);
+    iframeByHost.set(f.host, entry);
+  }
+  for (const [host, info] of iframeByHost) {
+    const selector = 'iframe[src*="' + host + '"]';
+    if (existingRemove.has(selector)) continue;
+    out.push({
+      key: "remove::" + selector,
+      layer: "remove",
+      value: selector,
+      reason: "hidden iframe: " + Array.from(info.reasons).join(", "),
+      confidence: 80,
+      count: info.samples.length,
+      evidence: info.samples.slice(0, 3).map(s => s.outerHTMLPreview)
+    });
+  }
+
+  // 6. Sticky overlays -> hide (medium)
+  const stickySeen = new Set();
+  for (const s of state.latestStickies) {
+    if (!s.selector || stickySeen.has(s.selector)) continue;
+    stickySeen.add(s.selector);
+    if (existingHide.has(s.selector)) continue;
+    out.push({
+      key: "hide::" + s.selector,
+      layer: "hide",
+      value: s.selector,
+      reason: "fixed overlay covering " + s.coverage + "% of viewport (z-index " + s.zIndex + ")",
+      confidence: 55,
+      count: 1,
+      evidence: [s.rect.w + "x" + s.rect.h + " at z-index " + s.zIndex]
+    });
+  }
+
+  // Apply dismissals
+  return out
+    .filter(s => !dismissed.has(s.key))
+    .sort((a, b) => (b.confidence - a.confidence) || (b.count - a.count));
+}
+
 // ================= Setup listeners =================
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -215,6 +498,7 @@ chrome.runtime.onStartup.addListener(async () => {
 (async () => {
   await refreshDebugFlag();
   await hydrateTabStats();
+  await hydrateBehavior();
   log("service worker started / woke up");
 })();
 
@@ -233,14 +517,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.webNavigation.onCommitted.addListener(details => {
   if (details.frameId !== 0) return;
   resetStats(details.tabId);
-  log("nav committed, reset stats for tab", details.tabId, details.url);
+  resetBehavior(details.tabId);
+  log("nav committed, reset tab", details.tabId, details.url);
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
   tabStats.delete(tabId);
+  tabBehavior.delete(tabId);
   schedulePersist();
+  schedulePersistBehavior();
 });
 
+// onRuleMatchedDebug only fires for unpacked extensions.
 chrome.declarativeNetRequest.onRuleMatchedDebug.addListener(info => {
   const tabId = info.request && info.request.tabId;
   const ruleId = info.rule && info.rule.ruleId;
@@ -295,6 +583,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return;
   }
 
+  if (msg.type === "hush:scan") {
+    const tabId = sender.tab && sender.tab.id;
+    if (typeof tabId !== "number") return;
+    (async () => {
+      const state = getBehavior(tabId);
+      state.pageHost = msg.hostname || state.pageHost;
+      // Merge resources (dedupe by url + startTime)
+      if (Array.isArray(msg.resources)) {
+        const seen = new Set(state.seenResources.map(r => r.url + "@" + r.startTime));
+        for (const r of msg.resources) {
+          const k = r.url + "@" + r.startTime;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          state.seenResources.push(r);
+        }
+        if (state.seenResources.length > MAX_SEEN_RESOURCES) {
+          state.seenResources.splice(0, state.seenResources.length - MAX_SEEN_RESOURCES);
+        }
+      }
+      if (Array.isArray(msg.iframes)) state.latestIframes = msg.iframes;
+      if (Array.isArray(msg.stickies)) state.latestStickies = msg.stickies;
+
+      const config = await loadConfig();
+      state.suggestions = computeSuggestions(state, config);
+      schedulePersistBehavior();
+      updateBadge(tabId);
+      log("scan merged for tab", tabId, "- suggestions:", state.suggestions.length);
+    })();
+    return;
+  }
+
   if (msg.type === "hush:get-tab-stats") {
     const tabId = typeof msg.tabId === "number" ? msg.tabId : (sender.tab && sender.tab.id);
     if (typeof tabId !== "number") {
@@ -302,6 +621,81 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return false;
     }
     sendResponse({ stats: tabStats.get(tabId) || emptyStats() });
+    return false;
+  }
+
+  if (msg.type === "hush:get-suggestions") {
+    const tabId = typeof msg.tabId === "number" ? msg.tabId : (sender.tab && sender.tab.id);
+    if (typeof tabId !== "number") {
+      sendResponse({ suggestions: [], pageHost: null });
+      return false;
+    }
+    (async () => {
+      const state = getBehavior(tabId);
+      const config = await loadConfig();
+      // Recompute on read in case config changed since last scan.
+      const suggestions = computeSuggestions(state, config);
+      state.suggestions = suggestions;
+      updateBadge(tabId);
+      sendResponse({ suggestions, pageHost: state.pageHost });
+    })();
+    return true;
+  }
+
+  if (msg.type === "hush:accept-suggestion") {
+    (async () => {
+      try {
+        const { hostname, layer, value } = msg;
+        if (!hostname || !layer || !value) {
+          sendResponse({ ok: false, error: "missing hostname/layer/value" });
+          return;
+        }
+        const config = await loadConfig();
+        const match = findConfigEntry(config, hostname);
+        let targetKey;
+        if (match) {
+          targetKey = match.key;
+        } else {
+          targetKey = hostname;
+          config[targetKey] = { hide: [], remove: [], block: [] };
+        }
+        const entry = config[targetKey];
+        if (!Array.isArray(entry[layer])) entry[layer] = [];
+        if (!entry[layer].includes(value)) entry[layer].push(value);
+        await chrome.storage.local.set({ [STORAGE_KEY]: config });
+        // storage.onChanged will re-sync DNR rules.
+
+        // Drop the accepted suggestion from every tab's state + refresh badges.
+        const acceptedKey = layer + "::" + value;
+        for (const [tabId, state] of tabBehavior) {
+          const before = state.suggestions.length;
+          state.suggestions = state.suggestions.filter(s => s.key !== acceptedKey);
+          if (state.suggestions.length !== before) {
+            updateBadge(tabId);
+          }
+        }
+        schedulePersistBehavior();
+        sendResponse({ ok: true, configKey: targetKey });
+      } catch (e) {
+        logError("accept-suggestion failed", e);
+        sendResponse({ ok: false, error: String(e) });
+      }
+    })();
+    return true;
+  }
+
+  if (msg.type === "hush:dismiss-suggestion") {
+    const tabId = typeof msg.tabId === "number" ? msg.tabId : (sender.tab && sender.tab.id);
+    if (typeof tabId !== "number" || !msg.key) {
+      sendResponse({ ok: false });
+      return false;
+    }
+    const state = getBehavior(tabId);
+    if (!state.dismissed.includes(msg.key)) state.dismissed.push(msg.key);
+    state.suggestions = state.suggestions.filter(s => s.key !== msg.key);
+    schedulePersistBehavior();
+    updateBadge(tabId);
+    sendResponse({ ok: true });
     return false;
   }
 
@@ -322,6 +716,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         tabId,
         options,
         tabStats: tabId !== null ? (tabStats.get(tabId) || null) : null,
+        tabBehavior: tabId !== null ? (tabBehavior.get(tabId) || null) : null,
         allTabStatsCount: tabStats.size,
         configSiteCount: Object.keys(config).length,
         configSites: Object.keys(config),

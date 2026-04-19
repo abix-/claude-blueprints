@@ -5,6 +5,7 @@ const siteListEl = document.getElementById("site-list");
 const detailEl = document.getElementById("detail");
 const addSiteBtn = document.getElementById("add-site");
 const debugToggleEl = document.getElementById("debug-toggle");
+const suggestionsToggleEl = document.getElementById("suggestions-toggle");
 const exportBtn = document.getElementById("export");
 const resetBtn = document.getElementById("reset");
 const statusEl = document.getElementById("status");
@@ -26,7 +27,9 @@ function setStatus(msg, ok) {
 async function loadAll() {
   const data = await chrome.storage.local.get([STORAGE_KEY, OPTIONS_KEY]);
   config = data[STORAGE_KEY] || {};
-  debugToggleEl.checked = !!(data[OPTIONS_KEY] && data[OPTIONS_KEY].debug);
+  const opts = data[OPTIONS_KEY] || {};
+  debugToggleEl.checked = !!opts.debug;
+  suggestionsToggleEl.checked = !!opts.suggestionsEnabled;
   render();
 }
 
@@ -242,6 +245,19 @@ debugToggleEl.addEventListener("change", async () => {
   options.debug = debugToggleEl.checked;
   await chrome.storage.local.set({ [OPTIONS_KEY]: options });
   setStatus(debugToggleEl.checked ? "Verbose logging ON" : "Verbose logging OFF", true);
+});
+
+suggestionsToggleEl.addEventListener("change", async () => {
+  const data = await chrome.storage.local.get(OPTIONS_KEY);
+  const options = data[OPTIONS_KEY] || {};
+  options.suggestionsEnabled = suggestionsToggleEl.checked;
+  await chrome.storage.local.set({ [OPTIONS_KEY]: options });
+  setStatus(
+    suggestionsToggleEl.checked
+      ? "Behavioral suggestions ON (reload tabs to start scanning)"
+      : "Behavioral suggestions OFF",
+    true
+  );
 });
 
 exportBtn.addEventListener("click", async () => {

@@ -1,3 +1,6 @@
+const OPTIONS_KEY = "options";
+const STORAGE_KEY = "config";
+
 async function main() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   const tab = tabs[0];
@@ -7,6 +10,13 @@ async function main() {
   const matchEl = document.getElementById("match");
   const sectionsEl = document.getElementById("sections");
   const unmatchedEl = document.getElementById("unmatched");
+  const createSiteBtn = document.getElementById("create-site");
+  const suggBlock = document.getElementById("suggestions-block");
+  const suggDisabled = document.getElementById("sugg-disabled");
+  const suggList = document.getElementById("sugg-list");
+  const suggCount = document.getElementById("sugg-count");
+  const suggSub = document.getElementById("sugg-sub");
+  const rescanRow = document.getElementById("rescan-row");
 
   document.getElementById("options").addEventListener("click", () => {
     chrome.runtime.openOptionsPage();
@@ -36,40 +46,233 @@ async function main() {
     setTimeout(() => { btn.textContent = origText; }, 2000);
   });
 
+  document.getElementById("sugg-enable").addEventListener("click", async () => {
+    const d = await chrome.storage.local.get(OPTIONS_KEY);
+    const opts = d[OPTIONS_KEY] || {};
+    opts.suggestionsEnabled = true;
+    await chrome.storage.local.set({ [OPTIONS_KEY]: opts });
+    // Trigger a scan now; continuous scheduled scans need a page reload.
+    if (typeof tabId === "number") {
+      try { await chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" }); } catch (e) {}
+    }
+    setTimeout(() => refreshSuggestions(tabId, hostname), 400);
+  });
+
+  document.getElementById("sugg-scan-once").addEventListener("click", async () => {
+    if (typeof tabId !== "number") return;
+    try { await chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" }); } catch (e) {}
+    setTimeout(() => refreshSuggestions(tabId, hostname), 400);
+  });
+
+  document.getElementById("sugg-rescan").addEventListener("click", async () => {
+    if (typeof tabId !== "number") return;
+    try { await chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" }); } catch (e) {}
+    setTimeout(() => refreshSuggestions(tabId, hostname), 400);
+  });
+
+  createSiteBtn.addEventListener("click", async () => {
+    if (!hostname) return;
+    const data = await chrome.storage.local.get(STORAGE_KEY);
+    const config = data[STORAGE_KEY] || {};
+    if (!config[hostname]) {
+      config[hostname] = { hide: [], remove: [], block: [] };
+      await chrome.storage.local.set({ [STORAGE_KEY]: config });
+    }
+    // Reload the popup view
+    main();
+  });
+
   if (typeof tabId !== "number") {
     matchEl.textContent = "No active tab";
     return;
   }
 
-  let stats = null;
-  try {
-    const resp = await chrome.runtime.sendMessage({
-      type: "hush:get-tab-stats",
-      tabId
-    });
-    stats = resp && resp.stats;
-  } catch (e) {
-    stats = null;
-  }
+  // Load stats, suggestions, options, AND the config itself.
+  // We check config directly (not stats.matchedDomain) to avoid a race where
+  // the popup opens before content.js has sent its first stats message.
+  const [statsResp, suggResp, storedData] = await Promise.all([
+    chrome.runtime.sendMessage({ type: "hush:get-tab-stats", tabId }).catch(() => null),
+    chrome.runtime.sendMessage({ type: "hush:get-suggestions", tabId }).catch(() => null),
+    chrome.storage.local.get([OPTIONS_KEY, STORAGE_KEY])
+  ]);
 
-  if (!stats || !stats.matchedDomain) {
+  const stats = (statsResp && statsResp.stats) || {};
+  const suggestions = (suggResp && suggResp.suggestions) || [];
+  const detectorEnabled = !!(storedData[OPTIONS_KEY] && storedData[OPTIONS_KEY].suggestionsEnabled);
+  const config = storedData[STORAGE_KEY] || {};
+
+  const configMatch = hostname ? findConfigEntry(config, hostname) : null;
+  const matchedDomain = stats.matchedDomain || (configMatch && configMatch.key) || null;
+  const isMatched = !!matchedDomain;
+
+  if (!isMatched) {
     matchEl.textContent = hostname || "-";
     unmatchedEl.hidden = false;
+    createSiteBtn.style.display = "inline-block";
+  } else {
+    matchEl.innerHTML = "Matched: <b>" + escapeHtml(matchedDomain) + "</b>" +
+      (hostname && hostname !== matchedDomain
+        ? " <span style=\"color:#999\">(" + escapeHtml(hostname) + ")</span>"
+        : "");
+    sectionsEl.hidden = false;
+
+    // Render in aggressiveness order: block > remove > hide.
+    renderBlockedList(stats.blockedUrls || [], stats.block || 0);
+    renderSelectorList("remove", stats.remove || {}, null);
+    renderRemovedEvidence(stats.removedElements || []);
+    const removeKeys = new Set(Object.keys(stats.remove || {}));
+    renderSelectorList("hide", stats.hide || {}, removeKeys);
+  }
+
+  // Suggestions block is always visible; content varies by enabled state.
+  suggBlock.hidden = false;
+  renderSuggestions(tabId, hostname, suggestions, detectorEnabled, isMatched);
+}
+
+async function refreshSuggestions(tabId, hostname) {
+  const resp = await chrome.runtime.sendMessage({ type: "hush:get-suggestions", tabId }).catch(() => null);
+  const optsData = await chrome.storage.local.get(OPTIONS_KEY);
+  const enabled = !!(optsData[OPTIONS_KEY] && optsData[OPTIONS_KEY].suggestionsEnabled);
+  const statsResp = await chrome.runtime.sendMessage({ type: "hush:get-tab-stats", tabId }).catch(() => null);
+  const isMatched = !!(statsResp && statsResp.stats && statsResp.stats.matchedDomain);
+  renderSuggestions(tabId, hostname, (resp && resp.suggestions) || [], enabled, isMatched);
+}
+
+function renderSuggestions(tabId, hostname, suggestions, enabled, isMatched) {
+  const suggDisabled = document.getElementById("sugg-disabled");
+  const suggList = document.getElementById("sugg-list");
+  const suggCount = document.getElementById("sugg-count");
+  const suggSub = document.getElementById("sugg-sub");
+  const rescanRow = document.getElementById("rescan-row");
+
+  suggCount.textContent = String(suggestions.length);
+  suggCount.classList.toggle("zero", suggestions.length === 0);
+
+  if (!enabled) {
+    suggDisabled.hidden = false;
+    rescanRow.hidden = true;
+    suggSub.textContent = "";
+    // still show the list if a one-shot scan produced results
+    renderSuggList(tabId, hostname, suggestions, isMatched);
     return;
   }
 
-  matchEl.innerHTML = "Matched: <b>" + escapeHtml(stats.matchedDomain) + "</b>" +
-    (hostname && hostname !== stats.matchedDomain
-      ? " <span style=\"color:#999\">(" + escapeHtml(hostname) + ")</span>"
-      : "");
-  sectionsEl.hidden = false;
+  suggDisabled.hidden = true;
+  rescanRow.hidden = false;
+  suggSub.textContent = suggestions.length
+    ? "click + Add to append to config"
+    : "no suspicious behavior observed yet";
+  renderSuggList(tabId, hostname, suggestions, isMatched);
+}
 
-  // Render in aggressiveness order: block > remove > hide.
-  renderBlockedList(stats.blockedUrls || [], stats.block || 0);
-  renderSelectorList("remove", stats.remove, null);
-  renderRemovedEvidence(stats.removedElements || []);
-  const removeKeys = new Set(Object.keys(stats.remove || {}));
-  renderSelectorList("hide", stats.hide, removeKeys);
+function renderSuggList(tabId, hostname, suggestions, isMatched) {
+  const suggList = document.getElementById("sugg-list");
+  suggList.innerHTML = "";
+  if (!suggestions.length) return;
+  for (const s of suggestions) {
+    suggList.appendChild(renderSuggRow(tabId, hostname, s, isMatched));
+  }
+}
+
+function renderSuggRow(tabId, hostname, s, isMatched) {
+  const li = document.createElement("li");
+
+  const top = document.createElement("div");
+  top.className = "sugg-row-top";
+  const layer = document.createElement("span");
+  layer.className = "sugg-layer " + s.layer;
+  layer.textContent = s.layer;
+  top.appendChild(layer);
+  const conf = document.createElement("span");
+  conf.className = "sugg-conf";
+  conf.textContent = "conf " + (s.confidence || 0) + "  |  count " + (s.count || 1);
+  top.appendChild(conf);
+  li.appendChild(top);
+
+  const value = document.createElement("div");
+  value.className = "sugg-value";
+  value.title = s.value;
+  value.textContent = s.value;
+  li.appendChild(value);
+
+  const reason = document.createElement("div");
+  reason.className = "sugg-reason";
+  reason.textContent = s.reason;
+  li.appendChild(reason);
+
+  const actions = document.createElement("div");
+  actions.className = "sugg-actions";
+  const addBtn = document.createElement("button");
+  addBtn.className = "add";
+  addBtn.textContent = "+ Add";
+  addBtn.addEventListener("click", async () => {
+    addBtn.disabled = true;
+    addBtn.textContent = "Adding...";
+    const resp = await chrome.runtime.sendMessage({
+      type: "hush:accept-suggestion",
+      hostname,
+      layer: s.layer,
+      value: s.value
+    }).catch(() => null);
+    if (resp && resp.ok) {
+      addBtn.textContent = "Added";
+      setTimeout(() => {
+        li.remove();
+        refreshSuggestions(tabId, hostname);
+      }, 400);
+    } else {
+      addBtn.disabled = false;
+      addBtn.textContent = "+ Add";
+    }
+  });
+  actions.appendChild(addBtn);
+
+  const dismissBtn = document.createElement("button");
+  dismissBtn.className = "dismiss";
+  dismissBtn.textContent = "Dismiss";
+  dismissBtn.addEventListener("click", async () => {
+    await chrome.runtime.sendMessage({
+      type: "hush:dismiss-suggestion",
+      tabId,
+      key: s.key
+    }).catch(() => null);
+    li.remove();
+    refreshSuggestions(tabId, hostname);
+  });
+  actions.appendChild(dismissBtn);
+
+  const evBtn = document.createElement("button");
+  evBtn.textContent = "Evidence";
+  evBtn.style.flex = "0 0 auto";
+  const ev = document.createElement("div");
+  ev.className = "sugg-evidence";
+  ev.hidden = true;
+  const evList = document.createElement("ul");
+  evList.className = "sugg-evidence-list";
+  const evSrc = Array.isArray(s.evidence) ? s.evidence : [];
+  if (!evSrc.length) {
+    const liE = document.createElement("li");
+    liE.style.fontStyle = "italic";
+    liE.textContent = "(no captured evidence)";
+    evList.appendChild(liE);
+  } else {
+    for (const e of evSrc) {
+      const liE = document.createElement("li");
+      liE.title = String(e);
+      liE.textContent = String(e);
+      evList.appendChild(liE);
+    }
+  }
+  ev.appendChild(evList);
+  evBtn.addEventListener("click", () => {
+    ev.hidden = !ev.hidden;
+    evBtn.textContent = ev.hidden ? "Evidence" : "Hide evidence";
+  });
+  actions.appendChild(evBtn);
+  li.appendChild(actions);
+  li.appendChild(ev);
+
+  return li;
 }
 
 function renderSelectorList(kind, entries, overlapSet) {
@@ -117,17 +320,14 @@ function renderRemovedEvidence(removedElements) {
   }
   container.hidden = false;
   container.innerHTML = "";
-
   const toggle = document.createElement("span");
   toggle.className = "evidence-toggle";
   toggle.textContent = "Show " + removedElements.length + " removed element" +
     (removedElements.length === 1 ? "" : "s");
   container.appendChild(toggle);
-
   const list = document.createElement("ul");
   list.className = "evidence-list";
   list.hidden = true;
-  // Show newest first.
   const items = removedElements.slice().reverse();
   for (const ev of items) {
     const li = document.createElement("li");
@@ -142,7 +342,6 @@ function renderRemovedEvidence(removedElements) {
     list.appendChild(li);
   }
   container.appendChild(list);
-
   toggle.addEventListener("click", () => {
     list.hidden = !list.hidden;
     toggle.textContent = (list.hidden ? "Show " : "Hide ") +
@@ -160,7 +359,6 @@ function renderBlockedList(blockedUrls, blockCount) {
   countEl.classList.toggle("zero", blockCount === 0);
   listEl.innerHTML = "";
 
-  // Group by pattern for the per-rule breakdown.
   const byPattern = {};
   for (const b of blockedUrls) {
     const key = b.pattern || "(unknown rule)";
@@ -196,13 +394,11 @@ function renderBlockedList(blockedUrls, blockCount) {
   }
   evidenceEl.hidden = false;
   evidenceEl.innerHTML = "";
-
   const toggle = document.createElement("span");
   toggle.className = "evidence-toggle";
   toggle.textContent = "Show " + blockedUrls.length + " blocked URL" +
     (blockedUrls.length === 1 ? "" : "s");
   evidenceEl.appendChild(toggle);
-
   const list = document.createElement("ul");
   list.className = "evidence-list";
   list.hidden = true;
@@ -221,7 +417,6 @@ function renderBlockedList(blockedUrls, blockCount) {
     list.appendChild(li);
   }
   evidenceEl.appendChild(list);
-
   toggle.addEventListener("click", () => {
     list.hidden = !list.hidden;
     toggle.textContent = (list.hidden ? "Show " : "Hide ") +
@@ -237,6 +432,16 @@ function timeOnly(iso) {
   } catch (e) {
     return "";
   }
+}
+
+function findConfigEntry(config, host) {
+  if (config[host]) return { key: host, cfg: config[host] };
+  for (const key of Object.keys(config)) {
+    if (host === key || host.endsWith("." + key)) {
+      return { key, cfg: config[key] };
+    }
+  }
+  return null;
 }
 
 function safeHostname(url) {
