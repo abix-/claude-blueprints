@@ -99,7 +99,8 @@ Based only on observed Hush suggestions plus DOM confirmation:
     ],
     "hide": [],
     "block": [
-      "||unagi.amazon.com^"
+      "||unagi.amazon.com",
+      "||unagi-na.amazon.com"
     ]
   }
 }
@@ -117,12 +118,24 @@ Catches iframes served from Amazon's programmatic ad-serving subdomain.
 Observed separately from the `ape_`-prefixed iframes - some ad iframes may
 be on a different CDN or carry different IDs, so this rule is the backstop.
 
-### Block: `||unagi.amazon.com^`
+### Block: `||unagi.amazon.com` and `||unagi-na.amazon.com`
 
 Kills the CSM telemetry ingest at the network layer. Since these are
 `sendBeacon` calls fired by Amazon's page JS (not a removable DOM element),
 network-block is the only mechanism that can stop them - Remove wouldn't
 help.
+
+Amazon has a family of `unagi` subdomains for regional event routing.
+Observed so far: `unagi.amazon.com` and `unagi-na.amazon.com`. Other
+regions almost certainly exist (`-eu`, `-ap`, etc.); add them as they
+show up in Hush suggestions.
+
+**Note on the trailing `^`:** earlier versions of these rules used
+`||unagi.amazon.com^` with a trailing separator anchor. The trailing `^`
+appeared to prevent matches for hyphenated subdomains in Chrome's DNR
+in at least one observed case - dropping it is safer and functionally
+equivalent for blocking everything on a host. Keep `^` only when you
+specifically need the pattern to end at a URL separator.
 
 ## What this doc does NOT claim
 
