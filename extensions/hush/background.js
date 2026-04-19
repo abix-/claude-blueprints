@@ -293,6 +293,45 @@ function isSubdomainOf(candidate, parent) {
   return candidate !== parent && candidate.endsWith("." + parent);
 }
 
+// Hidden iframes that are legitimately hidden by design and should not be
+// surfaced as suggestions. Captcha, OAuth, payment, bot-management, etc.
+// These are security-sensitive embeds that NEED to exist in a hidden state
+// for the feature to work - blocking them breaks login/signup/checkout.
+function isLegitHiddenIframe(srcUrl) {
+  let u;
+  try { u = new URL(srcUrl); } catch (e) { return false; }
+  const host = u.host;
+  const path = u.pathname;
+
+  // Captcha
+  if (/(^|\.)google\.com$/.test(host) && path.startsWith("/recaptcha")) return true;
+  if (/(^|\.)gstatic\.com$/.test(host) && path.startsWith("/recaptcha")) return true;
+  if (/(^|\.)hcaptcha\.com$/.test(host)) return true;
+  if (host === "challenges.cloudflare.com") return true;
+  if (/(^|\.)turnstile\.cloudflare\.com$/.test(host)) return true;
+
+  // Payment processors
+  if (/(^|\.)stripe\.com$/.test(host)) return true;
+  if (/(^|\.)paypal\.com$/.test(host)) return true;
+  if (/(^|\.)paypalobjects\.com$/.test(host)) return true;
+  if (/(^|\.)braintreegateway\.com$/.test(host)) return true;
+  if (/(^|\.)braintree-api\.com$/.test(host)) return true;
+  if (/(^|\.)adyen\.com$/.test(host)) return true;
+  if (/(^|\.)squareup\.com$/.test(host)) return true;
+  if (/(^|\.)squarecdn\.com$/.test(host)) return true;
+
+  // OAuth / auth flows
+  if (host === "accounts.google.com") return true;
+  if (host === "appleid.apple.com") return true;
+  if (host === "login.microsoftonline.com") return true;
+  if (host === "login.live.com") return true;
+  if (/(^|\.)firebaseapp\.com$/.test(host)) return true;
+  if (/(^|\.)auth0\.com$/.test(host)) return true;
+  if (/(^|\.)okta\.com$/.test(host)) return true;
+
+  return false;
+}
+
 function median(arr) {
   if (!arr.length) return 0;
   const s = arr.slice().sort((a, b) => a - b);
@@ -434,10 +473,11 @@ function computeSuggestions(state, config) {
     });
   }
 
-  // 5. Hidden iframes -> remove (high)
+  // 5. Hidden iframes -> remove (high), excluding known-legit sources
   const iframeByHost = new Map();
   for (const f of state.latestIframes) {
     if (!f.src || !f.host) continue;
+    if (isLegitHiddenIframe(f.src)) continue; // captcha / oauth / payment / etc.
     const entry = iframeByHost.get(f.host) || { host: f.host, reasons: new Set(), samples: [] };
     for (const r of f.reasons || []) entry.reasons.add(r);
     entry.samples.push(f);
@@ -499,8 +539,32 @@ chrome.runtime.onStartup.addListener(async () => {
   await refreshDebugFlag();
   await hydrateTabStats();
   await hydrateBehavior();
+  await rehydrateRulePatterns();
   log("service worker started / woke up");
 })();
+
+// Rebuild the ruleId -> { pattern, domain } map from whatever dynamic rules
+// are currently live. Needed because the SW can shut down on idle and lose
+// in-memory state, but Chrome persists the DNR rules themselves. Without
+// this, onRuleMatchedDebug would see ruleIds it can't map back to patterns
+// and the popup's Blocked section shows "(unknown rule)".
+async function rehydrateRulePatterns() {
+  try {
+    const existing = await chrome.declarativeNetRequest.getDynamicRules();
+    rulePatterns.clear();
+    for (const rule of existing) {
+      const pattern = rule.condition && rule.condition.urlFilter;
+      const domains = rule.condition && rule.condition.initiatorDomains;
+      rulePatterns.set(rule.id, {
+        pattern: pattern || "",
+        domain: (domains && domains[0]) || ""
+      });
+    }
+    log("rehydrated rulePatterns for", rulePatterns.size, "rule(s)");
+  } catch (e) {
+    logError("rehydrateRulePatterns failed", e);
+  }
+}
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
