@@ -61,6 +61,12 @@ changes expected).
   writes it back. Export downloads via a `web_sys::Blob` + synthetic
   anchor click; Reset calls `window.location().reload()` so the
   still-JS-owned site list + JSON editor re-read storage.
+- Iter 3: `AllowlistEditor` component ports the three allowlist
+  textareas (iframes / overlays / suggestion keys) + Save / Reset.
+  `mountOptions` mounts to a second root `#rust-allowlist-root`
+  inside the existing `<details>` wrapper. New chrome_bridge helpers
+  `set_allowlist` + `get_default_allowlist`. `loadDefaultAllowlist`,
+  `linesToList`, and `DEFAULT_ALLOWLIST` deleted from `options.js`.
 
 ## [0.10.0] - 2026-04-19
 

@@ -14,24 +14,9 @@ const STORAGE_KEY = "config";
 const OPTIONS_KEY = "options";
 const ALLOWLIST_KEY = "allowlist";
 
-// Defaults live in allowlist.defaults.json (same file background.js uses to
-// seed storage). Loaded once at page init and kept in a module-scoped var so
-// the "Reset to defaults" button doesn't need to re-fetch.
-let DEFAULT_ALLOWLIST = { iframes: [], overlays: [] };
-async function loadDefaultAllowlist() {
-  const url = chrome.runtime.getURL("allowlist.defaults.json");
-  const res = await fetch(url);
-  return res.json();
-}
-
 const siteListEl = document.getElementById("site-list");
 const detailEl = document.getElementById("detail");
 const addSiteBtn = document.getElementById("add-site");
-const allowlistIframesEl = document.getElementById("allowlist-iframes");
-const allowlistOverlaysEl = document.getElementById("allowlist-overlays");
-const allowlistSuggestionsEl = document.getElementById("allowlist-suggestions");
-const allowlistSaveBtn = document.getElementById("allowlist-save");
-const allowlistResetBtn = document.getElementById("allowlist-reset");
 const jsonEl = document.getElementById("json-config");
 const jsonApplyBtn = document.getElementById("json-apply");
 const jsonRefreshBtn = document.getElementById("json-refresh");
@@ -47,37 +32,28 @@ function setStatus(msg, ok) {
 }
 
 async function loadAll() {
-  try {
-    DEFAULT_ALLOWLIST = await loadDefaultAllowlist();
-  } catch (e) {
-    /* fall back to the empty default already in the module-scoped var */
-  }
   const data = await chrome.storage.local.get([STORAGE_KEY, OPTIONS_KEY, ALLOWLIST_KEY]);
   config = data[STORAGE_KEY] || {};
   const opts = data[OPTIONS_KEY] || {};
-  const al = data[ALLOWLIST_KEY] || DEFAULT_ALLOWLIST;
-  allowlistIframesEl.value = (al.iframes || []).join("\n");
-  allowlistOverlaysEl.value = (al.overlays || []).join("\n");
-  allowlistSuggestionsEl.value = (al.suggestions || []).join("\n");
+  const al = data[ALLOWLIST_KEY] || { iframes: [], overlays: [], suggestions: [] };
   render();
 
-  // Mount the Leptos preference toggles + status banner with initial
-  // values read from storage. A re-mount is idempotent because the
-  // Leptos tree re-reads `chrome.storage.local` on each user action.
+  // Mount the Leptos preference toggles + config toolbar + allowlist
+  // editor + status banner with initial values read from storage.
+  // Each component re-fetches storage on user actions, so the
+  // snapshot here is just the boot-time state.
   try {
     await wasmReady;
     mountOptions({
       debug: !!opts.debug,
       suggestionsEnabled: !!opts.suggestionsEnabled,
+      allowlist: {
+        iframes: al.iframes || [],
+        overlays: al.overlays || [],
+        suggestions: al.suggestions || [],
+      },
     });
   } catch (e) { console.error("[Hush options] mountOptions failed", e); }
-}
-
-function linesToList(text) {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map(s => s.trim())
-    .filter(Boolean);
 }
 
 async function save() {
@@ -322,34 +298,9 @@ jsonRefreshBtn.addEventListener("click", () => {
   setStatus("Refreshed from current state", true);
 });
 
-allowlistSaveBtn.addEventListener("click", async () => {
-  const allowlist = {
-    iframes: linesToList(allowlistIframesEl.value),
-    overlays: linesToList(allowlistOverlaysEl.value),
-    suggestions: linesToList(allowlistSuggestionsEl.value)
-  };
-  await chrome.storage.local.set({ [ALLOWLIST_KEY]: allowlist });
-  setStatus(
-    "Saved allowlists (" + allowlist.iframes.length + " iframes, " +
-    allowlist.overlays.length + " overlays, " +
-    allowlist.suggestions.length + " suggestions)",
-    true
-  );
-});
-
-allowlistResetBtn.addEventListener("click", async () => {
-  if (!confirm("Reset both allowlists to the shipped defaults?")) return;
-  try {
-    DEFAULT_ALLOWLIST = await loadDefaultAllowlist();
-  } catch (e) {
-    setStatus("Reset failed: " + e.message, false);
-    return;
-  }
-  await chrome.storage.local.set({ [ALLOWLIST_KEY]: DEFAULT_ALLOWLIST });
-  allowlistIframesEl.value = (DEFAULT_ALLOWLIST.iframes || []).join("\n");
-  allowlistOverlaysEl.value = (DEFAULT_ALLOWLIST.overlays || []).join("\n");
-  allowlistSuggestionsEl.value = (DEFAULT_ALLOWLIST.suggestions || []).join("\n");
-  setStatus("Reset allowlists to defaults", true);
-});
+// The three allowlist textareas and the Save / Reset buttons are
+// owned by the Leptos AllowlistEditor component now
+// (src/ui_options.rs). Writes go through chrome_bridge::set_allowlist
+// and reads through chrome_bridge::get_default_allowlist.
 
 loadAll();

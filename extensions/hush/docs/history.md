@@ -7,6 +7,21 @@ this file is chronology.
 
 ## Stage 5 (in progress): Options + content-script cleanup
 
+**Iter 3 (allowlist editor)**: three user-editable allowlists
+(iframes / overlays / suggestion keys) moved into the Leptos
+`AllowlistEditor` component. `mount_options` grew a second mount
+call so the editor renders into a separate `#rust-allowlist-root`
+inside the existing `<details>` wrapper - the surrounding
+`<summary>` + intro paragraph stay in plain HTML. New chrome_bridge
+helpers: `set_allowlist` writes the three-field triple back to
+`chrome.storage.local["allowlist"]`; `get_default_allowlist` fetches
+`allowlist.defaults.json` and parses the triple out of the JSON. The
+editor owns three `RwSignal<String>`s, splits them on save via a
+`lines_to_list` helper that matches the JS `linesToList` semantics,
+and renders status through the shared `setOptionsStatus` export.
+`loadDefaultAllowlist` + `linesToList` + `DEFAULT_ALLOWLIST` deleted
+from `options.js`.
+
 **Iter 2 (config toolbar)**: Export JSON + Reset to defaults ported
 to the Leptos `ConfigToolbar` component. Two new chrome_bridge
 helpers: `get_config_json` reads `chrome.storage.local["config"]` and

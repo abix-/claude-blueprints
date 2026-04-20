@@ -111,7 +111,11 @@ totals under 100 lines across all bootstrap shims.*
           `chrome.storage.local`.
     - [ ] Port JSON editor (Apply / Refresh buttons, `<textarea>`
           sync with site-list state)
-    - [ ] Port allowlist textareas (iframes / overlays / suggestions)
+    - [x] Port allowlist textareas (`AllowlistEditor` component;
+          `chrome_bridge::set_allowlist` +
+          `chrome_bridge::get_default_allowlist`). Mounts at a
+          second root `#rust-allowlist-root` inside the existing
+          `<details>` wrapper.
     - [ ] Port site list + per-site editor (the large chunk)
 - [ ] Port `content.js` DOM scans via `web_sys::Document` and
       `web_sys::Element` + `getComputedStyle`

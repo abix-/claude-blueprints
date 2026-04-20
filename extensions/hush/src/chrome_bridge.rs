@@ -222,6 +222,104 @@ pub async fn get_config_json() -> Result<String, JsValue> {
     Ok(json.as_string().unwrap_or_default())
 }
 
+/// Write an allowlist triple (iframes, overlays, suggestion keys) into
+/// `chrome.storage.local["allowlist"]`. Replaces any previous value
+/// wholesale - matches the JS options page's "save everything from
+/// the textareas" semantics.
+pub async fn set_allowlist(
+    iframes: Vec<String>,
+    overlays: Vec<String>,
+    suggestions: Vec<String>,
+) -> Result<(), JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let storage = Reflect::get(&chrome, &JsValue::from_str("storage"))?;
+    let local = Reflect::get(&storage, &JsValue::from_str("local"))?;
+
+    let allowlist = js_sys::Object::new();
+    let i = js_sys::Array::new();
+    for s in &iframes {
+        i.push(&JsValue::from_str(s));
+    }
+    let o = js_sys::Array::new();
+    for s in &overlays {
+        o.push(&JsValue::from_str(s));
+    }
+    let s = js_sys::Array::new();
+    for v in &suggestions {
+        s.push(&JsValue::from_str(v));
+    }
+    Reflect::set(&allowlist, &JsValue::from_str("iframes"), &i)?;
+    Reflect::set(&allowlist, &JsValue::from_str("overlays"), &o)?;
+    Reflect::set(&allowlist, &JsValue::from_str("suggestions"), &s)?;
+
+    let payload = js_sys::Object::new();
+    Reflect::set(&payload, &JsValue::from_str("allowlist"), &allowlist)?;
+
+    let set_fn: js_sys::Function = Reflect::get(&local, &JsValue::from_str("set"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set is not a function"))?;
+    let set_promise: Promise = set_fn
+        .call1(&local, &payload.into())?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set did not return a Promise"))?;
+    JsFuture::from(set_promise).await?;
+    Ok(())
+}
+
+/// Fetch the shipped `allowlist.defaults.json` via
+/// `chrome.runtime.getURL` + `fetch`. Returns the three-field triple
+/// as owned `Vec<String>`s so the caller can drop them straight into
+/// signals. Any missing field degrades to an empty list.
+pub async fn get_default_allowlist() -> Result<(Vec<String>, Vec<String>, Vec<String>), JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let runtime = Reflect::get(&chrome, &JsValue::from_str("runtime"))?;
+    let get_url_fn: js_sys::Function = Reflect::get(&runtime, &JsValue::from_str("getURL"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.runtime.getURL is not a function"))?;
+    let url = get_url_fn
+        .call1(&runtime, &JsValue::from_str("allowlist.defaults.json"))?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("chrome.runtime.getURL returned non-string"))?;
+
+    let fetch_fn: js_sys::Function = Reflect::get(&window, &JsValue::from_str("fetch"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("window.fetch is not a function"))?;
+    let fetch_promise: Promise = fetch_fn
+        .call1(&window, &JsValue::from_str(&url))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("fetch did not return a Promise"))?;
+    let response = JsFuture::from(fetch_promise).await?;
+    let json_fn: js_sys::Function = Reflect::get(&response, &JsValue::from_str("json"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("Response.json is not a function"))?;
+    let json_promise: Promise = json_fn
+        .call0(&response)?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("Response.json did not return a Promise"))?;
+    let seed = JsFuture::from(json_promise).await?;
+
+    fn to_vec(value: &JsValue, key: &str) -> Vec<String> {
+        let arr = match Reflect::get(value, &JsValue::from_str(key)) {
+            Ok(v) if !v.is_undefined() && !v.is_null() => v,
+            _ => return Vec::new(),
+        };
+        let arr: js_sys::Array = match arr.dyn_into() {
+            Ok(a) => a,
+            Err(_) => return Vec::new(),
+        };
+        arr.iter()
+            .filter_map(|v| v.as_string())
+            .collect()
+    }
+    Ok((
+        to_vec(&seed, "iframes"),
+        to_vec(&seed, "overlays"),
+        to_vec(&seed, "suggestions"),
+    ))
+}
+
 /// Fetch the shipped `sites.json` seed (via `chrome.runtime.getURL`) and
 /// write it to `chrome.storage.local["config"]`, replacing whatever's
 /// there. Used by the options-page "Reset to defaults" button.

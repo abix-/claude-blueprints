@@ -25,6 +25,21 @@ use wasm_bindgen::JsCast;
 pub struct OptionsSnapshot {
     pub debug: bool,
     pub suggestions_enabled: bool,
+    /// Current allowlist from `chrome.storage.local["allowlist"]`
+    /// (falls back to empty arrays if the key is absent).
+    #[serde(default)]
+    pub allowlist: AllowlistSnapshot,
+}
+
+/// Three independent user-editable allowlists. `iframes` is a list of
+/// URL substrings; `overlays` is a list of CSS selectors; `suggestions`
+/// is a list of suggestion keys populated by the popup's Allow button.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct AllowlistSnapshot {
+    pub iframes: Vec<String>,
+    pub overlays: Vec<String>,
+    pub suggestions: Vec<String>,
 }
 
 // Handle on the mounted options tree's status signal. Exposed to JS
@@ -71,16 +86,34 @@ pub fn mount_options(snapshot: JsValue) -> Result<(), JsValue> {
     let document = window
         .document()
         .ok_or_else(|| JsValue::from_str("no document"))?;
+
+    // Main root: toggles + config toolbar + status banner.
     let root = document
         .get_element_by_id("rust-options-root")
         .ok_or_else(|| JsValue::from_str("no #rust-options-root in options.html"))?;
     let root_el: web_sys::HtmlElement = root
         .dyn_into::<web_sys::HtmlElement>()
         .map_err(|_| JsValue::from_str("#rust-options-root is not an HtmlElement"))?;
+    {
+        let snap = snap.clone();
+        std::mem::forget(leptos::mount::mount_to(root_el, move || {
+            view! { <OptionsRoot snap=snap.clone() /> }
+        }));
+    }
 
-    std::mem::forget(leptos::mount::mount_to(root_el, move || {
-        view! { <OptionsRoot snap=snap.clone() /> }
-    }));
+    // Secondary root: allowlist editor. Lives in a separate `<details>`
+    // wrapper in options.html, hence a separate mount; it shares the
+    // main tree's status banner by calling setOptionsStatus through
+    // the wasm export.
+    if let Some(allow_root) = document.get_element_by_id("rust-allowlist-root") {
+        if let Ok(el) = allow_root.dyn_into::<web_sys::HtmlElement>() {
+            let allow_snap = snap.allowlist.clone();
+            std::mem::forget(leptos::mount::mount_to(el, move || {
+                view! { <AllowlistEditor snap=allow_snap.clone() /> }
+            }));
+        }
+    }
+
     Ok(())
 }
 
@@ -206,6 +239,186 @@ fn ConfigToolbar(status: RwSignal<Option<StatusMsg>>) -> impl IntoView {
             </button>
         </div>
     }
+}
+
+/// Allowlist editor: three `<textarea>`s (iframes, overlays,
+/// suggestion keys) plus Save + Reset buttons. Save serializes
+/// trimmed non-empty lines and writes the triple back to
+/// `chrome.storage.local["allowlist"]`. Reset fetches
+/// `allowlist.defaults.json`, writes it to storage, and updates the
+/// textarea signals so the UI reflects the reset without a reload.
+#[component]
+fn AllowlistEditor(snap: AllowlistSnapshot) -> impl IntoView {
+    let iframes = RwSignal::new(snap.iframes.join("\n"));
+    let overlays = RwSignal::new(snap.overlays.join("\n"));
+    let suggestions = RwSignal::new(snap.suggestions.join("\n"));
+    let busy = RwSignal::new(false);
+
+    let on_save = move |_| {
+        if busy.get() {
+            return;
+        }
+        busy.set(true);
+        let i = lines_to_list(&iframes.get());
+        let o = lines_to_list(&overlays.get());
+        let s = lines_to_list(&suggestions.get());
+        spawn_local(async move {
+            let (i_n, o_n, s_n) = (i.len(), o.len(), s.len());
+            let res = chrome_bridge::set_allowlist(i, o, s).await;
+            match res {
+                Ok(()) => {
+                    set_options_status(
+                        format!(
+                            "Saved allowlists ({} iframes, {} overlays, {} suggestions)",
+                            i_n, o_n, s_n
+                        ),
+                        true,
+                    );
+                }
+                Err(e) => {
+                    set_options_status(format!("Save failed: {:?}", e), false);
+                }
+            }
+            busy.set(false);
+        });
+    };
+
+    let on_reset = move |_| {
+        if busy.get() {
+            return;
+        }
+        let window = match web_sys::window() {
+            Some(w) => w,
+            None => return,
+        };
+        let ok = window
+            .confirm_with_message("Reset both allowlists to the shipped defaults?")
+            .unwrap_or(false);
+        if !ok {
+            return;
+        }
+        busy.set(true);
+        spawn_local(async move {
+            match chrome_bridge::get_default_allowlist().await {
+                Ok((i, o, s)) => {
+                    let i_clone = i.clone();
+                    let o_clone = o.clone();
+                    let s_clone = s.clone();
+                    match chrome_bridge::set_allowlist(i_clone, o_clone, s_clone).await {
+                        Ok(()) => {
+                            iframes.set(i.join("\n"));
+                            overlays.set(o.join("\n"));
+                            suggestions.set(s.join("\n"));
+                            set_options_status("Reset allowlists to defaults".into(), true);
+                        }
+                        Err(e) => {
+                            set_options_status(format!("Reset failed: {:?}", e), false);
+                        }
+                    }
+                }
+                Err(e) => {
+                    set_options_status(format!("Reset failed: {:?}", e), false);
+                }
+            }
+            busy.set(false);
+        });
+    };
+
+    let textarea_style = "width:100%;height:140px;font-family:ui-monospace,monospace;\
+                          font-size:12px;padding:10px;border:1px solid #ccc;\
+                          border-radius:5px;box-sizing:border-box;";
+    let h3_style = "font-size: 13px; margin: 14px 0 4px; font-weight: 600;";
+    let help_style = "color:#666; font-size:12px; margin: 0 0 8px;";
+
+    view! {
+        <div class="rust-allowlist-editor">
+            <h3 style=h3_style>"Iframe allowlist"</h3>
+            <p style=help_style>
+                "One URL substring per line. If a hidden iframe's src contains "
+                "any entry (case-insensitive), it's allowed through without "
+                "surfacing as a remove suggestion."
+            </p>
+            <textarea spellcheck="false"
+                      style=textarea_style
+                      prop:value=move || iframes.get()
+                      on:input=move |ev| {
+                          iframes.set(event_target_value(&ev));
+                      }>
+            </textarea>
+
+            <h3 style=h3_style>"Sticky-overlay allowlist"</h3>
+            <p style=help_style>
+                "One CSS selector per line. If a flagged sticky/fixed element "
+                "matches any selector, it's allowed through. Used to skip React "
+                "Portals, modal roots, and framework shells that legitimately "
+                "cover the viewport."
+            </p>
+            <textarea spellcheck="false"
+                      style=textarea_style
+                      prop:value=move || overlays.get()
+                      on:input=move |ev| {
+                          overlays.set(event_target_value(&ev));
+                      }>
+            </textarea>
+
+            <h3 style=h3_style>"Suggestion allowlist"</h3>
+            <p style=help_style>
+                "One suggestion key per line. Populated by the popup's "
+                <b>"Allow"</b>
+                " button; any listed key is filtered out at emit time, on "
+                "every site, forever. Remove a line to re-enable a suggestion. "
+                "Keys look like "
+                <code>"block::||example.com::canvas-fp"</code>
+                " or "
+                <code>{r#"remove::iframe[src*="captcha.com"]"#}</code>
+                "."
+            </p>
+            <textarea spellcheck="false"
+                      style=textarea_style
+                      prop:value=move || suggestions.get()
+                      on:input=move |ev| {
+                          suggestions.set(event_target_value(&ev));
+                      }>
+            </textarea>
+
+            <div class="toolbar" style="margin-top: 10px; display:flex; gap: 8px;">
+                <button on:click=on_save
+                        disabled=move || busy.get()
+                        class="primary"
+                        style="padding: 6px 14px; font-size: 13px; cursor: pointer;
+                               background: #2b7cff; color: white;
+                               border: 1px solid #2b7cff; border-radius: 5px;">
+                    "Save allowlists"
+                </button>
+                <button on:click=on_reset
+                        disabled=move || busy.get()
+                        style="padding: 6px 14px; font-size: 13px; cursor: pointer;
+                               background: #fff; border: 1px solid #ccc;
+                               border-radius: 5px;">
+                    "Reset to defaults"
+                </button>
+            </div>
+        </div>
+    }
+}
+
+/// Split a `\n`-separated textarea value into a trimmed, non-empty
+/// list. Mirrors the old JS `linesToList` helper.
+fn lines_to_list(text: &str) -> Vec<String> {
+    text.split(|c| c == '\n' || c == '\r')
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+/// Read the `value` prop off a DOM event's target. Common enough
+/// across the editor textareas to hoist out.
+fn event_target_value(ev: &web_sys::Event) -> String {
+    ev.target()
+        .and_then(|t| t.dyn_into::<web_sys::HtmlTextAreaElement>().ok())
+        .map(|ta| ta.value())
+        .unwrap_or_default()
 }
 
 /// Trigger a browser download of `content` under `filename`. Uses a
