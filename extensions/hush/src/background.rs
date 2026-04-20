@@ -440,8 +440,11 @@ async fn do_sync_dynamic_rules() -> Result<(), JsValue> {
     let mut patterns: HashMap<i32, RuleMeta> = HashMap::new();
     let mut next_id: i32 = 1;
     for (domain, cfg) in config.iter() {
-        for pattern in &cfg.block {
-            let pattern = pattern.trim();
+        for entry in &cfg.block {
+            if entry.disabled {
+                continue;
+            }
+            let pattern = entry.value.trim();
             if pattern.is_empty() {
                 continue;
             }
@@ -522,7 +525,8 @@ async fn rehydrate_rule_patterns() {
     // Build pattern -> source_domain reverse map, tolerating a trailing `^`.
     let mut pattern_to_source: HashMap<String, String> = HashMap::new();
     for (domain, cfg) in config.iter() {
-        for raw in &cfg.block {
+        for entry in &cfg.block {
+            let raw = entry.value.as_str();
             let normalized = raw.strip_suffix('^').unwrap_or(raw).to_string();
             pattern_to_source
                 .entry(normalized)
@@ -1575,8 +1579,8 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
                     return;
                 }
             };
-            if !arr.iter().any(|v| v == &value) {
-                arr.push(value.clone());
+            if !arr.iter().any(|e| e.value == value) {
+                arr.push(crate::types::RuleEntry::new(value.clone()));
             }
         }
         // Write back.

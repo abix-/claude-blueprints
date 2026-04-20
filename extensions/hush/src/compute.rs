@@ -43,9 +43,11 @@ pub fn compute_suggestions(
     // Across a heavy_tab run with ~30 suggestions that's ~90 heap
     // allocations avoided.
     let existing_block: Arc<[String]> =
-        Arc::from(normalize_block_patterns(merged.block.as_slice()));
-    let existing_remove: Arc<[String]> = Arc::from(merged.remove.as_slice());
-    let existing_hide: Arc<[String]> = Arc::from(merged.hide.as_slice());
+        Arc::from(normalize_block_patterns(&merged.block));
+    let existing_remove: Arc<[String]> =
+        Arc::from(merged.remove.iter().map(|e| e.value.clone()).collect::<Vec<_>>());
+    let existing_hide: Arc<[String]> =
+        Arc::from(merged.hide.iter().map(|e| e.value.clone()).collect::<Vec<_>>());
 
     let ctx = DetectCtx {
         hostname,
@@ -114,13 +116,13 @@ fn find_config_entry<'a>(config: &'a Config, host: &str) -> Option<(&'a String, 
 /// Normalize block patterns by stripping trailing `^` so dedup compares
 /// the same canonical form as the suggestion builders emit. Parity with
 /// the JS `existingBlock` Set construction in the old computeSuggestions.
-fn normalize_block_patterns(raw: &[String]) -> Vec<String> {
+fn normalize_block_patterns(raw: &[crate::types::RuleEntry]) -> Vec<String> {
     raw.iter()
-        .map(|p| {
-            if let Some(stripped) = p.strip_suffix('^') {
+        .map(|e| {
+            if let Some(stripped) = e.value.strip_suffix('^') {
                 stripped.to_string()
             } else {
-                p.clone()
+                e.value.clone()
             }
         })
         .collect()

@@ -10,7 +10,7 @@
 //! the page.
 
 use crate::chrome_bridge;
-use crate::types::{Config, SiteConfig};
+use crate::types::{Config, RuleEntry, SiteConfig};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde::Deserialize;
@@ -819,7 +819,7 @@ impl LayerKind {
             Self::Spoof => "Add kind tag like webgl-unmasked",
         }
     }
-    fn read<'a>(&self, cfg: &'a SiteConfig) -> &'a [String] {
+    fn read<'a>(&self, cfg: &'a SiteConfig) -> &'a [RuleEntry] {
         match self {
             Self::Block => &cfg.block,
             Self::Remove => &cfg.remove,
@@ -827,7 +827,7 @@ impl LayerKind {
             Self::Spoof => &cfg.spoof,
         }
     }
-    fn modify<'a>(&self, cfg: &'a mut SiteConfig) -> &'a mut Vec<String> {
+    fn modify<'a>(&self, cfg: &'a mut SiteConfig) -> &'a mut Vec<RuleEntry> {
         match self {
             Self::Block => &mut cfg.block,
             Self::Remove => &mut cfg.remove,
@@ -855,7 +855,7 @@ fn LayerSection(
         move || {
             let entries: Vec<String> = config.with(|c| {
                 c.get(&domain)
-                    .map(|cfg| layer.read(cfg).to_vec())
+                    .map(|cfg| layer.read(cfg).iter().map(|e| e.value.clone()).collect())
                     .unwrap_or_default()
             });
             if entries.is_empty() {
@@ -912,7 +912,7 @@ fn LayerSection(
             }
             let already = config.with(|c| {
                 c.get(&domain)
-                    .map(|cfg| layer.read(cfg).iter().any(|v| v == &value))
+                    .map(|cfg| layer.read(cfg).iter().any(|e| e.value == value))
                     .unwrap_or(false)
             });
             if already {
@@ -923,7 +923,7 @@ fn LayerSection(
             let v = value.clone();
             config.update(|c| {
                 if let Some(entry) = c.get_mut(&d) {
-                    layer.modify(entry).push(v);
+                    layer.modify(entry).push(RuleEntry::new(v));
                 }
             });
             draft.set(String::new());

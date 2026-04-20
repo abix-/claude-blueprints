@@ -251,24 +251,76 @@ pub struct Allowlist {
     pub suggestions: Vec<String>,
 }
 
+/// A single rule row. Unifies the shape across Block/Allow/Remove/
+/// Hide/Spoof so metadata (disabled, tags, comment) lives next to
+/// the match string it applies to.
+///
+/// `rule_id` derivation still uses `(action, scope, value)` so
+/// reorders, disable-toggles, and tag edits don't change identity
+/// — the firewall log's aggregation survives those edits.
+///
+/// Serialization elides every field except `value` by default so
+/// the on-disk JSON stays `{"value": "..."}` for a plain rule.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RuleEntry {
+    pub value: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disabled: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+impl RuleEntry {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            ..Default::default()
+        }
+    }
+}
+
+impl From<&str> for RuleEntry {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<String> for RuleEntry {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
 /// Per-site rules stored under a domain key in the user's config.
 /// Every field is optional so the editor can represent partially-filled
 /// entries without churning the schema.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SiteConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub hide: Vec<String>,
+    pub hide: Vec<RuleEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub remove: Vec<String>,
+    pub remove: Vec<RuleEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub block: Vec<String>,
+    pub block: Vec<RuleEntry>,
+    /// Counter-rules to Block/Remove/Hide. A matching `allow` rule
+    /// overrides a broader Block (via DNR priority) or excludes
+    /// matching nodes from Remove/Hide. Empty until Stage 9's
+    /// evaluator lands; reserved here so the schema is stable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow: Vec<RuleEntry>,
     /// Fingerprint signals to neutralize for this site. Each entry
     /// is a kind tag; the main-world hook checks the tag and returns
     /// bland, identical-across-users values instead of the real ones.
     /// Currently supported: `webgl-unmasked` (WebGL UNMASKED_VENDOR
     /// and UNMASKED_RENDERER). Future kinds: `canvas`, `audio`, etc.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub spoof: Vec<String>,
+    pub spoof: Vec<RuleEntry>,
 }
 
 /// Top-level user config, keyed by domain. `IndexMap` preserves
@@ -303,11 +355,11 @@ pub fn merged_site_config(config: &Config, hostname_key: &str) -> SiteConfig {
         config.get(hostname_key)
     };
 
-    fn merge(a: &[String], b: &[String]) -> Vec<String> {
-        let mut out: Vec<String> = a.to_vec();
-        for v in b {
-            if !out.iter().any(|x| x == v) {
-                out.push(v.clone());
+    fn merge(a: &[RuleEntry], b: &[RuleEntry]) -> Vec<RuleEntry> {
+        let mut out: Vec<RuleEntry> = a.to_vec();
+        for e in b {
+            if !out.iter().any(|x| x.value == e.value) {
+                out.push(e.clone());
             }
         }
         out
@@ -320,6 +372,7 @@ pub fn merged_site_config(config: &Config, hostname_key: &str) -> SiteConfig {
         hide: merge(&g.hide, &s.hide),
         remove: merge(&g.remove, &s.remove),
         block: merge(&g.block, &s.block),
+        allow: merge(&g.allow, &s.allow),
         spoof: merge(&g.spoof, &s.spoof),
     }
 }
@@ -668,5 +721,90 @@ mod signal_payload_tests {
     fn unknown_kind_is_rejected() {
         let s = r#"{"kind":"definitely-not-a-real-kind","x":1}"#;
         assert!(serde_json::from_str::<SignalPayload>(s).is_err());
+    }
+}
+
+#[cfg(test)]
+mod rule_entry_tests {
+    use super::*;
+
+    #[test]
+    fn plain_entry_serializes_to_value_only() {
+        let e = RuleEntry::new("||ads.example.com");
+        let json = serde_json::to_string(&e).unwrap();
+        assert_eq!(json, r#"{"value":"||ads.example.com"}"#);
+    }
+
+    #[test]
+    fn full_entry_round_trips() {
+        let e = RuleEntry {
+            value: "||ads.example.com".into(),
+            disabled: true,
+            tags: vec!["analytics".into(), "auto:pixel".into()],
+            comment: Some("temporarily muted for debugging".into()),
+        };
+        let json = serde_json::to_string(&e).unwrap();
+        let back: RuleEntry = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.value, e.value);
+        assert_eq!(back.disabled, e.disabled);
+        assert_eq!(back.tags, e.tags);
+        assert_eq!(back.comment, e.comment);
+    }
+
+    #[test]
+    fn bare_string_form_is_rejected() {
+        // Hard migration: the Rust side refuses legacy string entries.
+        // background.js runs migration before wasm init so Rust never
+        // sees the old shape on disk.
+        let err = serde_json::from_str::<RuleEntry>(r#""||ads.example.com""#);
+        assert!(err.is_err(), "bare string must fail to parse");
+    }
+
+    #[test]
+    fn site_config_preserves_rule_metadata_round_trip() {
+        let cfg = SiteConfig {
+            block: vec![
+                RuleEntry {
+                    value: "||a.test".into(),
+                    disabled: true,
+                    ..Default::default()
+                },
+                RuleEntry::new("||b.test"),
+            ],
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let back: SiteConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.block.len(), 2);
+        assert!(back.block[0].disabled);
+        assert!(!back.block[1].disabled);
+        assert_eq!(back.block[0].value, "||a.test");
+    }
+
+    #[test]
+    fn merged_config_dedupes_by_value_not_full_entry() {
+        // A global rule and a site rule with the same value but
+        // different metadata should still dedup to one entry.
+        let mut cfg = Config::new();
+        cfg.insert(
+            GLOBAL_SCOPE_KEY.into(),
+            SiteConfig {
+                block: vec![RuleEntry::new("||t.test")],
+                ..Default::default()
+            },
+        );
+        cfg.insert(
+            "site.test".into(),
+            SiteConfig {
+                block: vec![RuleEntry {
+                    value: "||t.test".into(),
+                    comment: Some("site-specific note".into()),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        );
+        let merged = merged_site_config(&cfg, "site.test");
+        assert_eq!(merged.block.len(), 1, "duplicate value dedups across scopes");
     }
 }

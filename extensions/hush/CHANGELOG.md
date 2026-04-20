@@ -7,6 +7,32 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-20
+
+### Stage 9 phase 1: RuleEntry schema migration
+- `types::RuleEntry { value, disabled, tags, comment }` replaces
+  bare-string entries in every `SiteConfig` action array. Default
+  serialization elides non-`value` fields so simple rules still
+  round-trip as `{"value": "..."}` on disk.
+- `SiteConfig.allow: Vec<RuleEntry>` added (empty; not yet
+  enforced). Reserves the shape so allow-override evaluator work
+  in phase 2 doesn't require another schema bump.
+- Hard migration: `background.js` runs a one-shot
+  `migrateConfigSchema()` at service-worker bootstrap (gated on a
+  `configSchemaVersion` storage key). Converts every string entry
+  under `block` / `remove` / `hide` / `spoof` into
+  `{value: s}` and writes the result back before WASM init. Rust
+  only ever sees the new shape.
+- `content.js` is defensive for the brief window between
+  extension upgrade and the first background-worker run:
+  `toValueList()` treats either string or object entries as a
+  value; `disabled: true` entries are skipped on the client side
+  too so the toggle in phase 2 works without a reload.
+- `sites.json` seed updated to the new shape.
+- 5 new regression tests in `types::rule_entry_tests` lock the
+  on-disk JSON shape, reject bare strings at the Rust boundary,
+  and verify `merged_site_config` still dedupes by value.
+
 ### Stage 4 progress: popup UI porting to Leptos
 - Iter 1 scaffold: Leptos 0.8 + `src/ui_popup.rs` + `mountPopup`
   wasm-bindgen export + `popup.js` bootstrap + `<div

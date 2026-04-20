@@ -299,12 +299,35 @@
   // only the reserved `__global__` entry exists, its rules still
   // fire. Duplicates (same selector / pattern / spoof tag) are
   // deduplicated so a value present in both scopes only fires once.
+  //
+  // Rule entries are `{value, disabled?, tags?, comment?}` objects
+  // after the Stage 9 migration. Old configs stored bare strings;
+  // the extension runs a one-shot migration on install/startup to
+  // convert those. This reader is defensive for the window where
+  // migration hasn't landed yet (first page load after upgrade):
+  // string entries are treated as `{value: s}`.
   const GLOBAL_KEY = "__global__";
-  function mergeArrays(a, b) {
-    const out = Array.isArray(a) ? a.slice() : [];
-    if (Array.isArray(b)) {
-      for (const v of b) if (!out.includes(v)) out.push(v);
+  function ruleValue(e) {
+    if (typeof e === "string") return e;
+    if (e && typeof e === "object") return String(e.value || "");
+    return "";
+  }
+  function ruleDisabled(e) {
+    return !!(e && typeof e === "object" && e.disabled);
+  }
+  function toValueList(arr) {
+    if (!Array.isArray(arr)) return [];
+    const out = [];
+    for (const e of arr) {
+      if (ruleDisabled(e)) continue;
+      const v = ruleValue(e);
+      if (v) out.push(v);
     }
+    return out;
+  }
+  function mergeArrays(a, b) {
+    const out = toValueList(a);
+    for (const v of toValueList(b)) if (!out.includes(v)) out.push(v);
     return out;
   }
   const globalCfg = (config[GLOBAL_KEY] && typeof config[GLOBAL_KEY] === "object")
@@ -335,12 +358,12 @@
   const scopeOf = {};
   const siteScopeKey = match ? match.key : null;
   if (globalCfg) {
-    for (const s of (globalCfg.hide   || [])) scopeOf["hide::"   + s] = GLOBAL_KEY;
-    for (const s of (globalCfg.remove || [])) scopeOf["remove::" + s] = GLOBAL_KEY;
+    for (const s of toValueList(globalCfg.hide))   scopeOf["hide::"   + s] = GLOBAL_KEY;
+    for (const s of toValueList(globalCfg.remove)) scopeOf["remove::" + s] = GLOBAL_KEY;
   }
   if (siteScopeKey && siteCfg) {
-    for (const s of (siteCfg.hide   || [])) scopeOf["hide::"   + s] = siteScopeKey;
-    for (const s of (siteCfg.remove || [])) scopeOf["remove::" + s] = siteScopeKey;
+    for (const s of toValueList(siteCfg.hide))   scopeOf["hide::"   + s] = siteScopeKey;
+    for (const s of toValueList(siteCfg.remove)) scopeOf["remove::" + s] = siteScopeKey;
   }
   function scopeForSelector(action, selector) {
     return scopeOf[action + "::" + selector]

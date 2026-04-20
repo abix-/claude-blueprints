@@ -30,7 +30,8 @@ pub use stack::script_origin_from_stack;
 pub use suggestion::build_suggestion;
 pub use types::{
     Allowlist, BehaviorState, BuildSuggestionInput, Config, IframeHit, JsCall, ReplayVendor,
-    Resource, SiteConfig, StickyHit, StickyRect, Suggestion, SuggestionDiag, SuggestionLayer,
+    Resource, RuleEntry, SiteConfig, StickyHit, StickyRect, Suggestion, SuggestionDiag,
+    SuggestionLayer,
 };
 
 use wasm_bindgen::prelude::*;

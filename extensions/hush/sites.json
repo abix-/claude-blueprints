@@ -1,44 +1,44 @@
 {
   "example.com": {
     "hide": [
-      ".popup",
-      ".newsletter-signup",
-      "[class*=\"AdBanner\"]"
+      { "value": ".popup" },
+      { "value": ".newsletter-signup" },
+      { "value": "[class*=\"AdBanner\"]" }
     ],
     "remove": [
-      ".modal-overlay"
+      { "value": ".modal-overlay" }
     ],
     "block": [
-      "||ads.example.com"
+      { "value": "||ads.example.com" }
     ]
   },
   "reddit.com": {
     "hide": [],
     "remove": [
-      "games-section-badge-controller",
-      "article[data-post-id]:has([is-post-commercial-communication])",
-      "faceplate-partial[name^=\"RelatedCommunityRecommendations\"]"
+      { "value": "games-section-badge-controller" },
+      { "value": "article[data-post-id]:has([is-post-commercial-communication])" },
+      { "value": "faceplate-partial[name^=\"RelatedCommunityRecommendations\"]" }
     ],
     "block": [
-      "||w3-reporting.reddit.com"
+      { "value": "||w3-reporting.reddit.com" }
     ]
   },
   "amazon.com": {
     "hide": [],
     "remove": [
-      "iframe[id^=\"ape_\"]",
-      "iframe[src*=\"s.amazon-adsystem.com\"]"
+      { "value": "iframe[id^=\"ape_\"]" },
+      { "value": "iframe[src*=\"s.amazon-adsystem.com\"]" }
     ],
     "block": [
-      "||unagi.amazon.com",
-      "||unagi-na.amazon.com"
+      { "value": "||unagi.amazon.com" },
+      { "value": "||unagi-na.amazon.com" }
     ]
   },
   "github.com": {
     "hide": [],
     "remove": [],
     "block": [
-      "||collector.github.com"
+      { "value": "||collector.github.com" }
     ]
   }
 }

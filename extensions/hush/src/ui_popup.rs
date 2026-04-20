@@ -595,10 +595,10 @@ fn FirewallLog(
         cfg: &SiteConfig,
         by_rule: &HashMap<String, Vec<FirewallEvent>>,
     ) {
-        let blocks_iter = cfg.block.iter().map(|m| ("block", m.as_str()));
-        let removes_iter = cfg.remove.iter().map(|m| ("remove", m.as_str()));
-        let hides_iter = cfg.hide.iter().map(|m| ("hide", m.as_str()));
-        let spoofs_iter = cfg.spoof.iter().map(|m| ("spoof", m.as_str()));
+        let blocks_iter = cfg.block.iter().map(|m| ("block", m.value.as_str()));
+        let removes_iter = cfg.remove.iter().map(|m| ("remove", m.value.as_str()));
+        let hides_iter = cfg.hide.iter().map(|m| ("hide", m.value.as_str()));
+        let spoofs_iter = cfg.spoof.iter().map(|m| ("spoof", m.value.as_str()));
         for (action, m) in blocks_iter
             .chain(removes_iter)
             .chain(hides_iter)
