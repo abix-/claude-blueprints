@@ -54,6 +54,15 @@ console_error_panic_hook = { version = "0.1", optional = true }
 # Used by SignalPayload roundtrip tests. Not pulled in at runtime; the
 # JS/Rust boundary uses serde-wasm-bindgen, not JSON.
 serde_json = "1.0"
+# Statistical benchmark harness for comparing compute_suggestions
+# throughput against the pre-port JS baseline. Criterion produces
+# stable mean + stddev with outlier filtering; the JS side uses Node's
+# built-in performance.now for the same synthetic fixture.
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "compute_suggestions"
+harness = false
 
 [features]
 default = ["panic-hook"]
@@ -71,10 +80,40 @@ wasm-opt = false
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
 
-# Release profile for WASM output: small + fast.
+# Release profile tuned for RUNTIME SPEED over binary size.
+# The WASM bundle ships larger (from ~700KB at opt-level=z up to
+# ~1.0-1.5MB at opt-level=3) but the in-browser hot paths (hook
+# dispatch, compute_suggestions) run at native-like speed. User-
+# perceived win: faster popup open, faster per-page scan.
+# Trade-off accepted because runtime perf is the product goal -
+# bundle loads once per tab session, hot paths run thousands of
+# times over that session.
 [profile.release]
-opt-level = "z"
-lto = true
+opt-level = 3
+lto = "fat"
 codegen-units = 1
-strip = true
+strip = "symbols"
 panic = "abort"
+debug = false
+
+# Maximum-speed profile that `cargo bench` picks up.
+# Per the Rust Performance Book, the knobs that actually move runtime
+# cost are:
+# - opt-level = 3: full auto-vectorization, inlining, loop unrolling
+# - lto = "fat": whole-program optimization across the crate graph
+# - codegen-units = 1: one LLVM compilation unit so the inliner can
+#   reason across the whole crate (supersedes incremental=false for
+#   runtime perf - they do the same thing from different angles)
+# - panic = "abort": no unwinding tables, smaller hot paths
+# - debug = false + strip = "symbols": smaller binary, better icache
+#
+# The companion knob `-C target-cpu=native` lives in
+# `.cargo/config.toml` and is only applied to non-wasm targets
+# (native binaries here only come from bench + test runs).
+[profile.bench]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = false
+strip = "symbols"
