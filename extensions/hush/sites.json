@@ -11,5 +11,41 @@
     "block": [
       "||ads.example.com"
     ]
+  },
+  "reddit.com": {
+    "hide": [],
+    "remove": [
+      "games-section-badge-controller",
+      "article[data-post-id]:has([is-post-commercial-communication])",
+      "faceplate-partial[name^=\"RelatedCommunityRecommendations\"]"
+    ],
+    "block": [
+      "||w3-reporting.reddit.com"
+    ]
+  },
+  "amazon.com": {
+    "hide": [],
+    "remove": [
+      "iframe[id^=\"ape_\"]",
+      "iframe[src*=\"s.amazon-adsystem.com\"]"
+    ],
+    "block": [
+      "||unagi.amazon.com",
+      "||unagi-na.amazon.com"
+    ]
+  },
+  "github.com": {
+    "hide": [],
+    "remove": [],
+    "block": [
+      "||collector.github.com"
+    ]
+  },
+  "claude.ai": {
+    "hide": [],
+    "remove": [
+      ".model-chat-content__sticker-chips-block"
+    ],
+    "block": []
   }
 }
