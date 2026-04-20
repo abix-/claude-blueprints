@@ -7,6 +7,34 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-19
+
+### Added
+- **Inline teaching text on every suggestion.** Each suggestion now carries
+  a `learn` field: one short technical paragraph that explains what the
+  signal is and why it's worth blocking. Rendered always-visible below
+  the reason in the popup, styled as a muted note-block. Covers all 14
+  detection types (beacon, pixel, first-party telemetry, polling, hidden
+  iframe, sticky overlay, canvas-fp, webgl-fp hot, webgl-fp general,
+  audio-fp, font-fp, replay vendors, replay listener density, invisible
+  animation loop). Copy is in `LEARN_TEXT` at the top of `background.js`
+  so new detectors can add entries in one place.
+- `docs/github.md` case study: first-party `collector.github.com`
+  sendBeacon telemetry, the gap curated filter lists don't reach.
+  Documents the observed rule + why sendBeacon is worth blocking by
+  default.
+
+### Changed
+- **`buildSuggestion()` helper** in `background.js` collapses the
+  8 suggestion-push sites to a single shape builder. Fields like `diag`,
+  `fromIframe`, `frameHostname`, and `learn` are computed once. Prevents
+  schema drift between detectors (the emit() bug was the same class of
+  problem at the main/isolated world boundary; this is the in-SW
+  equivalent guard).
+- README's case-studies index now lists GitHub alongside Reddit and Amazon.
+- Popup CSS: new `.sugg-learn` style (muted grey background, left border
+  accent) sits between the reason and the action buttons.
+
 ## [0.7.0] - 2026-04-19
 
 ### Added

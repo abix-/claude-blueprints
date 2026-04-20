@@ -22,6 +22,97 @@ async function loadDefaultAllowlist() {
 let debugLogging = false;
 const logBuffer = [];
 
+// Per-signal teaching text surfaced in the popup below each suggestion's
+// reason. Keep each string terse and technical: explain what the signal is
+// and why it's worth blocking. Not marketing copy. If a user doesn't know
+// what "sendBeacon" is, one short paragraph should get them oriented.
+const LEARN_TEXT = {
+  beacon:
+    "navigator.sendBeacon() is a fire-and-forget browser API built for " +
+    "telemetry. Requests are guaranteed to go out even on page unload, " +
+    "and the caller can't abort them. Almost no legitimate non-tracking " +
+    "use exists at scale - it was standardized specifically to deliver " +
+    "analytics during page teardown.",
+  pixel:
+    "A 1-pixel transparent image exists only to tell a third-party server " +
+    "that you loaded the current page. It carries no content. Responses " +
+    "under 200 bytes from a third-party img tag are the classic tracking " +
+    "pixel pattern - the image itself is irrelevant, the request is the " +
+    "signal.",
+  firstPartyTelemetry:
+    "A subdomain of the site you're on whose responses are all tiny (< 1KB " +
+    "median). Almost always an internal analytics, logging, or session- " +
+    "replay endpoint. First-party-owned subdomains like this don't show " +
+    "up on curated filter lists (EasyPrivacy, Disconnect) because those " +
+    "lists target cross-site trackers, not site-operated telemetry.",
+  polling:
+    "The same canonical URL fetched 4+ times over several seconds with tiny " +
+    "responses. Real-time chat and presence features use WebSockets for this " +
+    "shape; HTTP polling to a small-response endpoint is overwhelmingly " +
+    "analytics heartbeats or A/B-flag refreshers.",
+  hiddenIframe:
+    "An iframe from a different origin that is hidden (display:none, " +
+    "visibility:hidden, opacity 0, 1x1, or offscreen). Invisible cross-origin " +
+    "iframes are used to run third-party scripts in a partitioned JS " +
+    "context (for cross-site tracking, CSP evasion, or silent third-party " +
+    "cookie storage). Legitimate hidden iframes - captcha challenges, " +
+    "OAuth popups, payment widgets - are already allowlisted.",
+  stickyOverlay:
+    "A fixed- or sticky-position element with z-index >= 100 covering at " +
+    "least 25% of the viewport. Typically a newsletter popup, cookie banner, " +
+    "paywall nag, or app-store upsell. The visual presence and z-index " +
+    "floor distinguish these from legitimate sticky headers.",
+  canvasFp:
+    "A script drew to an HTML canvas and read the pixel bytes back (via " +
+    "toDataURL / toBlob / getImageData). GPU drivers, installed fonts, " +
+    "and OS text-rendering stacks each produce subtly different pixels " +
+    "for the same draw commands; those pixels hash to a stable per-device " +
+    "fingerprint that persists across cookie clears and incognito mode. " +
+    "3+ reads from one origin is the canonical fingerprinting pattern.",
+  webglFpHot:
+    "The script read UNMASKED_VENDOR_WEBGL or UNMASKED_RENDERER_WEBGL - " +
+    "the two WebGL parameters that directly expose your GPU's vendor and " +
+    "model as a string. Combined with 2-3 other signals, this uniquely " +
+    "identifies 90%+ of browser sessions. No legitimate rendering code " +
+    "needs to know which GPU you have.",
+  webglFp:
+    "Many WebGL getParameter() reads from one origin without the UNMASKED_* " +
+    "reads above. Pulls per-hardware capability limits (max texture size, " +
+    "uniform vector count, extension list, etc.) that vary by GPU. Hashed " +
+    "together they form a fingerprint even without explicit model strings.",
+  audioFp:
+    "The script constructed an OfflineAudioContext - an API that renders " +
+    "audio deterministically without playing it. The rendered buffer " +
+    "differs microscopically per CPU and audio stack, producing a per- " +
+    "device fingerprint when hashed. Practically the only use of this API " +
+    "in the wild is fingerprinting; legitimate audio code uses a plain " +
+    "AudioContext.",
+  fontFp:
+    "measureText() called 20+ times with different font-family assignments. " +
+    "The script measures a control string under each candidate font; if " +
+    "the rendered width differs from the browser's fallback, that font is " +
+    "installed on your machine. Each installed font is an additional bit " +
+    "of entropy in a cross-signal fingerprint.",
+  replayVendor:
+    "A known session-replay SaaS (Hotjar, FullStory, Microsoft Clarity, " +
+    "LogRocket, Smartlook, Mouseflow, PostHog) is loaded in the page. These " +
+    "tools record every mouse movement, keystroke, form input, scroll, and " +
+    "click, then replay your session as video for the site owner. You are " +
+    "an unpaid test subject whose interactions are visible to anyone with " +
+    "dashboard access.",
+  replayListener:
+    "12+ interaction event listeners (mousemove, mousedown, keydown, click, " +
+    "scroll, touch*) attached to document/window/body from one script " +
+    "origin. This density is characteristic of session-replay capture " +
+    "even when the vendor's global name is unknown or custom-built.",
+  rafWaste:
+    "A script is continuously painting to a canvas that is hidden " +
+    "(display:none, offscreen, sub-2px, or opacity 0). Burns CPU and " +
+    "drains battery for no visible output. Typical cause: a Lottie or " +
+    "canvas-based animation left running inside a collapsed panel or " +
+    "off-screen widget."
+};
+
 function safeStringify(v) {
   if (v == null) return String(v);
   if (typeof v === "string") return v;
@@ -561,13 +652,31 @@ function computeSuggestions(state, config) {
       : "unknown layer"
   });
 
+  // Shared suggestion-object builder. Centralizes the shape so fields like
+  // `diag`, `fromIframe`, `frameHostname`, and `learn` are computed once.
+  // Every call site that pushes into `out` should go through this so the
+  // schema can't drift between detectors.
+  const buildSuggestion = ({ key, layer, value, reason, confidence, count, evidence, fromFrame, learn }) => ({
+    key,
+    layer,
+    value,
+    reason,
+    confidence,
+    count,
+    evidence: evidence || [],
+    fromIframe: !!fromFrame,
+    frameHostname: fromFrame || null,
+    diag: makeDiag(value, layer, fromFrame || null),
+    learn: learn || ""
+  });
+
   for (const [host, hits] of beaconByHost) {
     const value = "||" + host;
     const hasMatch = existingBlock.has(value);
     log("beacon suggestion candidate:", value, "hits", hits.length, "existingBlock.has", hasMatch);
     if (hasMatch) continue;
     const fromFrame = firstNonTopFrame(hits);
-    out.push({
+    out.push(buildSuggestion({
       key: "block::" + value,
       layer: "block",
       value,
@@ -575,10 +684,9 @@ function computeSuggestions(state, config) {
       confidence: 95,
       count: hits.length,
       evidence: hits.slice(0, 5).map(h => h.url),
-      fromIframe: !!fromFrame,
-      frameHostname: fromFrame,
-      diag: makeDiag(value, "block", fromFrame)
-    });
+      fromFrame,
+      learn: LEARN_TEXT.beacon
+    }));
   }
 
   // 2. Tracking pixels -> block (high)
@@ -596,7 +704,7 @@ function computeSuggestions(state, config) {
     if (existingBlock.has(value)) continue;
     const med = median(hits.map(h => h.transferSize));
     const fromFrame = firstNonTopFrame(hits);
-    out.push({
+    out.push(buildSuggestion({
       key: "block::" + value,
       layer: "block",
       value,
@@ -604,10 +712,9 @@ function computeSuggestions(state, config) {
       confidence: 85,
       count: hits.length,
       evidence: hits.slice(0, 5).map(h => h.url + " (" + h.transferSize + "b)"),
-      fromIframe: !!fromFrame,
-      frameHostname: fromFrame,
-      diag: makeDiag(value, "block", fromFrame)
-    });
+      fromFrame,
+      learn: LEARN_TEXT.pixel
+    }));
   }
 
   // 3. First-party telemetry subdomains -> block (medium)
@@ -628,7 +735,7 @@ function computeSuggestions(state, config) {
     const value = "||" + host;
     if (existingBlock.has(value)) continue;
     const fromFrame = firstNonTopFrame(requests);
-    out.push({
+    out.push(buildSuggestion({
       key: "block::" + value,
       layer: "block",
       value,
@@ -636,10 +743,9 @@ function computeSuggestions(state, config) {
       confidence: 70,
       count: requests.length,
       evidence: requests.slice(0, 5).map(r => r.url + " (" + r.transferSize + "b, " + r.initiatorType + ")"),
-      fromIframe: !!fromFrame,
-      frameHostname: fromFrame,
-      diag: makeDiag(value, "block", fromFrame)
-    });
+      fromFrame,
+      learn: LEARN_TEXT.firstPartyTelemetry
+    }));
   }
 
   // 4. Polling -> block (medium-high)
@@ -664,7 +770,7 @@ function computeSuggestions(state, config) {
     const key = "block::" + value;
     if (existingBlock.has(value)) continue;
     if (out.find(s => s.key === key)) continue; // already added via another signal
-    out.push({
+    out.push(buildSuggestion({
       key,
       layer: "block",
       value,
@@ -672,10 +778,9 @@ function computeSuggestions(state, config) {
       confidence: 75,
       count: info.count,
       evidence: [info.sample],
-      fromIframe: false,
-      frameHostname: null,
-      diag: makeDiag(value, "block", null)
-    });
+      fromFrame: null,
+      learn: LEARN_TEXT.polling
+    }));
   }
 
   // 5. Hidden iframes -> remove (high), excluding known-legit sources
@@ -692,7 +797,7 @@ function computeSuggestions(state, config) {
     const selector = 'iframe[src*="' + host + '"]';
     if (existingRemove.has(selector)) continue;
     const fromFrame = firstNonTopFrame(info.samples);
-    out.push({
+    out.push(buildSuggestion({
       key: "remove::" + selector,
       layer: "remove",
       value: selector,
@@ -700,10 +805,9 @@ function computeSuggestions(state, config) {
       confidence: 80,
       count: info.samples.length,
       evidence: info.samples.slice(0, 3).map(s => s.outerHTMLPreview),
-      fromIframe: !!fromFrame,
-      frameHostname: fromFrame,
-      diag: makeDiag(selector, "remove", fromFrame)
-    });
+      fromFrame,
+      learn: LEARN_TEXT.hiddenIframe
+    }));
   }
 
   // =====================================================================
@@ -764,6 +868,18 @@ function computeSuggestions(state, config) {
     }
   }
 
+  // Map the `kind` tag (used both in the dedup suffix and to route teaching
+  // text) to the matching LEARN_TEXT entry. Any origin-block suggestion
+  // without a matching entry still works; it just has no teaching text.
+  const ORIGIN_BLOCK_LEARN = {
+    "canvas-fp": LEARN_TEXT.canvasFp,
+    "webgl-fp-hot": LEARN_TEXT.webglFpHot,
+    "webgl-fp": LEARN_TEXT.webglFp,
+    "audio-fp": LEARN_TEXT.audioFp,
+    "font-fp": LEARN_TEXT.fontFp,
+    "listener-density": LEARN_TEXT.replayListener
+  };
+
   // Emit a block suggestion targeting a script origin with a given reason.
   // Shared helper for fingerprinting/replay suggestions since they all result
   // in "block this script's origin" recommendations with varying confidence.
@@ -771,19 +887,17 @@ function computeSuggestions(state, config) {
     if (!origin || origin === "(unknown script)") return;
     const value = "||" + origin;
     if (existingBlock.has(value)) return;
-    const suggKey = "block::" + value + "::" + kind;
-    out.push({
-      key: suggKey,
+    out.push(buildSuggestion({
+      key: "block::" + value + "::" + kind,
       layer: "block",
       value,
       reason,
       confidence,
       count: 1,
       evidence: [],
-      fromIframe: false,
-      frameHostname: null,
-      diag: makeDiag(value, "block", null)
-    });
+      fromFrame: null,
+      learn: ORIGIN_BLOCK_LEARN[kind] || ""
+    }));
   };
 
   // Canvas fingerprinting: 3+ toDataURL/toBlob/getImageData calls is the
@@ -852,7 +966,7 @@ function computeSuggestions(state, config) {
     if (!vendorHost) continue;
     const value = "||" + vendorHost;
     if (existingBlock.has(value)) continue;
-    out.push({
+    out.push(buildSuggestion({
       key: "block::" + value + "::replay-" + vendor,
       layer: "block",
       value,
@@ -867,10 +981,9 @@ function computeSuggestions(state, config) {
                   vendor === "Smartlook" ? "smartlook" :
                   vendor === "Mouseflow" ? "mouseflow" :
                   vendor === "PostHog" ? "__posthog" : "?")],
-      fromIframe: false,
-      frameHostname: null,
-      diag: makeDiag(value, "block", null)
-    });
+      fromFrame: null,
+      learn: LEARN_TEXT.replayVendor
+    }));
   }
 
   // Listener density: heavy attachment of mousemove/keydown/click/etc
@@ -905,7 +1018,7 @@ function computeSuggestions(state, config) {
     if (existingBlock.has(value)) continue;
     const seconds = Math.max(1, Math.round(span / 1000));
     const ratePerSec = Math.round((info.invisible / seconds) * 10) / 10;
-    out.push({
+    out.push(buildSuggestion({
       key: "block::" + value + "::raf-waste::" + info.canvasSel,
       layer: "block",
       value,
@@ -917,10 +1030,9 @@ function computeSuggestions(state, config) {
         "origin: " + info.origin,
         "window: " + seconds + "s"
       ],
-      fromIframe: false,
-      frameHostname: null,
-      diag: makeDiag(value, "block", null)
-    });
+      fromFrame: null,
+      learn: LEARN_TEXT.rafWaste
+    }));
   }
 
   // 6. Sticky overlays -> hide (medium)
@@ -930,7 +1042,7 @@ function computeSuggestions(state, config) {
     stickySeen.add(s.selector);
     if (existingHide.has(s.selector)) continue;
     const stickyFrame = s.reporterFrame && s.reporterFrame !== hostname ? s.reporterFrame : null;
-    out.push({
+    out.push(buildSuggestion({
       key: "hide::" + s.selector,
       layer: "hide",
       value: s.selector,
@@ -938,10 +1050,9 @@ function computeSuggestions(state, config) {
       confidence: 55,
       count: 1,
       evidence: [s.rect.w + "x" + s.rect.h + " at z-index " + s.zIndex],
-      fromIframe: !!stickyFrame,
-      frameHostname: stickyFrame,
-      diag: makeDiag(s.selector, "hide", stickyFrame)
-    });
+      fromFrame: stickyFrame,
+      learn: LEARN_TEXT.stickyOverlay
+    }));
   }
 
   // Apply tab-session dismissals and the cross-session suggestion allowlist.

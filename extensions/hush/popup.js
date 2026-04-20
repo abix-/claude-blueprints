@@ -211,6 +211,16 @@ function renderSuggRow(tabId, hostname, s, isMatched) {
   reason.textContent = s.reason;
   li.appendChild(reason);
 
+  // Always-visible teaching text explaining what the signal is and why
+  // it's worth blocking. Technical but short. Only rendered if the
+  // background attached a `learn` string to the suggestion.
+  if (s.learn) {
+    const learn = document.createElement("div");
+    learn.className = "sugg-learn";
+    learn.textContent = s.learn;
+    li.appendChild(learn);
+  }
+
   const actions = document.createElement("div");
   actions.className = "sugg-actions";
   const addBtn = document.createElement("button");
