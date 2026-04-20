@@ -10,6 +10,7 @@
 
 mod allowlist;
 mod canon;
+mod chrome_bridge;
 mod compute;
 mod detectors;
 mod learn;

@@ -4,7 +4,7 @@
 // the Leptos subtree. Over subsequent commits, the per-section JS
 // renderers below get ported to Leptos components and their
 // corresponding `#block-list` / `#sugg-list` roots disappear.
-import initWasm, { initEngine, mountPopup } from "./dist/pkg/hush.js";
+import initWasm, { initEngine, mountPopup, refreshPopupSuggestions } from "./dist/pkg/hush.js";
 
 const wasmReady = initWasm().then(() => {
   try { initEngine(); } catch (e) { console.error("[Hush popup] initEngine failed", e); }
@@ -19,15 +19,13 @@ async function main() {
   const tabId = tab && tab.id;
   const hostname = tab && tab.url ? safeHostname(tab.url) : "";
 
-  // #match is now rendered by the Leptos component at #rust-popup-root.
+  // #match + suggestion list are now rendered by the Leptos tree at
+  // #rust-popup-root. Remaining JS-owned elements are listed here.
   const sectionsEl = document.getElementById("sections");
   const unmatchedEl = document.getElementById("unmatched");
   const createSiteBtn = document.getElementById("create-site");
   const suggBlock = document.getElementById("suggestions-block");
   const suggDisabled = document.getElementById("sugg-disabled");
-  const suggList = document.getElementById("sugg-list");
-  const suggCount = document.getElementById("sugg-count");
-  const suggSub = document.getElementById("sugg-sub");
   const rescanRow = document.getElementById("rescan-row");
 
   document.getElementById("options").addEventListener("click", () => {
@@ -67,19 +65,25 @@ async function main() {
     if (typeof tabId === "number") {
       try { await chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" }); } catch (e) {}
     }
-    setTimeout(() => refreshSuggestions(tabId, hostname), 400);
+    // Leptos owns the suggestion list; tell it to re-fetch. No full
+    // popup reload needed.
+    setTimeout(() => { try { refreshPopupSuggestions(); } catch (e) {} }, 400);
   });
 
   document.getElementById("sugg-scan-once").addEventListener("click", async () => {
     if (typeof tabId !== "number") return;
     try { await chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" }); } catch (e) {}
-    setTimeout(() => refreshSuggestions(tabId, hostname), 400);
+    // Leptos owns the suggestion list; tell it to re-fetch. No full
+    // popup reload needed.
+    setTimeout(() => { try { refreshPopupSuggestions(); } catch (e) {} }, 400);
   });
 
   document.getElementById("sugg-rescan").addEventListener("click", async () => {
     if (typeof tabId !== "number") return;
     try { await chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" }); } catch (e) {}
-    setTimeout(() => refreshSuggestions(tabId, hostname), 400);
+    // Leptos owns the suggestion list; tell it to re-fetch. No full
+    // popup reload needed.
+    setTimeout(() => { try { refreshPopupSuggestions(); } catch (e) {} }, 400);
   });
 
   createSiteBtn.addEventListener("click", async () => {
@@ -133,6 +137,13 @@ async function main() {
     renderSelectorList("hide", stats.hide || {}, removeKeys);
   }
 
+  // Suggestions list is rendered by the Leptos component tree (see
+  // src/ui_popup.rs). The per-tab detector-enable / scan-once / rescan
+  // buttons remain JS-driven for now (handlers wired earlier in main).
+  suggBlock.hidden = false;
+  suggDisabled.hidden = detectorEnabled;
+  rescanRow.hidden = !detectorEnabled;
+
   // Hand everything the Leptos root needs in one snapshot.
   const sumCounts = (m) => Object.values(m || {}).reduce((a, b) => a + (Number(b) || 0), 0);
   try {
@@ -144,269 +155,16 @@ async function main() {
       removeCount: sumCounts(stats.remove),
       hideCount: sumCounts(stats.hide),
       suggestionCount: suggestions.length,
+      tabId,
+      suggestions,
+      detectorEnabled,
     });
   } catch (e) { console.error("[Hush popup] mountPopup failed", e); }
-
-  // Suggestions block is always visible; content varies by enabled state.
-  suggBlock.hidden = false;
-  renderSuggestions(tabId, hostname, suggestions, detectorEnabled, isMatched);
 }
 
-async function refreshSuggestions(tabId, hostname) {
-  const resp = await chrome.runtime.sendMessage({ type: "hush:get-suggestions", tabId }).catch(() => null);
-  const optsData = await chrome.storage.local.get(OPTIONS_KEY);
-  const enabled = !!(optsData[OPTIONS_KEY] && optsData[OPTIONS_KEY].suggestionsEnabled);
-  const statsResp = await chrome.runtime.sendMessage({ type: "hush:get-tab-stats", tabId }).catch(() => null);
-  const isMatched = !!(statsResp && statsResp.stats && statsResp.stats.matchedDomain);
-  renderSuggestions(tabId, hostname, (resp && resp.suggestions) || [], enabled, isMatched);
-}
-
-function renderSuggestions(tabId, hostname, suggestions, enabled, isMatched) {
-  const suggDisabled = document.getElementById("sugg-disabled");
-  const suggList = document.getElementById("sugg-list");
-  const suggCount = document.getElementById("sugg-count");
-  const suggSub = document.getElementById("sugg-sub");
-  const rescanRow = document.getElementById("rescan-row");
-
-  suggCount.textContent = String(suggestions.length);
-  suggCount.classList.toggle("zero", suggestions.length === 0);
-
-  if (!enabled) {
-    suggDisabled.hidden = false;
-    rescanRow.hidden = true;
-    suggSub.textContent = "";
-    // still show the list if a one-shot scan produced results
-    renderSuggList(tabId, hostname, suggestions, isMatched);
-    return;
-  }
-
-  suggDisabled.hidden = true;
-  rescanRow.hidden = false;
-  suggSub.textContent = suggestions.length
-    ? "click + Add to append to config"
-    : "no suspicious behavior observed yet";
-  renderSuggList(tabId, hostname, suggestions, isMatched);
-}
-
-function renderSuggList(tabId, hostname, suggestions, isMatched) {
-  const suggList = document.getElementById("sugg-list");
-  suggList.innerHTML = "";
-  if (!suggestions.length) return;
-  for (const s of suggestions) {
-    suggList.appendChild(renderSuggRow(tabId, hostname, s, isMatched));
-  }
-}
-
-function renderSuggRow(tabId, hostname, s, isMatched) {
-  const li = document.createElement("li");
-
-  const top = document.createElement("div");
-  top.className = "sugg-row-top";
-  const layer = document.createElement("span");
-  layer.className = "sugg-layer " + s.layer;
-  layer.textContent = s.layer;
-  top.appendChild(layer);
-  if (s.fromIframe && s.frameHostname) {
-    const iframeChip = document.createElement("span");
-    iframeChip.className = "sugg-iframe";
-    iframeChip.textContent = "from iframe " + s.frameHostname;
-    iframeChip.title = "This request came from an embedded " + s.frameHostname +
-      " iframe on the current tab. Hush checks your tab's site config for dedup, " +
-      "so your existing rules still cover it.";
-    top.appendChild(iframeChip);
-  }
-  const conf = document.createElement("span");
-  conf.className = "sugg-conf";
-  conf.textContent = "conf " + (s.confidence || 0) + "  |  count " + (s.count || 1);
-  top.appendChild(conf);
-  li.appendChild(top);
-
-  const value = document.createElement("div");
-  value.className = "sugg-value";
-  value.title = s.value;
-  value.textContent = s.value;
-  li.appendChild(value);
-
-  const reason = document.createElement("div");
-  reason.className = "sugg-reason";
-  reason.textContent = s.reason;
-  li.appendChild(reason);
-
-  // Always-visible teaching text explaining what the signal is and why
-  // it's worth blocking. Technical but short. Only rendered if the
-  // background attached a `learn` string to the suggestion.
-  if (s.learn) {
-    const learn = document.createElement("div");
-    learn.className = "sugg-learn";
-    learn.textContent = s.learn;
-    li.appendChild(learn);
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "sugg-actions";
-  const addBtn = document.createElement("button");
-  addBtn.className = "add";
-  addBtn.textContent = "+ Add";
-  addBtn.addEventListener("click", async () => {
-    addBtn.disabled = true;
-    addBtn.textContent = "Adding...";
-    const resp = await chrome.runtime.sendMessage({
-      type: "hush:accept-suggestion",
-      hostname,
-      layer: s.layer,
-      value: s.value
-    }).catch(() => null);
-    if (resp && resp.ok) {
-      addBtn.textContent = "Added";
-      setTimeout(() => {
-        li.remove();
-        refreshSuggestions(tabId, hostname);
-      }, 400);
-    } else {
-      addBtn.disabled = false;
-      addBtn.textContent = "+ Add";
-    }
-  });
-  actions.appendChild(addBtn);
-
-  const dismissBtn = document.createElement("button");
-  dismissBtn.className = "dismiss";
-  dismissBtn.textContent = "Dismiss";
-  dismissBtn.title = "Hide this suggestion for the current tab session only. A reload will bring it back.";
-  dismissBtn.addEventListener("click", async () => {
-    await chrome.runtime.sendMessage({
-      type: "hush:dismiss-suggestion",
-      tabId,
-      key: s.key
-    }).catch(() => null);
-    li.remove();
-    refreshSuggestions(tabId, hostname);
-  });
-  actions.appendChild(dismissBtn);
-
-  // "Allow" persists the suggestion key in the allowlist so this exact
-  // suggestion never surfaces again on any site. Use for legit things Hush
-  // misidentifies (new captcha provider, a real hidden widget you use, etc).
-  // Revocable from the options page's allowlist editor.
-  const allowBtn = document.createElement("button");
-  allowBtn.className = "allow";
-  allowBtn.textContent = "Allow";
-  allowBtn.title = "Permanently allow this detection on all sites. Manage the full allowlist in Options.";
-  allowBtn.addEventListener("click", async () => {
-    allowBtn.disabled = true;
-    allowBtn.textContent = "Allowing...";
-    const resp = await chrome.runtime.sendMessage({
-      type: "hush:allowlist-add-suggestion",
-      key: s.key
-    }).catch(() => null);
-    if (resp && resp.ok) {
-      allowBtn.textContent = "Allowed";
-      setTimeout(() => {
-        li.remove();
-        refreshSuggestions(tabId, hostname);
-      }, 400);
-    } else {
-      allowBtn.disabled = false;
-      allowBtn.textContent = "Allow";
-    }
-  });
-  actions.appendChild(allowBtn);
-
-  // "Why here?" - inline diagnostic explaining the dedup decision,
-  // so the user can see WHY a suggestion appears even when they think
-  // they have a rule for it.
-  if (s.diag) {
-    const whyBtn = document.createElement("button");
-    whyBtn.textContent = "Why?";
-    whyBtn.style.flex = "0 0 auto";
-    whyBtn.title = "Show dedup diagnostic";
-    const whyPanel = document.createElement("div");
-    whyPanel.className = "sugg-evidence";
-    whyPanel.hidden = true;
-    whyBtn.addEventListener("click", () => {
-      whyPanel.hidden = !whyPanel.hidden;
-      whyBtn.textContent = whyPanel.hidden ? "Why?" : "Hide why";
-      if (!whyPanel.hidden) {
-        whyPanel.innerHTML = "";
-        const info = s.diag;
-        const list = document.createElement("ul");
-        list.className = "sugg-evidence-list";
-        const rows = [
-          ["Checked value", info.value],
-          ["Tab hostname (used for config match)", info.tabHostname || "(unknown)"],
-          ["Observed from frame", info.frameHostname || info.tabHostname || "(unknown)"],
-          ["From iframe?", info.isFromIframe ? "yes" : "no"],
-          ["Matched config key", info.matchedKey || "(no site config matched)"],
-          ["Existing " + info.layer + " rules count", String(info.existingBlockCount)],
-          ["Dedup result", info.dedupResult]
-        ];
-        for (const [k, v] of rows) {
-          const li = document.createElement("li");
-          li.innerHTML = "<b>" + escapeHtml(k) + ":</b> " + escapeHtml(String(v));
-          list.appendChild(li);
-        }
-        if (Array.isArray(info.existingBlockSample) && info.existingBlockSample.length) {
-          const li = document.createElement("li");
-          li.innerHTML = "<b>Existing rules sample (first 10):</b>";
-          list.appendChild(li);
-          for (const entry of info.existingBlockSample) {
-            const liE = document.createElement("li");
-            liE.style.paddingLeft = "12px";
-            liE.title = entry;
-            liE.textContent = entry + " (len=" + entry.length + ")";
-            list.appendChild(liE);
-          }
-          const li2 = document.createElement("li");
-          li2.innerHTML = "<b>Candidate value:</b> " + escapeHtml(info.value) + " (len=" + info.value.length + ")";
-          list.appendChild(li2);
-        }
-        whyPanel.appendChild(list);
-      }
-    });
-    actions.appendChild(whyBtn);
-    li.appendChild(whyPanel);
-  }
-
-  const evBtn = document.createElement("button");
-  evBtn.textContent = "Evidence";
-  evBtn.style.flex = "0 0 auto";
-  const ev = document.createElement("div");
-  ev.className = "sugg-evidence";
-  ev.hidden = true;
-  const evSrc = Array.isArray(s.evidence) ? s.evidence : [];
-  if (evSrc.length) {
-    const evHeader = document.createElement("div");
-    evHeader.style.cssText = "display:flex;justify-content:flex-end;margin:4px 0;";
-    const copyBtn = makeCopyButton(() => evSrc.map(e => String(e)).join("\n"));
-    evHeader.appendChild(copyBtn);
-    ev.appendChild(evHeader);
-  }
-  const evList = document.createElement("ul");
-  evList.className = "sugg-evidence-list";
-  if (!evSrc.length) {
-    const liE = document.createElement("li");
-    liE.style.fontStyle = "italic";
-    liE.textContent = "(no captured evidence)";
-    evList.appendChild(liE);
-  } else {
-    for (const e of evSrc) {
-      const liE = document.createElement("li");
-      liE.title = String(e);
-      liE.textContent = String(e);
-      evList.appendChild(liE);
-    }
-  }
-  ev.appendChild(evList);
-  evBtn.addEventListener("click", () => {
-    ev.hidden = !ev.hidden;
-    evBtn.textContent = ev.hidden ? "Evidence" : "Hide evidence";
-  });
-  actions.appendChild(evBtn);
-  li.appendChild(actions);
-  li.appendChild(ev);
-
-  return li;
-}
+// --- Deleted in Stage 4 iter 3 (moved to src/ui_popup.rs) ---
+// renderSuggestions, refreshSuggestions, renderSuggList, renderSuggRow
+// now live in Rust Leptos components.
 
 function renderSelectorList(kind, entries, overlapSet) {
   const countEl = document.getElementById(kind + "-count");
