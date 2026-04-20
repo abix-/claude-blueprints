@@ -7,6 +7,24 @@ this file is chronology.
 
 ## Stage 5 (in progress): Options + content-script cleanup
 
+**Iter 7 (popup bootstrap consolidation)**: `popup.js` collapsed
+from 148 LOC to 20. New async wasm-bindgen entry `hushPopupMain`
+owns the whole bootstrap flow: `chrome.tabs.query` for the active
+tab, four sequential sendMessage / storage.local.get calls
+(`hush:get-tab-stats`, `hush:get-suggestions`,
+`hush:get-rule-diagnostics`, `chrome.storage.local.get(["options",
+"config"])`), matched-domain resolution via hostname-suffix lookup,
+then `mount_popup_inner` with the assembled snapshot. New
+chrome_bridge helpers: `get_active_tab`, `open_options_page`,
+`reload_tab`, `get_debug_info`, `get_tab_stats`,
+`get_rule_diagnostics`, `get_popup_storage`. New Leptos
+components `UnmatchedBanner` + `FooterButtons` replace the static
+`<div id="unmatched">` + `<footer>` blocks in `popup.html`. The
+Debug button builds its clipboard payload via
+`js_sys::Object::assign` + `JSON.stringify` with a 2-space
+indent. Stage 5 bootstrap-LOC target met: popup 20 + options 34
++ content 32 = 86 LOC.
+
 **Iter 6 (content.rs)**: the content script ported to Rust/WASM in
 one pass. `src/content.rs` (~1000 LOC) owns every subsystem that
 lived in `content.js`: layer application (`apply_remove`,

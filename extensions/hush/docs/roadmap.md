@@ -142,16 +142,12 @@ totals under 100 lines across all bootstrap shims.*
 - [x] Delete the JS copies: `content.js` collapsed from 464 LOC to
       a 32-line wasm bootstrap. `options.js` is 34 LOC, `popup.js`
       is 148 LOC.
-- [ ] Final pass: confirm total JS LOC under 100 across all bootstrap
-      shims (`background.js`, `content.js`, `mainworld.js`, `popup.js`,
-      `options.js`). Current totals: popup 148, options 34, content
-      32, mainworld 419, background 988 = 1621. `background.js` is
-      out of scope for Stage 5 (service-worker port is a separate
-      stage); `mainworld.js` is the mainworld bootstrap + stubs and
-      is already as small as wasm-bindgen's main-world constraints
-      allow. The <100 LOC target applies to content + options +
-      popup bootstraps (current 214 LOC - the full popup.js is a
-      mix of bootstrap + unreplaced glue).
+- [x] Final pass: total JS LOC under 100 across popup + options +
+      content bootstrap shims. popup.js 20 + options.js 34 +
+      content.js 32 = 86. `mainworld.js` (419) stays larger because
+      of the physically-required synchronous document_start hook
+      stubs; `background.js` (988) is the service worker, out of
+      Stage 5 scope.
 
 ## Out of scope (for now)
 

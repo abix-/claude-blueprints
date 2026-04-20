@@ -12,7 +12,7 @@
 //! through Leptos's `Action` / `spawn_local` machinery without extra
 //! wrapping.
 
-use crate::types::Suggestion;
+use crate::types::{BlockDiagnostic, Config, Suggestion};
 use js_sys::{Promise, Reflect};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -429,6 +429,217 @@ pub async fn reset_config_to_defaults() -> Result<(), JsValue> {
 /// immediately. Message shape matches the JS popup's existing
 /// `chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" })` call.
 /// Errors when the tab is closed or the content script hasn't loaded.
+/// Active-tab identity used by the popup bootstrap: `chrome.tabs.query`
+/// result reduced to the fields the Leptos snapshot assembly cares
+/// about. Any missing field degrades to empty/None instead of
+/// propagating a parse error - the popup can still render without
+/// a tab (e.g. when opened from chrome://newtab).
+pub struct ActiveTab {
+    pub tab_id: Option<i32>,
+    pub url: String,
+}
+
+/// `chrome.tabs.query({active: true, currentWindow: true})` -> first
+/// element. Returns an empty `ActiveTab` if the call fails or the
+/// browser isn't showing a normal tab (devtools, extension page, etc.).
+pub async fn get_active_tab() -> Result<ActiveTab, JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let tabs = Reflect::get(&chrome, &JsValue::from_str("tabs"))?;
+    let query_fn: js_sys::Function = Reflect::get(&tabs, &JsValue::from_str("query"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.tabs.query is not a function"))?;
+    let q = js_sys::Object::new();
+    Reflect::set(&q, &JsValue::from_str("active"), &JsValue::TRUE)?;
+    Reflect::set(&q, &JsValue::from_str("currentWindow"), &JsValue::TRUE)?;
+    let promise: Promise = query_fn
+        .call1(&tabs, &q.into())?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.tabs.query did not return a Promise"))?;
+    let reply = JsFuture::from(promise).await?;
+    let arr = reply
+        .dyn_into::<js_sys::Array>()
+        .map_err(|_| JsValue::from_str("chrome.tabs.query did not return an array"))?;
+    if arr.length() == 0 {
+        return Ok(ActiveTab { tab_id: None, url: String::new() });
+    }
+    let first = arr.get(0);
+    let tab_id = Reflect::get(&first, &JsValue::from_str("id"))
+        .ok()
+        .and_then(|v| v.as_f64())
+        .map(|f| f as i32);
+    let url = Reflect::get(&first, &JsValue::from_str("url"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .unwrap_or_default();
+    Ok(ActiveTab { tab_id, url })
+}
+
+/// `chrome.runtime.openOptionsPage()`. Fire-and-forget; if the call
+/// throws (e.g. in a context without the options page), the caller
+/// absorbs the error.
+pub fn open_options_page() -> Result<(), JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let runtime = Reflect::get(&chrome, &JsValue::from_str("runtime"))?;
+    let open_fn: js_sys::Function = Reflect::get(&runtime, &JsValue::from_str("openOptionsPage"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.runtime.openOptionsPage is not a function"))?;
+    open_fn.call0(&runtime)?;
+    Ok(())
+}
+
+/// `chrome.tabs.reload(tabId)`. Used by the popup's Reload button to
+/// refresh the active tab so config / allowlist mutations take effect
+/// without the user hunting for the browser reload button.
+pub fn reload_tab(tab_id: i32) -> Result<(), JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let tabs = Reflect::get(&chrome, &JsValue::from_str("tabs"))?;
+    let reload_fn: js_sys::Function = Reflect::get(&tabs, &JsValue::from_str("reload"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.tabs.reload is not a function"))?;
+    reload_fn.call1(&tabs, &JsValue::from_f64(tab_id as f64))?;
+    Ok(())
+}
+
+/// Ask the background service worker for its current debug snapshot
+/// (tab stats, recent blocks, active rules). Returns the raw JsValue
+/// so the Debug button can pretty-print it without us defining a type
+/// whose shape would drift from `background.js`.
+pub async fn get_debug_info(tab_id: Option<i32>) -> Result<JsValue, JsValue> {
+    #[derive(Serialize)]
+    struct Msg {
+        #[serde(rename = "type")]
+        type_: &'static str,
+        #[serde(rename = "tabId")]
+        tab_id: Option<i32>,
+    }
+    let payload = serde_wasm_bindgen::to_value(&Msg {
+        type_: "hush:get-debug-info",
+        tab_id,
+    })
+    .map_err(|e| JsValue::from_str(&format!("get_debug_info serialize: {e}")))?;
+    let (runtime, func) = send_fn()?;
+    let promise: Promise = func
+        .call1(&runtime, &payload)?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.runtime.sendMessage did not return a Promise"))?;
+    JsFuture::from(promise).await
+}
+
+/// Per-tab stats the popup's activity summary + per-section panels
+/// consume. Matches the shape `background.js` returns for the
+/// `hush:get-tab-stats` message. All fields degrade to empty/zero so
+/// the popup can render before the content script has sent its first
+/// stats ping.
+#[derive(Default, Deserialize)]
+pub struct TabStats {
+    #[serde(rename = "matchedDomain", default)]
+    pub matched_domain: Option<String>,
+    #[serde(default)]
+    pub block: u32,
+    #[serde(default)]
+    pub hide: indexmap::IndexMap<String, u32>,
+    #[serde(default)]
+    pub remove: indexmap::IndexMap<String, u32>,
+    #[serde(rename = "blockedUrls", default)]
+    pub blocked_urls: Vec<crate::types::BlockedUrl>,
+    #[serde(rename = "removedElements", default)]
+    pub removed_elements: Vec<crate::types::RemovedElement>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct TabStatsResp {
+    stats: TabStats,
+}
+
+/// POST `hush:get-tab-stats` and deserialize into the typed shape.
+pub async fn get_tab_stats(tab_id: i32) -> Result<TabStats, JsValue> {
+    #[derive(Serialize)]
+    struct Msg {
+        #[serde(rename = "type")]
+        type_: &'static str,
+        #[serde(rename = "tabId")]
+        tab_id: i32,
+    }
+    let resp: TabStatsResp = send(&Msg {
+        type_: "hush:get-tab-stats",
+        tab_id,
+    })
+    .await?;
+    Ok(resp.stats)
+}
+
+/// POST `hush:get-rule-diagnostics` and return the per-rule diagnostic
+/// rows. Empty on error so the popup always renders.
+pub async fn get_rule_diagnostics(
+    tab_id: i32,
+    hostname: &str,
+) -> Result<Vec<BlockDiagnostic>, JsValue> {
+    #[derive(Serialize)]
+    struct Msg<'a> {
+        #[serde(rename = "type")]
+        type_: &'static str,
+        #[serde(rename = "tabId")]
+        tab_id: i32,
+        hostname: &'a str,
+    }
+    #[derive(Deserialize, Default)]
+    #[serde(default)]
+    struct Resp {
+        diagnostics: Vec<BlockDiagnostic>,
+    }
+    let resp: Resp = send(&Msg {
+        type_: "hush:get-rule-diagnostics",
+        tab_id,
+        hostname,
+    })
+    .await?;
+    Ok(resp.diagnostics)
+}
+
+/// Read `chrome.storage.local["options"]` + `["config"]` in one call.
+/// Missing keys degrade to defaults.
+pub async fn get_popup_storage() -> Result<PopupStorage, JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let storage = Reflect::get(&chrome, &JsValue::from_str("storage"))?;
+    let local = Reflect::get(&storage, &JsValue::from_str("local"))?;
+    let get_fn: js_sys::Function = Reflect::get(&local, &JsValue::from_str("get"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.get is not a function"))?;
+    let keys = js_sys::Array::of2(
+        &JsValue::from_str("options"),
+        &JsValue::from_str("config"),
+    );
+    let promise: Promise = get_fn
+        .call1(&local, &keys.into())?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.get did not return a Promise"))?;
+    let reply = JsFuture::from(promise).await?;
+    let detector_enabled = Reflect::get(&reply, &JsValue::from_str("options"))
+        .ok()
+        .and_then(|v| Reflect::get(&v, &JsValue::from_str("suggestionsEnabled")).ok())
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let config = Reflect::get(&reply, &JsValue::from_str("config"))
+        .ok()
+        .filter(|v| !v.is_undefined() && !v.is_null())
+        .map(|v| serde_wasm_bindgen::from_value::<Config>(v).unwrap_or_default())
+        .unwrap_or_default();
+    Ok(PopupStorage {
+        detector_enabled,
+        config,
+    })
+}
+
+pub struct PopupStorage {
+    pub detector_enabled: bool,
+    pub config: Config,
+}
+
 pub async fn scan_once(tab_id: i32) -> Result<(), JsValue> {
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
     let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;

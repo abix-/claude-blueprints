@@ -385,27 +385,12 @@
     <!-- Matched-site header is rendered by the Leptos component tree
          at #rust-popup-root below. See src/ui_popup.rs. -->
   </header>
-  <!-- Rust/Leptos component root. popup.js mounts it after WASM init. -->
+  <!-- Entire popup body (matched-site header, activity, suggestions,
+       detector CTA, three diagnostic sections, unmatched banner, and
+       footer buttons) rendered by the Leptos component tree. See
+       src/ui_popup.rs. -->
   <div id="rust-popup-root"></div>
 
-  <div id="unmatched" class="unmatched" hidden>
-    No config matched for this site.
-    <div><button id="create-site" style="display:none; flex:none; padding:6px 14px;">Create config for this site</button></div>
-  </div>
-
-  <!-- Suggestions list + detector enable/scan/rescan controls are
-       rendered by the Leptos component tree at #rust-popup-root above. -->
-
-  <!-- Blocked / Removed / Hidden sections all render inside the Leptos
-       tree at #rust-popup-root above (stage 4 iter 6 + iter 7). -->
-
-  <footer>
-    <button id="options">Open options</button>
-    <button id="reload">Reload tab</button>
-    <button id="debug" title="Copy debug info to clipboard">Debug</button>
-  </footer>
-
-  <!-- popup.js is a module so it can `import init, { mountPopup } from "./dist/pkg/hush.js"`. -->
   <script type="module" src="popup.js"></script>
 </body>
 </html>

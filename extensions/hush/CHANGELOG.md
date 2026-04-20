@@ -94,6 +94,16 @@ changes expected).
   grew web-sys features for `PerformanceObserver`,
   `MutationObserver`, `HtmlIFrameElement`, `HtmlStyleElement`,
   `Location`, and related init bags.
+- Iter 7: popup bootstrap consolidation. New async wasm-bindgen
+  entry `hushPopupMain` owns tab query + all chrome.runtime/storage
+  fetches + matched-domain resolution + mount. New Leptos
+  components `UnmatchedBanner` + `FooterButtons` replace the
+  `<div id="unmatched">` + `<footer>` blocks in `popup.html`. New
+  chrome_bridge helpers: `get_active_tab`, `open_options_page`,
+  `reload_tab`, `get_debug_info`, `get_tab_stats`,
+  `get_rule_diagnostics`, `get_popup_storage`. `popup.js` collapsed
+  from 148 LOC to 20. Stage 5 bootstrap-LOC goal met: popup 20 +
+  options 34 + content 32 = 86 across the three shims.
 
 ## [0.10.0] - 2026-04-19
 

@@ -135,6 +135,10 @@ pub struct PopupSnapshot {
     /// section.
     #[serde(default)]
     pub removed_elements: Vec<RemovedElement>,
+    /// The active tab's full URL. Used by the Debug button to include
+    /// it in the clipboard payload. Empty when there's no active tab.
+    #[serde(default)]
+    pub tab_url: String,
 }
 
 /// WASM entry. Called by `popup.js` once per popup open.
@@ -142,7 +146,10 @@ pub struct PopupSnapshot {
 pub fn mount_popup(snapshot: JsValue) -> Result<(), JsValue> {
     let snap: PopupSnapshot = serde_wasm_bindgen::from_value(snapshot)
         .map_err(|e| JsValue::from_str(&format!("mountPopup: {e}")))?;
+    mount_popup_inner(snap)
+}
 
+fn mount_popup_inner(snap: PopupSnapshot) -> Result<(), JsValue> {
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
     let document = window
         .document()
@@ -158,6 +165,101 @@ pub fn mount_popup(snapshot: JsValue) -> Result<(), JsValue> {
         view! { <PopupRoot snap=snap.clone() /> }
     }));
     Ok(())
+}
+
+/// One-shot popup bootstrap. Queries the active tab, fetches every
+/// piece of state the Leptos tree needs (per-tab stats, suggestions,
+/// rule diagnostics, persisted config + options), computes the
+/// `matched_domain` via hostname-suffix lookup, and mounts the tree.
+/// The JS bootstrap is now just `await initWasm(); hushPopupMain();`.
+#[wasm_bindgen(js_name = "hushPopupMain")]
+pub async fn hush_popup_main() -> Result<(), JsValue> {
+    let tab = chrome_bridge::get_active_tab().await?;
+    let hostname = safe_hostname(&tab.url);
+
+    // No tab (devtools / extension page): mount a minimal empty
+    // snapshot so the UI still renders without the per-tab sections.
+    let Some(tab_id) = tab.tab_id else {
+        return mount_popup_inner(PopupSnapshot {
+            hostname,
+            tab_url: tab.url.clone(),
+            ..PopupSnapshot::default()
+        });
+    };
+
+    // Sequential fetch: stats, suggestions, diagnostics, stored
+    // options + config. Each branch degrades independently so a dead
+    // background service worker never prevents the popup from
+    // rendering something. The per-branch cost is ~1-3ms of in-process
+    // message round-trips; parallelizing would shave ~10ms and isn't
+    // worth the unsafe-pin-projection machinery it requires.
+    let stats = chrome_bridge::get_tab_stats(tab_id).await.unwrap_or_default();
+    let suggestions = chrome_bridge::get_suggestions(tab_id)
+        .await
+        .unwrap_or_default();
+    let diagnostics = chrome_bridge::get_rule_diagnostics(tab_id, &hostname)
+        .await
+        .unwrap_or_default();
+    let storage = chrome_bridge::get_popup_storage().await.unwrap_or(
+        chrome_bridge::PopupStorage {
+            detector_enabled: false,
+            config: crate::types::Config::default(),
+        },
+    );
+
+    // matched_domain resolves from the tab's running stats first, then
+    // falls back to a hostname-suffix lookup in the user config. This
+    // mirrors the JS popup's `stats.matchedDomain || configMatch.key`.
+    let config_match_key = find_config_entry_key(&storage.config, &hostname);
+    let matched_domain = stats.matched_domain.clone().or(config_match_key);
+    let is_matched = matched_domain.is_some();
+
+    let block_count = stats.block;
+    let remove_count: u32 = stats.remove.values().sum();
+    let hide_count: u32 = stats.hide.values().sum();
+    let suggestion_count = suggestions.len() as u32;
+
+    let snap = PopupSnapshot {
+        hostname,
+        matched_domain,
+        block_count,
+        remove_count,
+        hide_count,
+        suggestion_count,
+        tab_id: Some(tab_id),
+        suggestions,
+        detector_enabled: storage.detector_enabled,
+        is_matched,
+        blocked_urls: stats.blocked_urls,
+        block_diagnostics: diagnostics,
+        remove_selectors: stats.remove,
+        hide_selectors: stats.hide,
+        removed_elements: stats.removed_elements,
+        tab_url: tab.url,
+    };
+    mount_popup_inner(snap)
+}
+
+fn safe_hostname(url: &str) -> String {
+    if url.is_empty() {
+        return String::new();
+    }
+    url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(String::from))
+        .unwrap_or_default()
+}
+
+fn find_config_entry_key(config: &crate::types::Config, host: &str) -> Option<String> {
+    if config.contains_key(host) {
+        return Some(host.to_string());
+    }
+    for key in config.keys() {
+        if host == key || host.ends_with(&format!(".{key}")) {
+            return Some(key.clone());
+        }
+    }
+    None
 }
 
 #[component]
@@ -184,6 +286,11 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
             hide_count=snap.hide_count
             suggestion_count=snap.suggestion_count
         />
+        {if !snap.is_matched {
+            view! {
+                <UnmatchedBanner hostname=snap.hostname.clone() />
+            }.into_any()
+        } else { view! { <div /> }.into_any() }}
         <SuggestionsList
             suggestions=suggestions
             hostname=hostname
@@ -212,6 +319,191 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
                 </div>
             }.into_any()
         } else { view! { <div /> }.into_any() }}
+        <FooterButtons
+            tab_id=tab_id
+            tab_url=snap.tab_url.clone()
+            hostname=snap.hostname.clone()
+        />
+    }
+}
+
+/// "No config matched for this site" placeholder with a Create-site
+/// button that seeds an empty triple under the current hostname and
+/// re-runs the popup bootstrap. Replaces the `#unmatched` +
+/// `#create-site` DOM that used to live in `popup.html`.
+#[component]
+fn UnmatchedBanner(hostname: String) -> impl IntoView {
+    let busy = RwSignal::new(false);
+    let on_create = move |_| {
+        if busy.get() || hostname.is_empty() {
+            return;
+        }
+        busy.set(true);
+        let hostname = hostname.clone();
+        spawn_local(async move {
+            // Read current config, insert an empty triple under
+            // hostname if absent, write it back, then re-run
+            // hush_popup_main so the Leptos tree re-mounts with the
+            // new matched state.
+            match chrome_bridge::get_popup_storage().await {
+                Ok(storage) => {
+                    let mut cfg = storage.config;
+                    if !cfg.contains_key(&hostname) {
+                        cfg.insert(
+                            hostname.clone(),
+                            crate::types::SiteConfig::default(),
+                        );
+                        let _ = chrome_bridge::set_config(&cfg).await;
+                    }
+                    // Clear the existing Leptos tree by blanking the
+                    // root, then re-run the bootstrap. Simpler than
+                    // plumbing a refresh signal through every sub-tree.
+                    if let Some(document) =
+                        web_sys::window().and_then(|w| w.document())
+                    {
+                        if let Some(root) =
+                            document.get_element_by_id("rust-popup-root")
+                        {
+                            root.set_inner_html("");
+                        }
+                    }
+                    let _ = hush_popup_main().await;
+                }
+                Err(e) => {
+                    web_sys::console::error_1(&JsValue::from_str(&format!(
+                        "[Hush popup] create-site: {:?}",
+                        e
+                    )));
+                    busy.set(false);
+                }
+            }
+        });
+    };
+
+    view! {
+        <div class="rust-unmatched"
+             style="padding: 12px 14px; color: #666; text-align: center;
+                    background: #fafafa; border-bottom: 1px solid #eee;">
+            "No config matched for this site."
+            <div style="margin-top: 8px;">
+                <button on:click=on_create
+                        disabled=move || busy.get()
+                        style="padding: 6px 14px; font-size: 12px;
+                               background: #fff; border: 1px solid #ccc;
+                               border-radius: 5px; cursor: pointer;">
+                    "Create config for this site"
+                </button>
+            </div>
+        </div>
+    }
+}
+
+/// Footer buttons: Options (opens the options page), Reload (reloads
+/// the active tab), Debug (copies a JSON debug snapshot to the
+/// clipboard). Replaces the `<footer>` block that used to live in
+/// `popup.html`.
+#[component]
+fn FooterButtons(
+    tab_id: Option<i32>,
+    tab_url: String,
+    hostname: String,
+) -> impl IntoView {
+    let debug_label = RwSignal::new("Debug");
+
+    let on_options = move |_| {
+        if let Err(e) = chrome_bridge::open_options_page() {
+            web_sys::console::error_1(&JsValue::from_str(&format!(
+                "[Hush popup] openOptionsPage: {:?}",
+                e
+            )));
+        }
+    };
+
+    let on_reload = move |_| {
+        if let Some(tid) = tab_id {
+            if let Err(e) = chrome_bridge::reload_tab(tid) {
+                web_sys::console::error_1(&JsValue::from_str(&format!(
+                    "[Hush popup] reload_tab: {:?}",
+                    e
+                )));
+            }
+        }
+    };
+
+    let on_debug = {
+        let tab_url = tab_url.clone();
+        let hostname = hostname.clone();
+        move |_| {
+            let tab_url = tab_url.clone();
+            let hostname = hostname.clone();
+            spawn_local(async move {
+                let debug_info = chrome_bridge::get_debug_info(tab_id)
+                    .await
+                    .unwrap_or(JsValue::NULL);
+                // Build a payload object: spread debug_info, add
+                // url + hostname. Matches the JS popup's shape.
+                let payload = js_sys::Object::new();
+                if debug_info.is_object() {
+                    let _ = js_sys::Object::assign(&payload, debug_info.unchecked_ref());
+                }
+                let _ = js_sys::Reflect::set(
+                    &payload,
+                    &JsValue::from_str("url"),
+                    &JsValue::from_str(&tab_url),
+                );
+                let _ = js_sys::Reflect::set(
+                    &payload,
+                    &JsValue::from_str("hostname"),
+                    &JsValue::from_str(&hostname),
+                );
+                let json = js_sys::JSON::stringify_with_replacer_and_space(
+                    &payload,
+                    &JsValue::NULL,
+                    &JsValue::from_f64(2.0),
+                )
+                .ok()
+                .and_then(|v| v.as_string())
+                .unwrap_or_default();
+                let ok = clipboard_write(&json);
+                debug_label.set(if ok { "Copied!" } else { "Copy failed" });
+                // Revert after 2s.
+                if let Some(window) = web_sys::window() {
+                    let cb = Closure::<dyn Fn()>::new(move || debug_label.set("Debug"));
+                    let _ = window
+                        .set_timeout_with_callback_and_timeout_and_arguments_0(
+                            cb.as_ref().unchecked_ref(),
+                            2000,
+                        );
+                    cb.forget();
+                }
+            });
+        }
+    };
+
+    view! {
+        <footer style="display: flex; gap: 8px; padding: 10px 14px;
+                       border-top: 1px solid #eee; background: #fafafa;">
+            <button on:click=on_options
+                    style="flex: 1; padding: 6px 10px; font-size: 12px;
+                           border: 1px solid #ccc; background: #fff;
+                           border-radius: 5px; cursor: pointer;">
+                "Open options"
+            </button>
+            <button on:click=on_reload
+                    disabled=move || tab_id.is_none()
+                    style="flex: 1; padding: 6px 10px; font-size: 12px;
+                           border: 1px solid #ccc; background: #fff;
+                           border-radius: 5px; cursor: pointer;">
+                "Reload tab"
+            </button>
+            <button on:click=on_debug
+                    title="Copy debug info to clipboard"
+                    style="flex: 1; padding: 6px 10px; font-size: 12px;
+                           border: 1px solid #ccc; background: #fff;
+                           border-radius: 5px; cursor: pointer;">
+                {move || debug_label.get()}
+            </button>
+        </footer>
     }
 }
 
