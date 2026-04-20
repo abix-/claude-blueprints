@@ -5,9 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "wasm-pack build crates/engine --target web --out-dir ../../pkg --no-typescript",
-    "build:dev": "wasm-pack build crates/engine --target web --out-dir ../../pkg --no-typescript --dev",
-    "test": "npm run build && node --test test/",
-    "test:rust": "cargo test --workspace"
+    "build": "wasm-pack build --target web --out-dir dist/pkg --no-typescript",
+    "build:dev": "wasm-pack build --target web --out-dir dist/pkg --no-typescript --dev",
+    "test": "npm run build && node --test test/*.mjs",
+    "test:rust": "cargo test"
   }
 }

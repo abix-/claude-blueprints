@@ -5,7 +5,7 @@
 //! user's per-tab-session dismissal set + the cross-session allowlist,
 //! and returns suggestions sorted by confidence then by count.
 
-use hush_types::{Allowlist, BehaviorState, Config, SiteConfig, Suggestion};
+use crate::types::{Allowlist, BehaviorState, Config, SiteConfig, Suggestion};
 
 use crate::detectors::{
     detect_beacon, detect_first_party_telemetry, detect_from_js_calls, detect_hidden_iframes,
@@ -114,7 +114,7 @@ fn normalize_block_patterns(raw: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hush_types::{IframeHit, JsCall, ReplayVendor, Resource};
+    use crate::types::{IframeHit, JsCall, ReplayVendor, Resource};
 
     fn state(hostname: &str) -> BehaviorState {
         BehaviorState {

@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use hush_types::{
+use crate::types::{
     BuildSuggestionInput, IframeHit, JsCall, Resource, StickyHit, Suggestion, SuggestionLayer,
 };
 
@@ -908,7 +908,7 @@ pub(crate) fn detect_from_js_calls(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hush_types::{ReplayVendor, StickyRect};
+    use crate::types::{ReplayVendor, StickyRect};
 
     fn ctx<'a>(hostname: &'a str) -> DetectCtx<'a> {
         DetectCtx {

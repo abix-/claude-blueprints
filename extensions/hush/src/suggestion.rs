@@ -6,7 +6,7 @@
 //! the direct answer to the class of bug that produced the 0.5.0 emit()
 //! regression: one field only has to be added in one place.
 
-use hush_types::{BuildSuggestionInput, Suggestion, SuggestionDiag, SuggestionLayer};
+use crate::types::{BuildSuggestionInput, Suggestion, SuggestionDiag, SuggestionLayer};
 
 /// Build a suggestion. Pure function; all inputs are passed in.
 pub fn build_suggestion(input: &BuildSuggestionInput) -> Suggestion {

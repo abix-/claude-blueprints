@@ -1,22 +1,10 @@
 //! Hush detection engine.
 //!
-//! Session A of the Rust migration (see `docs/rust-migration-plan.md`)
-//! ports the following pure functions from `background.js`:
-//!
-//! - `LEARN_TEXT` - per-signal teaching strings shown in the popup.
-//! - `buildSuggestion` - the single shape builder every detector goes
-//!   through. Centralizes dedup-diag computation so the schema can't
-//!   drift between detectors.
-//! - Allowlist matching helpers: `is_legit_hidden_iframe`,
-//!   `overlay_allowlisted`.
-//! - URL canonicalization: `canonicalize_url`.
-//! - `pattern_keyword` for DNR rule diagnostics.
-//! - `script_origin_from_stack` for attributing observations to a script.
-//!
-//! Subsequent sessions port the detector aggregators (B), main-world
-//! hooks (C), and popup/options UI (D/E). This crate is the single
-//! ground truth for engine behavior; the JS shell calls into it via
-//! wasm-bindgen.
+//! Single-crate layout matching the `endless` repo model. All modules
+//! live flat under `src/`; the wasm-bindgen-exported entry points are
+//! right here in `lib.rs`. For the stage-by-stage port plan see
+//! `docs/roadmap.md`; for per-signal research notes see
+//! `docs/heuristic-roadmap.md`.
 
 #![forbid(unsafe_code)]
 
@@ -27,17 +15,18 @@ mod detectors;
 mod learn;
 mod stack;
 mod suggestion;
+pub mod types;
 
 pub use allowlist::{is_legit_hidden_iframe, overlay_allowlisted};
 pub use canon::{canonicalize_url, pattern_keyword};
 pub use compute::compute_suggestions;
-pub use hush_types::{
-    Allowlist, BehaviorState, BuildSuggestionInput, Config, IframeHit, JsCall, ReplayVendor,
-    Resource, SiteConfig, StickyHit, StickyRect, Suggestion, SuggestionDiag, SuggestionLayer,
-};
 pub use learn::{learn_text, LearnKind};
 pub use stack::script_origin_from_stack;
 pub use suggestion::build_suggestion;
+pub use types::{
+    Allowlist, BehaviorState, BuildSuggestionInput, Config, IframeHit, JsCall, ReplayVendor,
+    Resource, SiteConfig, StickyHit, StickyRect, Suggestion, SuggestionDiag, SuggestionLayer,
+};
 
 use wasm_bindgen::prelude::*;
 
@@ -97,9 +86,9 @@ pub fn is_legit_hidden_iframe_wasm(src_url: &str, allowlist: JsValue) -> Result<
 /// WASM-exported top-level `computeSuggestions`. The service worker
 /// hands us the tab's behavior state, the full user config, and the
 /// persisted allowlist; we return a fully-filtered, confidence-sorted
-/// list of suggestions. This is the single entry point the JS shell
-/// needs after Session B - every detector path above is called
-/// internally.
+/// list of suggestions. Every detector path in the crate is invoked
+/// internally; this is the single entry point the JS service worker
+/// needs.
 #[wasm_bindgen(js_name = "computeSuggestions")]
 pub fn compute_suggestions_wasm(
     state: JsValue,

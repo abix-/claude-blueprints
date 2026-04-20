@@ -8,7 +8,7 @@
 import init, {
   initEngine,
   computeSuggestions as wasmComputeSuggestions,
-} from "./pkg/hush_engine.js";
+} from "./dist/pkg/hush.js";
 
 const wasmReady = (async () => {
   await init();

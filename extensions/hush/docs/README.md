@@ -16,10 +16,12 @@ Each case study documents:
 - [amazon.md](amazon.md) - Amazon homepage ad iframes. Narrow scope, only documents what has been observed in Hush's suggestion output on the homepage - no speculation about other Amazon surfaces.
 - [github.md](github.md) - GitHub's first-party telemetry collector (`collector.github.com`). Demonstrates how the sendBeacon detector catches first-party-owned analytics that curated filter lists don't reach.
 
-## Roadmap
+## Planning
 
-- [heuristic-roadmap.md](heuristic-roadmap.md) - gap analysis of detection signals Hush doesn't catch yet, ranked by value. Covers fingerprinting, session replay tools, navigator-read patterns, supercookies, rAF-loop detection, and service worker tracking. Source material for future implementation chapters.
-- [rust-migration-plan.md](rust-migration-plan.md) - plan to port Hush from JavaScript to a max-Rust architecture (engine, UI, content script, and main-world hooks all in Rust + WASM, with only ~75 lines of JS bootstrap remaining). Thesis, target architecture, session-by-session plan.
+- [roadmap.md](roadmap.md) - stage-based development roadmap. First unchecked stage is the current sprint. Follows the endless repo pattern: numbered stages with "Done when:" acceptance criteria.
+- [completed.md](completed.md) - snapshot of current user-facing features.
+- [history.md](history.md) - retired rollout notes.
+- [heuristic-roadmap.md](heuristic-roadmap.md) - gap analysis of detection signals. Source material for future roadmap stages.
 
 ## Contributing your own
 
