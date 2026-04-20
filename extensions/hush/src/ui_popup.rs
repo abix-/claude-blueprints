@@ -11,13 +11,41 @@
 //! iterations.
 
 use crate::chrome_bridge;
-use crate::types::{Suggestion, SuggestionLayer};
+use crate::types::{Suggestion, SuggestionDiag, SuggestionLayer};
+use js_sys::Reflect;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde::Deserialize;
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+
+/// Fire-and-forget clipboard write. Logs the failure and moves on
+/// instead of propagating the error back to the UI thread - the
+/// button already shows "Copy failed" visual feedback through the
+/// button-label swap in [`CopyButton`].
+fn clipboard_write(text: &str) -> bool {
+    let Some(window) = web_sys::window() else {
+        return false;
+    };
+    let navigator = window.navigator();
+    // web_sys exposes Navigator::clipboard() behind a Clipboard feature.
+    // Use Reflect to avoid panicking on browsers that don't expose it.
+    let clipboard = Reflect::get(&navigator, &JsValue::from_str("clipboard"))
+        .ok()
+        .filter(|v| !v.is_undefined() && !v.is_null());
+    let Some(clipboard) = clipboard else {
+        return false;
+    };
+    let write = match Reflect::get(&clipboard, &JsValue::from_str("writeText")) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let Ok(func) = write.dyn_into::<js_sys::Function>() else {
+        return false;
+    };
+    func.call1(&clipboard, &JsValue::from_str(text)).is_ok()
+}
 
 // Handle to the popup's top-level suggestions signal + its tab id.
 // Populated on mount, consumed by [`refresh_popup_suggestions`] when
@@ -364,6 +392,12 @@ where
     let count = suggestion.count;
     let from_iframe = suggestion.from_iframe;
     let frame_host = suggestion.frame_hostname.clone();
+    let evidence = suggestion.evidence.clone();
+    let diag = suggestion.diag.clone();
+
+    // Why? / Evidence panels are independently collapsible per row.
+    let why_open = RwSignal::new(false);
+    let evidence_open = RwSignal::new(false);
 
     view! {
         <li class="rust-sugg-row"
@@ -442,7 +476,160 @@ where
                     title="Permanently allow on every site. Revocable from Options.">
                     "Allow"
                 </button>
+                <button
+                    on:click=move |_| why_open.update(|v| *v = !*v)
+                    style="padding: 4px 10px; font-size: 11px;
+                           background: #fff; color: #555;
+                           border: 1px solid #ccc; border-radius: 3px;
+                           cursor: pointer; flex: 0 0 auto;"
+                    title="Why is this suggestion showing even if I have a rule?">
+                    {move || if why_open.get() { "Hide why" } else { "Why?" }}
+                </button>
+                <button
+                    on:click=move |_| evidence_open.update(|v| *v = !*v)
+                    style="padding: 4px 10px; font-size: 11px;
+                           background: #fff; color: #555;
+                           border: 1px solid #ccc; border-radius: 3px;
+                           cursor: pointer; flex: 0 0 auto;"
+                    title="Raw observations that triggered this suggestion">
+                    {move || if evidence_open.get() { "Hide evidence" } else { "Evidence" }}
+                </button>
             </div>
+            {move || if why_open.get() {
+                view! { <WhyPanel diag=diag.clone() /> }.into_any()
+            } else {
+                view! { <span /> }.into_any()
+            }}
+            {move || if evidence_open.get() {
+                view! { <EvidencePanel evidence=evidence.clone() /> }.into_any()
+            } else {
+                view! { <span /> }.into_any()
+            }}
         </li>
+    }
+}
+
+/// Dedup diagnostic panel. Explains why a suggestion surfaced even
+/// when the user thinks they have a matching rule - drawn from the
+/// engine's `SuggestionDiag` attached to every suggestion.
+#[component]
+fn WhyPanel(diag: SuggestionDiag) -> impl IntoView {
+    let layer_str = match diag.layer {
+        SuggestionLayer::Block => "block",
+        SuggestionLayer::Remove => "remove",
+        SuggestionLayer::Hide => "hide",
+    };
+    let tab_host = if diag.tab_hostname.is_empty() {
+        "(unknown)".to_string()
+    } else {
+        diag.tab_hostname.clone()
+    };
+    let frame_host = if diag.frame_hostname.is_empty() {
+        tab_host.clone()
+    } else {
+        diag.frame_hostname.clone()
+    };
+    let is_iframe = if diag.is_from_iframe { "yes" } else { "no" };
+    let matched_key = diag
+        .matched_key
+        .clone()
+        .unwrap_or_else(|| "(no site config matched)".into());
+    let rule_count = diag.existing_block_count.to_string();
+    let sample_rows: Vec<_> = diag
+        .existing_block_sample
+        .iter()
+        .map(|entry| {
+            let line = format!("{} (len={})", entry, entry.len());
+            view! {
+                <li style="padding-left: 12px; font-family: ui-monospace, monospace;">
+                    {line}
+                </li>
+            }
+        })
+        .collect();
+    let has_sample = !diag.existing_block_sample.is_empty();
+    let candidate_line = format!("{} (len={})", diag.value, diag.value.len());
+
+    view! {
+        <div style="margin-top: 6px; padding: 8px 10px;
+                    background: #fafafa; border: 1px solid #eee;
+                    border-radius: 3px; font-size: 11px;">
+            <ul style="list-style:none; padding:0; margin:0;">
+                <li><b>"Checked value: "</b> {diag.value.clone()}</li>
+                <li><b>"Tab hostname (used for config match): "</b> {tab_host}</li>
+                <li><b>"Observed from frame: "</b> {frame_host}</li>
+                <li><b>"From iframe?: "</b> {is_iframe}</li>
+                <li><b>"Matched config key: "</b> {matched_key}</li>
+                <li><b>"Existing " {layer_str} " rules count: "</b> {rule_count}</li>
+                <li><b>"Dedup result: "</b> {diag.dedup_result.clone()}</li>
+                {if has_sample {
+                    view! {
+                        <li style="margin-top: 4px;"><b>"Existing rules sample (first 10):"</b></li>
+                        {sample_rows}
+                        <li style="margin-top: 4px;"><b>"Candidate value: "</b> {candidate_line}</li>
+                    }.into_any()
+                } else { view! { <li /> }.into_any() }}
+            </ul>
+        </div>
+    }
+}
+
+/// Evidence panel: the raw observations the engine used to justify
+/// the suggestion. Shows one line per entry with a Copy button that
+/// writes all entries newline-joined to the clipboard.
+#[component]
+fn EvidencePanel(evidence: Vec<String>) -> impl IntoView {
+    let copy_label = RwSignal::new("Copy");
+    let joined = evidence.join("\n");
+    let on_copy = move |_| {
+        let ok = clipboard_write(&joined);
+        copy_label.set(if ok { "Copied" } else { "Failed" });
+        let label = copy_label;
+        // Revert after 1.5s. Leptos has no built-in setTimeout wrapper
+        // that's tiny; use gloo-less Window.setTimeout via web_sys.
+        if let Some(window) = web_sys::window() {
+            let cb = Closure::<dyn Fn()>::new(move || label.set("Copy"));
+            let _ = window
+                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(),
+                    1500,
+                );
+            cb.forget();
+        }
+    };
+    let entries = evidence.clone();
+    let empty = entries.is_empty();
+
+    view! {
+        <div style="margin-top: 6px; padding: 8px 10px;
+                    background: #fafafa; border: 1px solid #eee;
+                    border-radius: 3px; font-size: 11px;">
+            <div style="display:flex; justify-content:flex-end; margin-bottom: 4px;">
+                <button on:click=on_copy
+                        disabled=move || empty
+                        style="padding: 2px 10px; font-size: 10px;
+                               border: 1px solid #ccc; background: #fff;
+                               border-radius: 4px; cursor: pointer;"
+                        title="Copy all evidence to clipboard">
+                    {move || copy_label.get()}
+                </button>
+            </div>
+            <ul style="list-style:none; padding:0; margin:0;">
+                {if empty {
+                    view! {
+                        <li style="font-style: italic; color: #999;">
+                            "(no captured evidence)"
+                        </li>
+                    }.into_any()
+                } else {
+                    entries.into_iter().map(|e| view! {
+                        <li style="font-family: ui-monospace, monospace;
+                                   word-break: break-all; margin-bottom: 2px;">
+                            {e}
+                        </li>
+                    }).collect::<Vec<_>>().into_any()
+                }}
+            </ul>
+        </div>
     }
 }
