@@ -492,16 +492,32 @@ fn SiteList(
     view! {
         <ul class="site-list">
             {move || {
-                let mut keys: Vec<String> = config.with(|c| c.keys().cloned().collect());
-                keys.sort();
-                if keys.is_empty() {
+                // Global scope is always pinned at the top of the
+                // list (even when the user hasn't added any rules to
+                // it yet). Other site entries follow in sorted
+                // hostname order. Skip the `__global__` entry when
+                // sorting site rows so it isn't duplicated.
+                let all_keys: Vec<String> = config.with(|c| c.keys().cloned().collect());
+                let mut site_keys: Vec<String> = all_keys
+                    .into_iter()
+                    .filter(|k| k != crate::types::GLOBAL_SCOPE_KEY)
+                    .collect();
+                site_keys.sort();
+                let global_row = view! {
+                    <SiteListRow
+                        config=config
+                        selected=selected
+                        domain=crate::types::GLOBAL_SCOPE_KEY.to_string()
+                    />
+                };
+                let site_rows = if site_keys.is_empty() {
                     view! {
                         <div class="site-list-empty">
                             "No sites yet. Click '+ Add site' to start."
                         </div>
                     }.into_any()
                 } else {
-                    keys.into_iter().map(|domain| {
+                    site_keys.into_iter().map(|domain| {
                         view! {
                             <SiteListRow
                                 config=config
@@ -510,7 +526,11 @@ fn SiteList(
                             />
                         }
                     }).collect::<Vec<_>>().into_any()
-                }
+                };
+                view! {
+                    {global_row}
+                    {site_rows}
+                }.into_any()
             }}
         </ul>
         <div class="sidebar-actions">
@@ -561,9 +581,14 @@ fn SiteListRow(
         }
     };
 
+    let display_name = if row_domain == crate::types::GLOBAL_SCOPE_KEY {
+        "Global (all sites)".to_string()
+    } else {
+        row_domain.clone()
+    };
     view! {
         <li class=class_name on:click=on_click>
-            <span>{row_domain}</span>
+            <span>{display_name}</span>
             <span class="badges">{badges}</span>
         </li>
     }
@@ -587,6 +612,17 @@ fn SiteDetail(
             }
             .into_any();
         };
+        // The global-scope row is always selectable even before any
+        // rules are authored under it. If missing, lazily create it
+        // so the layer sections have something to write into.
+        let is_global = domain == crate::types::GLOBAL_SCOPE_KEY;
+        if is_global && !config.with(|c| c.contains_key(&domain)) {
+            config.update(|c| {
+                c.insert(domain.clone(), crate::types::SiteConfig::default());
+            });
+            // Don't persist yet - only writes with actual rule content
+            // should land on disk; empty global entry is transient.
+        }
         if !config.with(|c| c.contains_key(&domain)) {
             return view! {
                 <div class="detail-empty">
@@ -673,24 +709,45 @@ fn SiteDetailBody(
         }
     };
 
+    let is_global = domain == crate::types::GLOBAL_SCOPE_KEY;
+    let header = if is_global {
+        view! {
+            <div class="domain-row" style="align-items: baseline;">
+                <div style="flex: 1; font-weight: 600; font-size: 14px;
+                            color: #2d4d8a;">
+                    "Global (all sites)"
+                </div>
+                <div style="color: #666; font-size: 12px;">
+                    "Rules here apply to every tab. Site-scoped rules layer on top."
+                </div>
+            </div>
+        }
+        .into_any()
+    } else {
+        view! {
+            <div class="domain-row">
+                <input type="text"
+                       spellcheck="false"
+                       prop:value=move || domain_input.get()
+                       on:input=move |ev| {
+                           let val = ev.target()
+                               .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+                               .map(|i| i.value())
+                               .unwrap_or_default();
+                           domain_input.set(val);
+                       }
+                       on:change=on_rename
+                />
+                <button class="danger" on:click=on_delete>
+                    "Delete site"
+                </button>
+            </div>
+        }
+        .into_any()
+    };
+
     view! {
-        <div class="domain-row">
-            <input type="text"
-                   spellcheck="false"
-                   prop:value=move || domain_input.get()
-                   on:input=move |ev| {
-                       let val = ev.target()
-                           .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-                           .map(|i| i.value())
-                           .unwrap_or_default();
-                       domain_input.set(val);
-                   }
-                   on:change=on_rename
-            />
-            <button class="danger" on:click=on_delete>
-                "Delete site"
-            </button>
-        </div>
+        {header}
         <LayerSection
             config=config
             domain=domain.clone()

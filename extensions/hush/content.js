@@ -294,29 +294,54 @@
     return;
   }
 
+  // Firewall-style evaluation: global rules apply to every tab AND
+  // site-scoped rules add on top. A site match is NOT required - if
+  // only the reserved `__global__` entry exists, its rules still
+  // fire. Duplicates (same selector / pattern / spoof tag) are
+  // deduplicated so a value present in both scopes only fires once.
+  const GLOBAL_KEY = "__global__";
+  function mergeArrays(a, b) {
+    const out = Array.isArray(a) ? a.slice() : [];
+    if (Array.isArray(b)) {
+      for (const v of b) if (!out.includes(v)) out.push(v);
+    }
+    return out;
+  }
+  const globalCfg = (config[GLOBAL_KEY] && typeof config[GLOBAL_KEY] === "object")
+    ? config[GLOBAL_KEY]
+    : null;
   const match = findConfigEntry(config, location.hostname);
-  if (!match) {
+  const siteCfg = match ? match.cfg : null;
+  const matchedDomain = match ? match.key : (globalCfg ? GLOBAL_KEY : null);
+  if (!globalCfg && !match) {
     log(location.hostname, "- no matching site config. configured sites:", Object.keys(config));
     return;
   }
-  const cfg = match.cfg;
-  const matchedDomain = match.key;
-  log(location.hostname, "- matched:", matchedDomain);
+
+  const cfg = {
+    hide:   mergeArrays(globalCfg && globalCfg.hide,   siteCfg && siteCfg.hide),
+    remove: mergeArrays(globalCfg && globalCfg.remove, siteCfg && siteCfg.remove),
+    block:  mergeArrays(globalCfg && globalCfg.block,  siteCfg && siteCfg.block),
+    spoof:  mergeArrays(globalCfg && globalCfg.spoof,  siteCfg && siteCfg.spoof)
+  };
+  log(location.hostname, "- matched:", matchedDomain,
+      "global:", globalCfg ? "yes" : "no",
+      "site:", match ? match.key : "no");
 
   // Signal the main-world hook about any fingerprint signals the user
-  // has opted to spoof on this site. Comma-separated kind tags. The
-  // main-world `getParameter` wrapper reads this dataset attribute at
-  // call time, so the write ordering between content-script and
-  // main-world install is irrelevant - by the time the page calls
-  // WebGL, documentElement.dataset.hushSpoof is set.
-  if (Array.isArray(cfg.spoof) && cfg.spoof.length) {
+  // has opted to spoof. Comma-separated kind tags. The main-world
+  // `getParameter` wrapper reads this dataset attribute at call time,
+  // so the write ordering between content-script and main-world
+  // install is irrelevant - by the time the page calls WebGL,
+  // documentElement.dataset.hushSpoof is set.
+  if (cfg.spoof.length) {
     try {
       document.documentElement.dataset.hushSpoof = cfg.spoof.join(",");
     } catch (e) { /* documentElement not ready yet */ }
   }
 
-  const removeSelectors = Array.isArray(cfg.remove) ? cfg.remove.slice() : [];
-  const hideSelectors   = Array.isArray(cfg.hide)   ? cfg.hide.slice()   : [];
+  const removeSelectors = cfg.remove.slice();
+  const hideSelectors   = cfg.hide.slice();
 
   const stats = {
     matchedDomain,

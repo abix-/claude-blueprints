@@ -206,7 +206,54 @@ pub struct SiteConfig {
 /// insertion order so the options page's site list shows entries in the
 /// order the user added them, matching the previous JS object iteration
 /// semantics.
+///
+/// The reserved key [`GLOBAL_SCOPE_KEY`] (`"__global__"`) holds rules
+/// that apply to every tab regardless of hostname. When a tab's
+/// hostname matches a site entry, global rules layer underneath the
+/// site-scoped rules (both sets apply; the site-scoped set takes
+/// precedence only for duplicate values).
 pub type Config = IndexMap<String, SiteConfig>;
+
+/// Reserved Config key for rules that apply globally (every tab).
+/// Normal hostnames can't start with an underscore, so this name is
+/// safe against collisions with user-authored domains.
+pub const GLOBAL_SCOPE_KEY: &str = "__global__";
+
+/// Merge the global-scope entry (if present) with a site-scoped
+/// entry into a new `SiteConfig` that callers can evaluate against
+/// a tab. Duplicate values (same selector / pattern / spoof tag) are
+/// deduplicated so a rule present in both scopes only fires once.
+///
+/// Order: global first, site on top. Stable order within each layer,
+/// with site-scoped values winning positional order for duplicates.
+pub fn merged_site_config(config: &Config, hostname_key: &str) -> SiteConfig {
+    let global = config.get(GLOBAL_SCOPE_KEY);
+    let site = if hostname_key == GLOBAL_SCOPE_KEY {
+        None
+    } else {
+        config.get(hostname_key)
+    };
+
+    fn merge(a: &[String], b: &[String]) -> Vec<String> {
+        let mut out: Vec<String> = a.to_vec();
+        for v in b {
+            if !out.iter().any(|x| x == v) {
+                out.push(v.clone());
+            }
+        }
+        out
+    }
+
+    let empty = SiteConfig::default();
+    let g = global.unwrap_or(&empty);
+    let s = site.unwrap_or(&empty);
+    SiteConfig {
+        hide: merge(&g.hide, &s.hide),
+        remove: merge(&g.remove, &s.remove),
+        block: merge(&g.block, &s.block),
+        spoof: merge(&g.spoof, &s.spoof),
+    }
+}
 
 /// One resource request observed via `PerformanceObserver`. Matches the
 /// shape produced by `content.js`'s resource observer plus the

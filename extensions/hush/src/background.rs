@@ -763,10 +763,16 @@ fn compute_rule_diagnostics(tab_id: Option<i32>, hostname: Option<&str>) -> Vec<
         let mut out = Vec::new();
         for (id, meta) in &st.rule_patterns {
             let source_domain = meta.domain.clone();
-            if let (Some(h), false) = (&host, source_domain.is_empty()) {
-                let matches = h == &source_domain || h.ends_with(&format!(".{source_domain}"));
-                if !matches {
-                    continue;
+            // Reserved `__global__` scope rules apply to every tab,
+            // so they always show up in this tab's diagnostics
+            // regardless of hostname.
+            let is_global = source_domain == crate::types::GLOBAL_SCOPE_KEY;
+            if !is_global {
+                if let (Some(h), false) = (&host, source_domain.is_empty()) {
+                    let matches = h == &source_domain || h.ends_with(&format!(".{source_domain}"));
+                    if !matches {
+                        continue;
+                    }
                 }
             }
             let keyword = pattern_keyword(&meta.pattern).to_string();
