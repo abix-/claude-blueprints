@@ -139,3 +139,142 @@ pub struct SiteConfig {
 /// order the user added them, matching the previous JS object iteration
 /// semantics.
 pub type Config = IndexMap<String, SiteConfig>;
+
+/// One resource request observed via `PerformanceObserver`. Matches the
+/// shape produced by `content.js`'s resource observer plus the
+/// `reporterFrame` tag added by background when the message is received.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resource {
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub host: String,
+    #[serde(rename = "initiatorType", default)]
+    pub initiator_type: String,
+    #[serde(rename = "transferSize", default)]
+    pub transfer_size: i64,
+    #[serde(default)]
+    pub duration: i64,
+    #[serde(rename = "startTime", default)]
+    pub start_time: i64,
+    #[serde(rename = "reporterFrame", default, skip_serializing_if = "Option::is_none")]
+    pub reporter_frame: Option<String>,
+}
+
+/// One hidden-iframe observation from `content.js`'s `scanHiddenIframes`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IframeHit {
+    #[serde(default)]
+    pub src: String,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub reasons: Vec<String>,
+    #[serde(default)]
+    pub width: i64,
+    #[serde(default)]
+    pub height: i64,
+    #[serde(rename = "outerHTMLPreview", default)]
+    pub outer_html_preview: String,
+    #[serde(rename = "reporterFrame", default, skip_serializing_if = "Option::is_none")]
+    pub reporter_frame: Option<String>,
+}
+
+/// Sticky/fixed-position overlay observation from
+/// `content.js`'s `scanStickyOverlays`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StickyHit {
+    #[serde(default)]
+    pub selector: String,
+    #[serde(default)]
+    pub coverage: u32,
+    #[serde(rename = "zIndex", default)]
+    pub z_index: i64,
+    #[serde(default)]
+    pub rect: StickyRect,
+    #[serde(rename = "reporterFrame", default, skip_serializing_if = "Option::is_none")]
+    pub reporter_frame: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StickyRect {
+    #[serde(default)]
+    pub w: i64,
+    #[serde(default)]
+    pub h: i64,
+}
+
+/// One main-world hook observation. Shaped as a flat struct with all
+/// kind-specific fields optional; `kind` is the discriminator.
+///
+/// This mirrors the flattened JS object that crossed the isolated/main
+/// world boundary. A discriminated-union form would be cleaner but
+/// serde-wasm-bindgen's default tag/variant handling is noisier at
+/// the FFI boundary; flat + optional keeps the JS side untouched.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct JsCall {
+    pub kind: String,
+    #[serde(default)]
+    pub t: String,
+    #[serde(default)]
+    pub stack: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    #[serde(rename = "bodyPreview", default, skip_serializing_if = "Option::is_none")]
+    pub body_preview: Option<String>,
+    // Tier 1 fingerprinting fields
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub param: Option<String>,
+    #[serde(rename = "hotParam", default)]
+    pub hot_param: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    // Tier 2 session-replay fields
+    #[serde(rename = "eventType", default, skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vendors: Vec<ReplayVendor>,
+    // Tier 5 raf-waste fields
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub op: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+    #[serde(rename = "canvasSel", default, skip_serializing_if = "Option::is_none")]
+    pub canvas_sel: Option<String>,
+    #[serde(rename = "reporterFrame", default, skip_serializing_if = "Option::is_none")]
+    pub reporter_frame: Option<String>,
+}
+
+/// Session-replay vendor hit reported from a periodic poll of known
+/// sentinel globals.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayVendor {
+    #[serde(default)]
+    pub key: String,
+    pub vendor: String,
+}
+
+/// Per-tab behavioral state that the engine inspects when computing
+/// suggestions. Populated by the service worker from `content.js`
+/// messages.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BehaviorState {
+    #[serde(rename = "pageHost", default, skip_serializing_if = "Option::is_none")]
+    pub page_host: Option<String>,
+    #[serde(rename = "seenResources", default)]
+    pub seen_resources: Vec<Resource>,
+    #[serde(rename = "latestIframes", default)]
+    pub latest_iframes: Vec<IframeHit>,
+    #[serde(rename = "latestStickies", default)]
+    pub latest_stickies: Vec<StickyHit>,
+    #[serde(rename = "jsCalls", default)]
+    pub js_calls: Vec<JsCall>,
+    #[serde(default)]
+    pub dismissed: Vec<String>,
+    #[serde(default)]
+    pub suggestions: Vec<Suggestion>,
+}

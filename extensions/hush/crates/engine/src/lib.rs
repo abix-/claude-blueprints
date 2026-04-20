@@ -22,15 +22,18 @@
 
 mod allowlist;
 mod canon;
+mod compute;
+mod detectors;
 mod learn;
 mod stack;
 mod suggestion;
 
 pub use allowlist::{is_legit_hidden_iframe, overlay_allowlisted};
 pub use canon::{canonicalize_url, pattern_keyword};
+pub use compute::compute_suggestions;
 pub use hush_types::{
-    Allowlist, BuildSuggestionInput, Config, SiteConfig, Suggestion, SuggestionDiag,
-    SuggestionLayer,
+    Allowlist, BehaviorState, BuildSuggestionInput, Config, IframeHit, JsCall, ReplayVendor,
+    Resource, SiteConfig, StickyHit, StickyRect, Suggestion, SuggestionDiag, SuggestionLayer,
 };
 pub use learn::{learn_text, LearnKind};
 pub use stack::script_origin_from_stack;
@@ -89,4 +92,26 @@ pub fn is_legit_hidden_iframe_wasm(src_url: &str, allowlist: JsValue) -> Result<
     let list: Vec<String> =
         serde_wasm_bindgen::from_value(allowlist).map_err(|e| JsValue::from_str(&e.to_string()))?;
     Ok(is_legit_hidden_iframe(src_url, &list))
+}
+
+/// WASM-exported top-level `computeSuggestions`. The service worker
+/// hands us the tab's behavior state, the full user config, and the
+/// persisted allowlist; we return a fully-filtered, confidence-sorted
+/// list of suggestions. This is the single entry point the JS shell
+/// needs after Session B - every detector path above is called
+/// internally.
+#[wasm_bindgen(js_name = "computeSuggestions")]
+pub fn compute_suggestions_wasm(
+    state: JsValue,
+    config: JsValue,
+    allowlist: JsValue,
+) -> Result<JsValue, JsValue> {
+    let state: BehaviorState =
+        serde_wasm_bindgen::from_value(state).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let config: Config =
+        serde_wasm_bindgen::from_value(config).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let allowlist: Allowlist =
+        serde_wasm_bindgen::from_value(allowlist).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let suggestions = compute_suggestions(&state, &config, &allowlist);
+    serde_wasm_bindgen::to_value(&suggestions).map_err(|e| JsValue::from_str(&e.to_string()))
 }
