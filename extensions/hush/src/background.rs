@@ -1220,19 +1220,16 @@ fn handle_stats(msg: &JsValue, sender: &JsValue) {
     // Snapshot the new removed events before moving them into stats;
     // the firewall-log emission below needs the per-element detail.
     let remove_events: Vec<RemovedElement> = new_removed.clone();
-    // Resolve the scope for these remove events. If the tab has a
-    // matched site config, attribute removes to that hostname; if it
-    // only matched `__global__`, or no match info arrived yet, fall
-    // back to the global scope. We can't tell from here whether an
-    // individual selector lived under global vs site scope without
-    // re-reading config, so we approximate with matched_domain.
-    let resolved_scope: String = {
-        let explicit = matched
-            .clone()
-            .flatten()
-            .filter(|s| !s.is_empty());
-        explicit.unwrap_or_else(|| GLOBAL_SCOPE_KEY.to_string())
-    };
+    // Per-event scope comes from the content script (which knows
+    // whether each selector was authored under `__global__` or the
+    // site entry). Fall back to matched_domain / global only when
+    // the event arrived without a scope tag, to stay tolerant of
+    // legacy content scripts.
+    let fallback_scope: String = matched
+        .clone()
+        .flatten()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| GLOBAL_SCOPE_KEY.to_string());
     get_stats_mut(tab_id, |s| {
         if let Some(m) = matched {
             s.matched_domain = m;
@@ -1252,13 +1249,18 @@ fn handle_stats(msg: &JsValue, sender: &JsValue) {
         }
     });
     for ev in remove_events {
+        let scope = if ev.scope.is_empty() {
+            fallback_scope.clone()
+        } else {
+            ev.scope.clone()
+        };
         push_firewall_event(
             tab_id,
             FirewallEvent {
                 t: ev.t.clone(),
-                rule_id: crate::types::rule_id("remove", &resolved_scope, &ev.selector),
+                rule_id: crate::types::rule_id("remove", &scope, &ev.selector),
                 action: "remove".to_string(),
-                scope: resolved_scope.clone(),
+                scope,
                 match_: ev.selector.clone(),
                 evidence: FirewallEvidence::Remove { el: ev.el.clone() },
             },

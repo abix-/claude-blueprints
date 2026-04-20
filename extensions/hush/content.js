@@ -324,6 +324,29 @@
     block:  mergeArrays(globalCfg && globalCfg.block,  siteCfg && siteCfg.block),
     spoof:  mergeArrays(globalCfg && globalCfg.spoof,  siteCfg && siteCfg.spoof)
   };
+  // Build a selector -> originating-scope map so the firewall-log
+  // event stream can attribute each hit back to the same row the
+  // rule enumeration shows. Without this, the popup's FirewallLog
+  // component shows the rule under its authoring scope (e.g.
+  // `__global__`) but records events under the site scope, producing
+  // confusing "double entry" rows (one rule with 0 hits + an orphan
+  // event row for the site scope). Site-scoped rules win when a
+  // selector appears in both layers (most-specific scope wins).
+  const scopeOf = {};
+  const siteScopeKey = match ? match.key : null;
+  if (globalCfg) {
+    for (const s of (globalCfg.hide   || [])) scopeOf["hide::"   + s] = GLOBAL_KEY;
+    for (const s of (globalCfg.remove || [])) scopeOf["remove::" + s] = GLOBAL_KEY;
+  }
+  if (siteScopeKey && siteCfg) {
+    for (const s of (siteCfg.hide   || [])) scopeOf["hide::"   + s] = siteScopeKey;
+    for (const s of (siteCfg.remove || [])) scopeOf["remove::" + s] = siteScopeKey;
+  }
+  function scopeForSelector(action, selector) {
+    return scopeOf[action + "::" + selector]
+      || siteScopeKey
+      || GLOBAL_KEY;
+  }
   log(location.hostname, "- matched:", matchedDomain,
       "global:", globalCfg ? "yes" : "no",
       "site:", match ? match.key : "no");
@@ -408,7 +431,8 @@
             pendingRemovedEvents.push({
               t: new Date().toISOString(),
               selector: sel,
-              el: describeElement(el)
+              el: describeElement(el),
+              scope: scopeForSelector("remove", sel)
             });
             el.remove();
           }

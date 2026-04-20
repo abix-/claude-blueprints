@@ -165,6 +165,13 @@ pub struct RemovedElement {
     /// Short human-readable description of the element (tag + id/class).
     #[serde(default)]
     pub el: String,
+    /// Scope key (site hostname or `__global__`) the selector was
+    /// authored under. Content script tags each event with this so
+    /// the firewall log attributes hits to the same row the rule
+    /// enumeration shows. Empty when legacy events arrive without
+    /// this field.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub scope: String,
 }
 
 /// Unified firewall-log event. Every rule hit (across all actions and
