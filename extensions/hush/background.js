@@ -9,7 +9,7 @@ import initWasm, { initEngine, hushBackgroundMain } from "./dist/pkg/hush.js";
 
 (async () => {
   try {
-    await initWasm();
+    await initWasm({ module_or_path: "./dist/pkg/hush_bg.wasm" });
     try { initEngine(); } catch (e) { console.error("[Hush bg] initEngine failed", e); }
     hushBackgroundMain();
   } catch (e) {

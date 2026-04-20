@@ -11,7 +11,7 @@ import initWasm, { initEngine, hushPopupMain } from "./dist/pkg/hush.js";
 
 (async () => {
   try {
-    await initWasm();
+    await initWasm({ module_or_path: "./dist/pkg/hush_bg.wasm" });
     try { initEngine(); } catch (e) { console.error("[Hush popup] initEngine failed", e); }
     await hushPopupMain();
   } catch (e) {

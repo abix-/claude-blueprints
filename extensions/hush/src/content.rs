@@ -28,7 +28,7 @@ use wasm_bindgen::JsCast;
 use web_sys::{
     Document, Element, HtmlElement, HtmlIFrameElement, HtmlStyleElement, MutationObserver,
     MutationObserverInit, PerformanceEntry, PerformanceObserver, PerformanceObserverEntryList,
-    PerformanceObserverInit, PerformanceResourceTiming, Window,
+    PerformanceResourceTiming, Window,
 };
 
 // ---------------------------------------------------------------------------
@@ -668,11 +668,22 @@ fn install_resource_observer() {
             return;
         }
     };
-    let init = PerformanceObserverInit::new(
-        &js_sys::Array::of1(&JsValue::from_str("resource")).into(),
+    // Use the `type` (singular) variant instead of the `entryTypes`
+    // array; Chrome rejects `buffered: true` with the array form.
+    // Build the init dict by hand via Reflect so we don't fight
+    // web_sys feature-flag variance across versions.
+    let init = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(
+        &init,
+        &JsValue::from_str("type"),
+        &JsValue::from_str("resource"),
     );
-    init.set_buffered(true);
-    let _ = obs.observe(&init);
+    let _ = js_sys::Reflect::set(
+        &init,
+        &JsValue::from_str("buffered"),
+        &JsValue::TRUE,
+    );
+    let _ = obs.observe(init.unchecked_ref::<web_sys::PerformanceObserverInit>());
     keep_closure(cb);
     keep_closure(obs);
 }

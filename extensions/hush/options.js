@@ -6,7 +6,7 @@
 
 import initWasm, { initEngine, mountOptions } from "./dist/pkg/hush.js";
 
-const wasmReady = initWasm().then(() => {
+const wasmReady = initWasm({ module_or_path: "./dist/pkg/hush_bg.wasm" }).then(() => {
   try { initEngine(); } catch (e) { console.error("[Hush options] initEngine failed", e); }
 }).catch(e => console.error("[Hush options] wasm init failed", e));
 
