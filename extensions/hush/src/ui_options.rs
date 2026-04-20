@@ -114,6 +114,18 @@ pub fn mount_options(snapshot: JsValue) -> Result<(), JsValue> {
         }
     }
 
+    // Tertiary root: raw JSON editor. Reads the initial config text
+    // synchronously from `chrome.storage.local` when its Refresh
+    // handler fires so it stays in sync with whatever the JS-owned
+    // site list has done.
+    if let Some(json_root) = document.get_element_by_id("rust-json-root") {
+        if let Ok(el) = json_root.dyn_into::<web_sys::HtmlElement>() {
+            std::mem::forget(leptos::mount::mount_to(el, move || {
+                view! { <JsonEditor /> }
+            }));
+        }
+    }
+
     Ok(())
 }
 
@@ -396,6 +408,108 @@ fn AllowlistEditor(snap: AllowlistSnapshot) -> impl IntoView {
                                background: #fff; border: 1px solid #ccc;
                                border-radius: 5px;">
                     "Reset to defaults"
+                </button>
+            </div>
+        </div>
+    }
+}
+
+/// Raw JSON editor: one `<textarea>` + Apply + Refresh buttons.
+/// Apply parses the textarea, validates the shape
+/// (top-level object, not array), writes it to
+/// `chrome.storage.local["config"]`, and reloads the page so the
+/// still-JS-owned site list re-renders. Refresh reads the current
+/// config back out of storage and updates the textarea signal.
+#[component]
+fn JsonEditor() -> impl IntoView {
+    let text = RwSignal::new(String::new());
+    let busy = RwSignal::new(false);
+
+    // Load initial value from storage on mount. Without this the
+    // textarea starts empty and Refresh is the only way to populate
+    // it, which is surprising.
+    let initial_text = text;
+    spawn_local(async move {
+        match chrome_bridge::get_config_json().await {
+            Ok(json) => initial_text.set(json),
+            Err(e) => web_sys::console::error_1(&JsValue::from_str(&format!(
+                "[Hush options] initial JSON load failed: {:?}",
+                e
+            ))),
+        }
+    });
+
+    let on_refresh = move |_| {
+        if busy.get() {
+            return;
+        }
+        busy.set(true);
+        spawn_local(async move {
+            match chrome_bridge::get_config_json().await {
+                Ok(json) => {
+                    text.set(json);
+                    set_options_status("Refreshed from current state".into(), true);
+                }
+                Err(e) => {
+                    set_options_status(format!("Refresh failed: {:?}", e), false);
+                }
+            }
+            busy.set(false);
+        });
+    };
+
+    let on_apply = move |_| {
+        if busy.get() {
+            return;
+        }
+        busy.set(true);
+        let current = text.get();
+        spawn_local(async move {
+            match chrome_bridge::set_config_from_json(&current).await {
+                Ok(()) => {
+                    // Reload so the JS-owned site list picks up the
+                    // new config. Same pattern as Reset-to-defaults.
+                    if let Some(window) = web_sys::window() {
+                        let _ = window.location().reload();
+                    }
+                }
+                Err(e) => {
+                    let msg = e
+                        .as_string()
+                        .unwrap_or_else(|| format!("{:?}", e));
+                    set_options_status(format!("Apply failed: {}", msg), false);
+                    busy.set(false);
+                }
+            }
+        });
+    };
+
+    view! {
+        <div class="rust-json-editor">
+            <textarea spellcheck="false"
+                      style="width:100%;min-height:240px;font-family:ui-monospace,monospace;\
+                             font-size:12px;padding:10px;border:1px solid #ccc;\
+                             border-radius:5px;box-sizing:border-box;"
+                      prop:value=move || text.get()
+                      on:input=move |ev| {
+                          text.set(event_target_value(&ev));
+                      }>
+            </textarea>
+            <div class="toolbar" style="margin-top: 10px; display:flex; gap: 8px;">
+                <button on:click=on_apply
+                        disabled=move || busy.get()
+                        class="primary"
+                        style="padding: 6px 14px; font-size: 13px; cursor: pointer;
+                               background: #2b7cff; color: white;
+                               border: 1px solid #2b7cff; border-radius: 5px;">
+                    "Apply JSON"
+                </button>
+                <button on:click=on_refresh
+                        disabled=move || busy.get()
+                        style="padding: 6px 14px; font-size: 13px; cursor: pointer;
+                               background: #fff; border: 1px solid #ccc;
+                               border-radius: 5px;">
+                    "Refresh from storage"
                 </button>
             </div>
         </div>

@@ -320,6 +320,37 @@ pub async fn get_default_allowlist() -> Result<(Vec<String>, Vec<String>, Vec<St
     ))
 }
 
+/// Parse a JSON string as a config object (top-level must be a
+/// non-array object; arbitrary site keys below). Writes the parsed
+/// value into `chrome.storage.local["config"]`. Rejects the write
+/// with a descriptive error if the top-level shape is wrong - same
+/// validation the old JS handler did.
+pub async fn set_config_from_json(json: &str) -> Result<(), JsValue> {
+    let parsed = js_sys::JSON::parse(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {:?}", e)))?;
+    if !parsed.is_object() || parsed.is_null() || js_sys::Array::is_array(&parsed) {
+        return Err(JsValue::from_str(
+            "Config must be a JSON object (keys are domain names).",
+        ));
+    }
+
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let storage = Reflect::get(&chrome, &JsValue::from_str("storage"))?;
+    let local = Reflect::get(&storage, &JsValue::from_str("local"))?;
+    let set_fn: js_sys::Function = Reflect::get(&local, &JsValue::from_str("set"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set is not a function"))?;
+    let payload = js_sys::Object::new();
+    Reflect::set(&payload, &JsValue::from_str("config"), &parsed)?;
+    let set_promise: Promise = set_fn
+        .call1(&local, &payload.into())?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set did not return a Promise"))?;
+    JsFuture::from(set_promise).await?;
+    Ok(())
+}
+
 /// Fetch the shipped `sites.json` seed (via `chrome.runtime.getURL`) and
 /// write it to `chrome.storage.local["config"]`, replacing whatever's
 /// there. Used by the options-page "Reset to defaults" button.

@@ -7,6 +7,17 @@ this file is chronology.
 
 ## Stage 5 (in progress): Options + content-script cleanup
 
+**Iter 4 (JSON editor)**: raw JSON textarea + Apply + Refresh moved
+into the Leptos `JsonEditor` component at a third mount point
+`#rust-json-root`. New `chrome_bridge::set_config_from_json` parses
+the textarea with `js_sys::JSON::parse`, rejects anything that isn't
+a non-array object, and writes the result to
+`chrome.storage.local["config"]`. Apply reloads the page so the
+still-JS-owned site list picks up the new shape; Refresh reads
+storage through the existing `get_config_json` helper. The JS
+`jsonEl` / `jsonApplyBtn` / `jsonRefreshBtn` references and the
+`jsonEl.value = ...` write in `save()` / `render()` all deleted.
+
 **Iter 3 (allowlist editor)**: three user-editable allowlists
 (iframes / overlays / suggestion keys) moved into the Leptos
 `AllowlistEditor` component. `mount_options` grew a second mount

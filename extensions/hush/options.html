@@ -524,11 +524,9 @@ iframe[src*="tracker.example.com"]
       copy/paste between machines, or to review the full structure. Click <b>Apply JSON</b> after
       editing.
     </p>
-    <textarea id="json-config" spellcheck="false"></textarea>
-    <div class="toolbar">
-      <button id="json-apply" class="primary">Apply JSON</button>
-      <button id="json-refresh">Refresh from storage</button>
-    </div>
+    <!-- Raw JSON textarea + Apply/Refresh rendered by the Leptos
+         JsonEditor component (src/ui_options.rs). -->
+    <div id="rust-json-root"></div>
   </details>
 
   <script type="module" src="options.js"></script>

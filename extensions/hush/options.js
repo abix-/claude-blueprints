@@ -17,9 +17,6 @@ const ALLOWLIST_KEY = "allowlist";
 const siteListEl = document.getElementById("site-list");
 const detailEl = document.getElementById("detail");
 const addSiteBtn = document.getElementById("add-site");
-const jsonEl = document.getElementById("json-config");
-const jsonApplyBtn = document.getElementById("json-apply");
-const jsonRefreshBtn = document.getElementById("json-refresh");
 
 let config = {};
 let selectedDomain = null;
@@ -58,13 +55,14 @@ async function loadAll() {
 
 async function save() {
   await chrome.storage.local.set({ [STORAGE_KEY]: config });
-  jsonEl.value = JSON.stringify(config, null, 2);
 }
 
 function render() {
   renderSiteList();
   renderDetail();
-  jsonEl.value = JSON.stringify(config, null, 2);
+  // The JSON editor (Leptos JsonEditor) reads from storage on its
+  // Refresh button and on mount. After the JS site list mutates
+  // `config`, the user can click Refresh to resync the textarea.
 }
 
 function renderSiteList() {
@@ -274,29 +272,10 @@ addSiteBtn.addEventListener("click", async () => {
 // sites.json and reloads the page so the remaining JS-owned UI
 // re-reads chrome.storage.local.
 
-jsonApplyBtn.addEventListener("click", async () => {
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonEl.value);
-  } catch (e) {
-    setStatus("Invalid JSON: " + e.message, false);
-    return;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    setStatus("Config must be a JSON object (keys are domain names).", false);
-    return;
-  }
-  config = parsed;
-  if (!(selectedDomain in config)) selectedDomain = null;
-  await save();
-  render();
-  setStatus("Applied JSON", true);
-});
-
-jsonRefreshBtn.addEventListener("click", () => {
-  jsonEl.value = JSON.stringify(config, null, 2);
-  setStatus("Refreshed from current state", true);
-});
+// The raw JSON editor (Apply / Refresh + textarea) is owned by the
+// Leptos JsonEditor component now (src/ui_options.rs). Apply writes
+// to chrome.storage.local and reloads the page so the site list
+// re-renders from storage.
 
 // The three allowlist textareas and the Save / Reset buttons are
 // owned by the Leptos AllowlistEditor component now

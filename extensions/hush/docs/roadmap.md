@@ -109,8 +109,10 @@ totals under 100 lines across all bootstrap shims.*
           + `reset_config_to_defaults` helpers). Reset reloads the
           page so the JS-owned site list and JSON editor re-read
           `chrome.storage.local`.
-    - [ ] Port JSON editor (Apply / Refresh buttons, `<textarea>`
-          sync with site-list state)
+    - [x] Port JSON editor (`JsonEditor` component;
+          `chrome_bridge::set_config_from_json` +
+          `chrome_bridge::get_config_json`). Apply reloads the page
+          so the JS-owned site list re-reads `chrome.storage.local`.
     - [x] Port allowlist textareas (`AllowlistEditor` component;
           `chrome_bridge::set_allowlist` +
           `chrome_bridge::get_default_allowlist`). Mounts at a

@@ -67,6 +67,12 @@ changes expected).
   inside the existing `<details>` wrapper. New chrome_bridge helpers
   `set_allowlist` + `get_default_allowlist`. `loadDefaultAllowlist`,
   `linesToList`, and `DEFAULT_ALLOWLIST` deleted from `options.js`.
+- Iter 4: `JsonEditor` component ports the raw-JSON textarea +
+  Apply / Refresh to a third mount root `#rust-json-root`. New
+  `chrome_bridge::set_config_from_json` parses via `js_sys::JSON`,
+  validates the top-level shape, writes to `chrome.storage.local`.
+  Apply reloads the page so the still-JS-owned site list re-reads
+  storage.
 
 ## [0.10.0] - 2026-04-19
 
