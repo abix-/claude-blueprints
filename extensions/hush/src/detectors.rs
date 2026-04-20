@@ -143,6 +143,24 @@ use crate::learn::LearnKind;
 use crate::stack::script_origin_from_stack;
 use crate::suggestion::build_suggestion;
 
+/// Map a detector signal kind to the spoof kind that neutralizes the
+/// same underlying observation, if any. Used by `DetectCtx::is_covered`
+/// to suppress block-origin suggestions when the user has already
+/// picked the spoof lane for the corresponding fingerprint signal.
+///
+/// Only the fingerprint-vs-spoof relationships live here —
+/// URL-layer equivalences (block covers neuter/silence) are structural
+/// and handled directly in `is_covered` without a map.
+pub(crate) fn spoof_kind_for_signal(signal_kind: &str) -> Option<&'static str> {
+    match signal_kind {
+        "webgl-fp-hot" => Some("webgl-unmasked"),
+        "canvas-fp" => Some("canvas"),
+        "audio-fp" => Some("audio"),
+        "font-fp" => Some("font-enum"),
+        _ => None,
+    }
+}
+
 /// Opaque per-detect context the orchestrator fills in once and passes
 /// to each detector. Bundling this keeps every detector signature narrow.
 pub(crate) struct DetectCtx<'a> {
@@ -185,15 +203,73 @@ impl<'a> DetectCtx<'a> {
     fn has_neuter(&self, v: &str) -> bool {
         self.existing_neuter.iter().any(|e| e == v)
     }
-    #[allow(dead_code)]
     fn has_silence(&self, v: &str) -> bool {
         self.existing_silence.iter().any(|e| e == v)
     }
     fn has_spoof(&self, kind: &str) -> bool {
         self.existing_spoof.iter().any(|e| e == kind)
     }
-    fn finish(&self, input: BuildSuggestionInput) -> Suggestion {
-        build_suggestion(&input)
+
+    /// Central cross-layer dedup predicate. Returns true if an
+    /// enabled rule equivalent to the (layer, value, kind) triple
+    /// already covers the signal the caller is about to emit as a
+    /// suggestion. One source of truth — adding a new equivalence
+    /// (e.g. "block covers remove-of-iframe") is a match-arm edit
+    /// here instead of scattered per-detector ad-hoc checks.
+    ///
+    /// Rules:
+    /// - Same-layer same-value always dedups (trivial).
+    /// - Block covers Neuter and Silence: a URL-blocked script
+    ///   never runs, so there are no listeners to neuter and no
+    ///   calls to silence.
+    /// - Spoof covers the equivalent fingerprint-signal block
+    ///   suggestion (webgl-fp-hot → `webgl-unmasked` spoof, etc.)
+    ///   via [`spoof_kind_for_signal`].
+    /// - Remove / Hide cross-layer: not currently — those are DOM
+    ///   selectors, not URL filters; no dedup relationship to
+    ///   network-layer actions.
+    fn is_covered(&self, layer: SuggestionLayer, value: &str, kind: &str) -> bool {
+        let same_layer = match layer {
+            SuggestionLayer::Block => self.has_block(value),
+            SuggestionLayer::Remove => self.has_remove(value),
+            SuggestionLayer::Hide => self.has_hide(value),
+            SuggestionLayer::Neuter => self.has_neuter(value),
+            SuggestionLayer::Silence => self.has_silence(value),
+        };
+        if same_layer {
+            return true;
+        }
+        // Cross-layer: block subsumes neuter/silence (script can't run).
+        if matches!(layer, SuggestionLayer::Neuter | SuggestionLayer::Silence)
+            && self.has_block(value)
+        {
+            return true;
+        }
+        // Cross-layer: matching spoof neutralizes the fingerprint
+        // signal the block suggestion would otherwise target. Only
+        // applies to Block suggestions — spoof has no bearing on
+        // DOM-selector (remove/hide) rules even if the detector
+        // kind coincidentally lines up.
+        if layer == SuggestionLayer::Block {
+            if let Some(spoof_kind) = spoof_kind_for_signal(kind) {
+                if self.has_spoof(spoof_kind) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Build a suggestion if the triple isn't already covered.
+    /// Detectors wrap pushes in `if let Some(s) = ctx.try_finish(...)`
+    /// instead of re-implementing dedup at every call site. Single
+    /// source of truth — adding a new equivalence rule is an edit
+    /// in [`Self::is_covered`] and every detector benefits.
+    fn try_finish(&self, input: BuildSuggestionInput) -> Option<Suggestion> {
+        if self.is_covered(input.layer, &input.value, &input.kind) {
+            return None;
+        }
+        Some(build_suggestion(&input))
     }
     /// Returns a `BuildSuggestionInput` with every *context* field
     /// (tab_hostname, matched_key, config_has_site, existing_*) already
@@ -201,7 +277,7 @@ impl<'a> DetectCtx<'a> {
     /// update syntax to avoid repeating those six fields on every push:
     ///
     /// ```ignore
-    /// out.push(ctx.finish(BuildSuggestionInput {
+    /// if let Some(s) = ctx.try_finish(BuildSuggestionInput {
     ///     key: "...".into(),
     ///     layer: SuggestionLayer::Block,
     ///     value: "...".into(),
@@ -211,8 +287,11 @@ impl<'a> DetectCtx<'a> {
     ///     evidence: vec![],
     ///     from_frame: None,
     ///     learn: LearnKind::Beacon.text().into(),
+    ///     kind: LearnKind::Beacon.tag().into(),
     ///     ..ctx.ctx_fields()
-    /// }));
+    /// }) {
+    ///     out.push(s);
+    /// }
     /// ```
     ///
     /// Non-context fields are filled with sentinel defaults that the
@@ -347,11 +426,8 @@ pub(crate) fn detect_beacon(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
     let mut out = Vec::with_capacity(8);
     for (host, hits) in by_host {
         let value = block_value(host);
-        if ctx.has_block(&value) {
-            continue;
-        }
         let from_frame = first_non_top_frame(hits.iter().copied(), ctx.hostname);
-        out.push(ctx.finish(BuildSuggestionInput {
+        if let Some(s) = ctx.try_finish(BuildSuggestionInput {
             key: block_key(&value),
             layer: SuggestionLayer::Block,
             value: value.clone(),
@@ -363,7 +439,9 @@ pub(crate) fn detect_beacon(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
             learn: LearnKind::Beacon.text().to_string(),
             kind: LearnKind::Beacon.tag().to_string(),
             ..ctx.ctx_fields()
-        }));
+        }) {
+            out.push(s);
+        }
     }
     out
 }
@@ -387,12 +465,9 @@ pub(crate) fn detect_pixels(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
     let mut out = Vec::with_capacity(8);
     for (host, hits) in by_host {
         let value = block_value(host);
-        if ctx.has_block(&value) {
-            continue;
-        }
         let med = median(hits.iter().map(|h| h.transfer_size).collect());
         let from_frame = first_non_top_frame(hits.iter().copied(), ctx.hostname);
-        out.push(ctx.finish(BuildSuggestionInput {
+        if let Some(s) = ctx.try_finish(BuildSuggestionInput {
             key: block_key(&value),
             layer: SuggestionLayer::Block,
             value: value.clone(),
@@ -413,7 +488,9 @@ pub(crate) fn detect_pixels(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
             learn: LearnKind::Pixel.text().to_string(),
             kind: LearnKind::Pixel.tag().to_string(),
             ..ctx.ctx_fields()
-        }));
+        }) {
+            out.push(s);
+        }
     }
     out
 }
@@ -451,11 +528,8 @@ pub(crate) fn detect_first_party_telemetry(
             continue;
         }
         let value = block_value(host);
-        if ctx.has_block(&value) {
-            continue;
-        }
         let from_frame = first_non_top_frame(requests.iter().copied(), ctx.hostname);
-        out.push(ctx.finish(BuildSuggestionInput {
+        if let Some(s) = ctx.try_finish(BuildSuggestionInput {
             key: block_key(&value),
             layer: SuggestionLayer::Block,
             value: value.clone(),
@@ -481,7 +555,9 @@ pub(crate) fn detect_first_party_telemetry(
             learn: LearnKind::FirstPartyTelemetry.text().to_string(),
             kind: LearnKind::FirstPartyTelemetry.tag().to_string(),
             ..ctx.ctx_fields()
-        }));
+        }) {
+            out.push(s);
+        }
     }
     out
 }
@@ -536,14 +612,11 @@ pub(crate) fn detect_polling(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sug
         // Polling keeps a trailing "^" anchor so the rule doesn't
         // collide with same-host non-polling block rules on dedup.
         let value = format!("{}^", block_value(info.host));
-        if ctx.has_block(&value) {
-            continue;
-        }
         let key = block_key(&value);
         if out.iter().any(|s: &Suggestion| s.key == key) {
             continue;
         }
-        out.push(ctx.finish(BuildSuggestionInput {
+        if let Some(s) = ctx.try_finish(BuildSuggestionInput {
             key,
             layer: SuggestionLayer::Block,
             value: value.clone(),
@@ -560,7 +633,9 @@ pub(crate) fn detect_polling(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sug
             learn: LearnKind::Polling.text().to_string(),
             kind: LearnKind::Polling.tag().to_string(),
             ..ctx.ctx_fields()
-        }));
+        }) {
+            out.push(s);
+        }
     }
     out
 }
@@ -601,12 +676,9 @@ pub(crate) fn detect_hidden_iframes(
     let mut out = Vec::with_capacity(8);
     for (host, info) in by_host {
         let selector = format!("iframe[src*=\"{host}\"]");
-        if ctx.has_remove(&selector) {
-            continue;
-        }
         let from_frame = first_non_top_frame(info.samples.iter().copied(), ctx.hostname);
         let reason_list: Vec<String> = info.reasons.into_iter().collect();
-        out.push(ctx.finish(BuildSuggestionInput {
+        if let Some(s) = ctx.try_finish(BuildSuggestionInput {
             key: format!("remove::{selector}"),
             layer: SuggestionLayer::Remove,
             value: selector.clone(),
@@ -623,7 +695,9 @@ pub(crate) fn detect_hidden_iframes(
             learn: LearnKind::HiddenIframe.text().to_string(),
             kind: LearnKind::HiddenIframe.tag().to_string(),
             ..ctx.ctx_fields()
-        }));
+        }) {
+            out.push(s);
+        }
     }
     out
 }
@@ -643,15 +717,12 @@ pub(crate) fn detect_sticky_overlays(
         if !seen.insert(s.selector.clone()) {
             continue;
         }
-        if ctx.has_hide(&s.selector) {
-            continue;
-        }
         let from_frame = s
             .reporter_frame
             .as_deref()
             .filter(|f| !f.is_empty() && *f != ctx.hostname)
             .map(str::to_string);
-        out.push(ctx.finish(BuildSuggestionInput {
+        if let Some(suggestion) = ctx.try_finish(BuildSuggestionInput {
             key: format!("hide::{}", s.selector),
             layer: SuggestionLayer::Hide,
             value: s.selector.clone(),
@@ -669,7 +740,9 @@ pub(crate) fn detect_sticky_overlays(
             learn: LearnKind::StickyOverlay.text().to_string(),
             kind: LearnKind::StickyOverlay.tag().to_string(),
             ..ctx.ctx_fields()
-        }));
+        }) {
+            out.push(suggestion);
+        }
     }
     out
 }
@@ -693,10 +766,7 @@ fn emit_origin_block(
         return;
     }
     let value = block_value(origin);
-    if ctx.has_block(&value) {
-        return;
-    }
-    out.push(ctx.finish(BuildSuggestionInput {
+    if let Some(s) = ctx.try_finish(BuildSuggestionInput {
         key: format!("{}::{kind_tag}", block_key(&value)),
         layer: SuggestionLayer::Block,
         value: value.clone(),
@@ -708,7 +778,9 @@ fn emit_origin_block(
         learn: learn.text().to_string(),
         kind: learn.tag().to_string(),
         ..ctx.ctx_fields()
-    }));
+    }) {
+        out.push(s);
+    }
 }
 
 /// Shared aggregation pass over js_calls; every main-world detector
@@ -887,20 +959,22 @@ pub(crate) fn detect_from_js_calls(
     // suggestion for a user who already picked the spoof lane is
     // just nagging. If the user ever removes the spoof rule, the
     // suggestion will resurface on the next tab.
-    if !ctx.has_spoof("webgl-unmasked") {
-        for (origin, &hot_count) in &s.hot_params_by_origin {
-            if hot_count >= 1 {
-                emit_origin_block(
-                    ctx,
-                    &mut out,
-                    origin,
-                    "WebGL fingerprinting (read UNMASKED_RENDERER_WEBGL or _VENDOR_WEBGL)"
-                        .to_string(),
-                    95,
-                    "webgl-fp-hot",
-                    LearnKind::WebglFpHot,
-                );
-            }
+    // `webgl-fp-hot` → `webgl-unmasked` spoof equivalence is
+    // encoded in `spoof_kind_for_signal` + `DetectCtx::is_covered`,
+    // so emit_origin_block short-circuits when the spoof rule is
+    // already active. No per-detector skip needed.
+    for (origin, &hot_count) in &s.hot_params_by_origin {
+        if hot_count >= 1 {
+            emit_origin_block(
+                ctx,
+                &mut out,
+                origin,
+                "WebGL fingerprinting (read UNMASKED_RENDERER_WEBGL or _VENDOR_WEBGL)"
+                    .to_string(),
+                95,
+                "webgl-fp-hot",
+                LearnKind::WebglFpHot,
+            );
         }
     }
     // WebGL general getParameter flurry (excluded from origins already flagged for UNMASKED).
@@ -970,9 +1044,6 @@ pub(crate) fn detect_from_js_calls(
             continue;
         };
         let value = block_value(vendor_host);
-        if ctx.has_block(&value) {
-            continue;
-        }
         let sentinel_name = match vendor.as_str() {
             "Hotjar" => "_hjSettings",
             "FullStory" => "FS",
@@ -983,7 +1054,7 @@ pub(crate) fn detect_from_js_calls(
             "PostHog" => "__posthog",
             _ => "?",
         };
-        out.push(ctx.finish(BuildSuggestionInput {
+        if let Some(s) = ctx.try_finish(BuildSuggestionInput {
             key: format!("{}::replay-{vendor}", block_key(&value)),
             layer: SuggestionLayer::Block,
             value: value.clone(),
@@ -997,7 +1068,9 @@ pub(crate) fn detect_from_js_calls(
             learn: LearnKind::ReplayVendor.text().to_string(),
             kind: LearnKind::ReplayVendor.tag().to_string(),
             ..ctx.ctx_fields()
-        }));
+        }) {
+            out.push(s);
+        }
     }
 
     // Listener density: 12+ interaction listeners from one origin in <60s.
@@ -1018,11 +1091,8 @@ pub(crate) fn detect_from_js_calls(
                 continue;
             }
             let value = block_value(origin);
-            if ctx.has_neuter(&value) || ctx.has_block(&value) {
-                continue;
-            }
             let types: Vec<&str> = info.types.iter().map(String::as_str).collect();
-            out.push(ctx.finish(BuildSuggestionInput {
+            if let Some(sg) = ctx.try_finish(BuildSuggestionInput {
                 key: format!("neuter::{value}::listener-density"),
                 layer: SuggestionLayer::Neuter,
                 value: value.clone(),
@@ -1038,7 +1108,9 @@ pub(crate) fn detect_from_js_calls(
                 learn: LearnKind::ReplayListener.text().to_string(),
                 kind: LearnKind::ReplayListener.tag().to_string(),
                 ..ctx.ctx_fields()
-            }));
+            }) {
+                out.push(sg);
+            }
         }
     }
 
@@ -1061,12 +1133,9 @@ pub(crate) fn detect_from_js_calls(
             continue;
         }
         let value = block_value(&entry.origin);
-        if ctx.has_block(&value) {
-            continue;
-        }
         let seconds = ((span / 1000) as u32).max(1);
         let rate_per_sec = (entry.invisible as f64 / seconds as f64 * 10.0).round() / 10.0;
-        out.push(ctx.finish(BuildSuggestionInput {
+        if let Some(s) = ctx.try_finish(BuildSuggestionInput {
             key: format!("{}::raf-waste::{}", block_key(&value), entry.canvas_sel),
             layer: SuggestionLayer::Block,
             value: value.clone(),
@@ -1088,7 +1157,9 @@ pub(crate) fn detect_from_js_calls(
             learn: LearnKind::RafWaste.text().to_string(),
             kind: LearnKind::RafWaste.tag().to_string(),
             ..ctx.ctx_fields()
-        }));
+        }) {
+            out.push(s);
+        }
     }
 
     out
@@ -1315,6 +1386,41 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].confidence, 95);
         assert!(out[0].key.ends_with("::webgl-fp-hot"));
+    }
+
+    #[test]
+    fn is_covered_central_dedup_rules() {
+        // Same-layer same-value.
+        let mut c = ctx("site.test");
+        c.existing_block = Arc::from(["||foo.com".to_string()]);
+        assert!(c.is_covered(SuggestionLayer::Block, "||foo.com", "beacon"));
+        assert!(!c.is_covered(SuggestionLayer::Block, "||bar.com", "beacon"));
+
+        // Block covers Neuter: URL-blocked script can't run.
+        let mut c = ctx("site.test");
+        c.existing_block = Arc::from(["||hotjar.com".to_string()]);
+        assert!(c.is_covered(SuggestionLayer::Neuter, "||hotjar.com", "replay-listener"));
+
+        // Block covers Silence: same reasoning.
+        assert!(c.is_covered(SuggestionLayer::Silence, "||hotjar.com", "replay-listener"));
+
+        // Neuter does NOT cover Block (narrower primitive).
+        let mut c = ctx("site.test");
+        c.existing_neuter = Arc::from(["||hotjar.com".to_string()]);
+        assert!(c.is_covered(SuggestionLayer::Neuter, "||hotjar.com", "replay-listener"));
+        assert!(!c.is_covered(SuggestionLayer::Block, "||hotjar.com", "beacon"));
+
+        // Spoof covers the equivalent fingerprint-signal block
+        // suggestion via `spoof_kind_for_signal`.
+        let mut c = ctx("site.test");
+        c.existing_spoof = Arc::from(["webgl-unmasked".to_string()]);
+        assert!(c.is_covered(SuggestionLayer::Block, "||fp.test", "webgl-fp-hot"));
+        // Non-hot webgl-fp is NOT covered by webgl-unmasked spoof
+        // (spoof only neutralizes UNMASKED reads).
+        assert!(!c.is_covered(SuggestionLayer::Block, "||fp.test", "webgl-fp"));
+
+        // Spoof doesn't cross over to Remove/Hide.
+        assert!(!c.is_covered(SuggestionLayer::Remove, ".foo", "webgl-fp-hot"));
     }
 
     #[test]
