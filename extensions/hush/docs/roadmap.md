@@ -62,16 +62,27 @@ diagnostics, suggestions list, and the Add / Dismiss / Allow actions
 all work identically to the current JS popup. Performance budget: cold
 popup open under 100 ms.*
 
-- [ ] Pick framework: Leptos (recommended for bundle size) or Yew
-- [ ] Add Leptos dep + compile target
-- [ ] Port popup component tree: match header, activity section, block
-      diagnostics, suggestions list, action row
-- [ ] Wire messaging from popup to service worker (same
-      `chrome.runtime.sendMessage` envelopes, typed via shared types)
-- [ ] Port `.sugg-learn` + `.sugg-actions` styling (can stay CSS)
-- [ ] Replace `popup.js` with bootstrap that loads WASM and mounts
-      the component tree
-- [ ] Verify cold-open render time in DevTools Performance
+- [x] Pick framework: Leptos 0.8 (smallest bundle of the Rust WASM
+      frameworks; fine-grained signals match the popup's mutation
+      patterns)
+- [x] Add Leptos dep + wasm-bindgen-futures + chrome_bridge module
+- [x] Port matched-site header (`MatchedSite` component)
+- [x] Port activity summary pills (`ActivitySummary` component)
+- [x] Port suggestions list with Add / Dismiss / Allow actions
+      (`SuggestionsList` + `SuggestionRow` + async
+      `chrome_bridge::accept_suggestion` / `dismiss_suggestion` /
+      `allowlist_suggestion`)
+- [x] Port Why? / Evidence expandable panels (`WhyPanel` +
+      `EvidencePanel` + clipboard copy via `navigator.clipboard.writeText`)
+- [x] Port detector CTA (`DetectorCta`: Enable / Scan-once / Rescan)
+      with `chrome_bridge::enable_detector` + `scan_once`
+- [x] Expose `refreshPopupSuggestions` wasm-bindgen export so button
+      actions can refresh the Leptos signal without remounting
+- [ ] Port the blocked-URL list, removed-element evidence, and
+      block-rule diagnostics sections (still `popup.js` renderers
+      targeting `#block-list` / `#remove-evidence` / `#block-diagnostics`)
+- [ ] Verify cold-open render time in DevTools Performance against the
+      100ms budget
 
 ### Stage 5: Options UI + content script cleanup
 

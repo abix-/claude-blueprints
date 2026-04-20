@@ -393,22 +393,8 @@
     <div><button id="create-site" style="display:none; flex:none; padding:6px 14px;">Create config for this site</button></div>
   </div>
 
-  <!-- Suggestions list is rendered by the Leptos component tree at
-       #rust-popup-root above. The enable / scan-once / rescan controls
-       below remain JS-driven; they call refreshPopupSuggestions() on
-       the Leptos root after firing their chrome.runtime messages. -->
-  <div id="suggestions-block" class="suggestions-block" hidden>
-    <div id="sugg-disabled" class="sugg-disabled" hidden>
-      <div class="hint">Behavioral suggestions are off (zero CPU cost).</div>
-      <div class="btnrow">
-        <button id="sugg-enable">Enable</button>
-        <button id="sugg-scan-once">Scan this tab now</button>
-      </div>
-    </div>
-    <div id="rescan-row" class="rescan-row" hidden>
-      <button id="sugg-rescan" style="flex:none;">Rescan now</button>
-    </div>
-  </div>
+  <!-- Suggestions list + detector enable/scan/rescan controls are
+       rendered by the Leptos component tree at #rust-popup-root above. -->
 
   <div id="sections" class="sections" hidden>
     <details class="section" open>

@@ -5,6 +5,68 @@ complete in [roadmap.md](roadmap.md). Present-tense feature behavior
 lives in [completed.md](completed.md) and the per-subsystem docs;
 this file is chronology.
 
+## Stage 4 (in progress): Popup UI in Leptos
+
+Framework pick: Leptos 0.8. Smallest bundle of the Rust WASM web
+frameworks (~25KB framework cost vs Yew's ~110KB), fine-grained
+signals match how the popup actually mutates (suggestion list changes
+on Add / Dismiss / Allow clicks), strongest community trajectory.
+See [roadmap.md](roadmap.md) Stage 4 entry for the per-component
+checklist.
+
+Shipped across four iterations:
+
+**Iter 1 (scaffold)**: Leptos 0.8 added to `Cargo.toml` (csr feature
+only). New `src/ui_popup.rs` with a stub `PopupHeader`. Bootstrap in
+`popup.js` dynamically imports the WASM bundle and calls a
+`mountPopup` wasm-bindgen export. `popup.html` grew a
+`<div id="rust-popup-root">` mount point.
+
+**Iter 2 (matched-site + activity summary)**: `MatchedSite` +
+`ActivitySummary` components own the popup header. `popup.js` hands
+the computed hostname / matched domain / per-layer counts to Leptos
+in one snapshot via `mountPopup(snap)`. The old `<div id="match">` +
+its JS `.textContent` / `.innerHTML` writes deleted.
+
+**Iter 3 (suggestions list + actions)**: full suggestions UI in Rust.
+`SuggestionsList` + `SuggestionRow` components render the list; Add /
+Dismiss / Allow buttons call new async helpers in
+`src/chrome_bridge.rs` (`accept_suggestion`, `dismiss_suggestion`,
+`allowlist_suggestion`). Each helper serializes the message, awaits
+the returned Promise via `wasm-bindgen-futures::JsFuture`,
+deserializes the reply. Rows go busy/disabled during in-flight
+mutations. The 255-line block of JS renderers
+(`renderSuggestions` / `refreshSuggestions` / `renderSuggList` /
+`renderSuggRow`) deleted. `POPUP_HANDLE` thread_local holds the
+popup's suggestions signal + tab id so external callers (JS enable /
+scan-once / rescan) can trigger a re-fetch via an exported
+`refreshPopupSuggestions` without remounting.
+
+**Iter 4 (Why? / Evidence panels)**: per-row expandable panels for
+the dedup diagnostic (`WhyPanel` over `SuggestionDiag`) and the raw
+evidence array (`EvidencePanel` with a Copy button that writes to
+`navigator.clipboard.writeText`). Each panel is an independent
+`RwSignal<bool>` so one expanded doesn't collapse the other.
+
+**Iter 5 (detector CTA)**: the Enable / Scan-once / Rescan row is now
+a Leptos `DetectorCta` component. Uses two new `chrome_bridge`
+helpers: `enable_detector` (reads chrome.storage.local["options"],
+merges `suggestionsEnabled: true`, writes back) and `scan_once`
+(chrome.tabs.sendMessage with `hush:scan-once`). Deleted the JS
+handlers for `#sugg-enable` / `#sugg-scan-once` / `#sugg-rescan` and
+the `<div id="suggestions-block">` wrapper from `popup.html`.
+
+Bundle trajectory: ~552KB (pre-Leptos) -> ~580KB (iter 2) -> ~652KB
+(iter 3, adds signals + async runtime) -> ~688KB (iter 4, clipboard
++ expandable panels) -> ~NNNKB (iter 5). Numbers are unoptimized
+(wasm-opt still disabled until the bundled binaryen catches up with
+rustc 1.95's nontrapping-fptoint).
+
+Remaining before Stage 4 is fully [x]: port the blocked-URL list,
+removed-element evidence, and block-rule diagnostics sections. Those
+still render via `popup.js` onto `#block-list` / `#remove-evidence` /
+`#block-diagnostics` roots.
+
 ## Stage 3: Main-world hooks in Rust (0.10.0)
 
 Typed `SignalPayload` enum landed in `src/types.rs` with one variant

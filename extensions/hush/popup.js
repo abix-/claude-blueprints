@@ -19,14 +19,12 @@ async function main() {
   const tabId = tab && tab.id;
   const hostname = tab && tab.url ? safeHostname(tab.url) : "";
 
-  // #match + suggestion list are now rendered by the Leptos tree at
-  // #rust-popup-root. Remaining JS-owned elements are listed here.
+  // #match + suggestion list + detector CTA are now rendered by the
+  // Leptos tree at #rust-popup-root. Remaining JS-owned elements are
+  // listed here.
   const sectionsEl = document.getElementById("sections");
   const unmatchedEl = document.getElementById("unmatched");
   const createSiteBtn = document.getElementById("create-site");
-  const suggBlock = document.getElementById("suggestions-block");
-  const suggDisabled = document.getElementById("sugg-disabled");
-  const rescanRow = document.getElementById("rescan-row");
 
   document.getElementById("options").addEventListener("click", () => {
     chrome.runtime.openOptionsPage();
@@ -56,35 +54,9 @@ async function main() {
     setTimeout(() => { btn.textContent = origText; }, 2000);
   });
 
-  document.getElementById("sugg-enable").addEventListener("click", async () => {
-    const d = await chrome.storage.local.get(OPTIONS_KEY);
-    const opts = d[OPTIONS_KEY] || {};
-    opts.suggestionsEnabled = true;
-    await chrome.storage.local.set({ [OPTIONS_KEY]: opts });
-    // Trigger a scan now; continuous scheduled scans need a page reload.
-    if (typeof tabId === "number") {
-      try { await chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" }); } catch (e) {}
-    }
-    // Leptos owns the suggestion list; tell it to re-fetch. No full
-    // popup reload needed.
-    setTimeout(() => { try { refreshPopupSuggestions(); } catch (e) {} }, 400);
-  });
-
-  document.getElementById("sugg-scan-once").addEventListener("click", async () => {
-    if (typeof tabId !== "number") return;
-    try { await chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" }); } catch (e) {}
-    // Leptos owns the suggestion list; tell it to re-fetch. No full
-    // popup reload needed.
-    setTimeout(() => { try { refreshPopupSuggestions(); } catch (e) {} }, 400);
-  });
-
-  document.getElementById("sugg-rescan").addEventListener("click", async () => {
-    if (typeof tabId !== "number") return;
-    try { await chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" }); } catch (e) {}
-    // Leptos owns the suggestion list; tell it to re-fetch. No full
-    // popup reload needed.
-    setTimeout(() => { try { refreshPopupSuggestions(); } catch (e) {} }, 400);
-  });
+  // Detector enable / scan-once / rescan buttons are rendered by the
+  // Leptos DetectorCta component and call chrome.storage.local +
+  // chrome.tabs.sendMessage via src/chrome_bridge.rs.
 
   createSiteBtn.addEventListener("click", async () => {
     if (!hostname) return;
@@ -137,12 +109,7 @@ async function main() {
     renderSelectorList("hide", stats.hide || {}, removeKeys);
   }
 
-  // Suggestions list is rendered by the Leptos component tree (see
-  // src/ui_popup.rs). The per-tab detector-enable / scan-once / rescan
-  // buttons remain JS-driven for now (handlers wired earlier in main).
-  suggBlock.hidden = false;
-  suggDisabled.hidden = detectorEnabled;
-  rescanRow.hidden = !detectorEnabled;
+  // Suggestions list + detector CTA are rendered by the Leptos tree.
 
   // Hand everything the Leptos root needs in one snapshot.
   const sumCounts = (m) => Object.values(m || {}).reduce((a, b) => a + (Number(b) || 0), 0);

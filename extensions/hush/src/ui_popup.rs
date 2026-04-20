@@ -157,7 +157,137 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
             hostname=hostname
             tab_id=tab_id
         />
+        <DetectorCta
+            detector_enabled=snap.detector_enabled
+            tab_id=tab_id
+        />
     }
+}
+
+/// Call-to-action row under the suggestions list. When the behavioral
+/// detector is off, shows "Enable" + "Scan this tab now". When it's
+/// on, shows "Rescan now". Both paths end by calling
+/// [`refresh_popup_suggestions`] so new findings surface without a
+/// full popup reload.
+#[component]
+fn DetectorCta(detector_enabled: bool, tab_id: Option<i32>) -> impl IntoView {
+    let enabled = RwSignal::new(detector_enabled);
+    let busy = RwSignal::new(false);
+
+    let enable_click = move |_| {
+        if busy.get() {
+            return;
+        }
+        let Some(tab_id) = tab_id else {
+            return;
+        };
+        busy.set(true);
+        spawn_local(async move {
+            if let Err(e) = chrome_bridge::enable_detector().await {
+                web_sys::console::error_1(&JsValue::from_str(&format!(
+                    "[Hush popup] enable_detector: {:?}",
+                    e
+                )));
+            }
+            let _ = chrome_bridge::scan_once(tab_id).await;
+            // Refresh after content-script has had a moment to scan.
+            set_timeout(300, move || {
+                refresh_popup_suggestions();
+                busy.set(false);
+                enabled.set(true);
+            });
+        });
+    };
+
+    let scan_click = move |_| {
+        if busy.get() {
+            return;
+        }
+        let Some(tab_id) = tab_id else {
+            return;
+        };
+        busy.set(true);
+        spawn_local(async move {
+            let _ = chrome_bridge::scan_once(tab_id).await;
+            set_timeout(300, move || {
+                refresh_popup_suggestions();
+                busy.set(false);
+            });
+        });
+    };
+
+    view! {
+        <div class="rust-detector-cta"
+             style="margin-top: 12px; padding: 8px 10px;
+                    background: #fffdf5; border: 1px solid #f0e4b0;
+                    border-radius: 4px; font-size: 11px;">
+            {move || if enabled.get() {
+                view! {
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="color: #555; flex: 1;">
+                            "Behavioral detector is on."
+                        </span>
+                        <button
+                            disabled=move || busy.get()
+                            on:click=scan_click
+                            style="padding: 4px 10px; font-size: 11px;
+                                   background: #fff; border: 1px solid #ccc;
+                                   border-radius: 3px; cursor: pointer;">
+                            "Rescan now"
+                        </button>
+                    </div>
+                }.into_any()
+            } else {
+                view! {
+                    <div>
+                        <div style="color: #8a6500; margin-bottom: 6px;">
+                            "Behavioral suggestions are off (zero CPU cost)."
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <button
+                                disabled=move || busy.get()
+                                on:click=enable_click
+                                style="padding: 4px 10px; font-size: 11px;
+                                       background: #2b7cff; color: #fff;
+                                       border: 1px solid #2b7cff;
+                                       border-radius: 3px; cursor: pointer;">
+                                "Enable"
+                            </button>
+                            <button
+                                disabled=move || busy.get()
+                                on:click=scan_click
+                                style="padding: 4px 10px; font-size: 11px;
+                                       background: #fff; border: 1px solid #ccc;
+                                       border-radius: 3px; cursor: pointer;">
+                                "Scan this tab now"
+                            </button>
+                        </div>
+                    </div>
+                }.into_any()
+            }}
+        </div>
+    }
+}
+
+/// One-shot setTimeout wrapper. Allocates a Closure that the browser
+/// fires once after `ms` milliseconds, then leaks it (it's a one-shot
+/// callback so the lifetime is implicit in the timer's own bounded
+/// duration). Any `.forget()` alternative ends up the same way.
+fn set_timeout(ms: i32, f: impl FnOnce() + 'static) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let cell = std::cell::Cell::new(Some(f));
+    let cb = Closure::<dyn Fn()>::new(move || {
+        if let Some(f) = cell.take() {
+            f();
+        }
+    });
+    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+        cb.as_ref().unchecked_ref(),
+        ms,
+    );
+    cb.forget();
 }
 
 #[component]

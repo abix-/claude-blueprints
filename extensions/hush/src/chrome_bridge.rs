@@ -144,3 +144,62 @@ pub async fn get_suggestions(tab_id: i32) -> Result<Vec<Suggestion>, JsValue> {
     .await?;
     Ok(resp.suggestions)
 }
+
+/// Enable the behavioral-suggestion detector by merging
+/// `{suggestionsEnabled: true}` into `chrome.storage.local["options"]`.
+/// Preserves every other option field already set.
+pub async fn enable_detector() -> Result<(), JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let storage = Reflect::get(&chrome, &JsValue::from_str("storage"))?;
+    let local = Reflect::get(&storage, &JsValue::from_str("local"))?;
+
+    // Read current options object so we can merge.
+    let get_fn: js_sys::Function = Reflect::get(&local, &JsValue::from_str("get"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.get is not a function"))?;
+    let get_promise: Promise = get_fn
+        .call1(&local, &JsValue::from_str("options"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.get did not return a Promise"))?;
+    let reply = JsFuture::from(get_promise).await?;
+    let opts = Reflect::get(&reply, &JsValue::from_str("options"))
+        .ok()
+        .filter(|v| !v.is_undefined() && !v.is_null())
+        .unwrap_or_else(|| js_sys::Object::new().into());
+    Reflect::set(&opts, &JsValue::from_str("suggestionsEnabled"), &JsValue::TRUE)?;
+
+    // Write it back via chrome.storage.local.set({options: {...}}).
+    let set_payload = js_sys::Object::new();
+    Reflect::set(&set_payload, &JsValue::from_str("options"), &opts)?;
+    let set_fn: js_sys::Function = Reflect::get(&local, &JsValue::from_str("set"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set is not a function"))?;
+    let set_promise: Promise = set_fn
+        .call1(&local, &set_payload.into())?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set did not return a Promise"))?;
+    JsFuture::from(set_promise).await?;
+    Ok(())
+}
+
+/// Ask the content script in tab `tab_id` to run one behavioral scan
+/// immediately. Message shape matches the JS popup's existing
+/// `chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" })` call.
+/// Errors when the tab is closed or the content script hasn't loaded.
+pub async fn scan_once(tab_id: i32) -> Result<(), JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let tabs = Reflect::get(&chrome, &JsValue::from_str("tabs"))?;
+    let send_fn: js_sys::Function = Reflect::get(&tabs, &JsValue::from_str("sendMessage"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.tabs.sendMessage is not a function"))?;
+    let msg = js_sys::Object::new();
+    Reflect::set(&msg, &JsValue::from_str("type"), &JsValue::from_str("hush:scan-once"))?;
+    let promise: Promise = send_fn
+        .call2(&tabs, &JsValue::from_f64(tab_id as f64), &msg.into())?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.tabs.sendMessage did not return a Promise"))?;
+    JsFuture::from(promise).await?;
+    Ok(())
+}

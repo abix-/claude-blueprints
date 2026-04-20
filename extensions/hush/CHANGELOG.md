@@ -7,6 +7,25 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+### Stage 4 progress: popup UI porting to Leptos
+- Iter 1 scaffold: Leptos 0.8 + `src/ui_popup.rs` + `mountPopup`
+  wasm-bindgen export + `popup.js` bootstrap + `<div
+  id="rust-popup-root">` mount point in `popup.html`.
+- Iter 2: `MatchedSite` + `ActivitySummary` components. The old
+  `<div id="match">` + its JS writes deleted.
+- Iter 3: `SuggestionsList` + `SuggestionRow` with Add / Dismiss /
+  Allow. New `src/chrome_bridge.rs` async helpers call
+  `chrome.runtime.sendMessage` via `js_sys::Reflect` +
+  `wasm-bindgen-futures`. 255-line JS render block deleted.
+- Iter 4: Why? (dedup diag) + Evidence (raw observations with Copy
+  button) expandable per-row panels.
+- Iter 5: `DetectorCta` component owns the Enable / Scan-once /
+  Rescan row with `chrome.storage.local` + `chrome.tabs.sendMessage`
+  from Rust. `#suggestions-block` deleted from `popup.html`.
+
+Remaining before Stage 4 is fully complete: port the blocked-URL
+list, removed-element evidence, and block-rule diagnostics sections.
+
 ## [0.10.0] - 2026-04-19
 
 ### Licensing
