@@ -66,16 +66,28 @@ JS renderers `renderBlockedList` + `renderBlockDiagnostics` +
 `escapeHtml` (~170 LOC) and the `#block-count` / `#block-list` /
 `#block-evidence` / `#block-diagnostics` DOM anchors in `popup.html`.
 
+**Iter 7 (Removed + Hidden sections)**: the last two per-section JS
+renderers ported. `RemovedSection` + `RemovedEvidence` +
+`HiddenSection` components replace `renderSelectorList` +
+`renderRemovedEvidence` + `makeCopyButton` + `timeOnly` (Rust's
+`js_sys::Date::to_time_string` slice replaces the JS helper). New
+type `RemovedElement` in `src/types.rs`; `PopupSnapshot` carries
+`remove_selectors` + `hide_selectors` as `IndexMap<String, u32>` to
+preserve the content script's insertion order. The `#sections` div
+is gone from `popup.html` - all diagnostic sections live inside the
+Leptos tree now. Stage 4 is fully `[x]` modulo the 100ms cold-open
+verification.
+
 Bundle trajectory: ~552KB (pre-Leptos) -> ~580KB (iter 2) -> ~652KB
 (iter 3, adds signals + async runtime) -> ~688KB (iter 4, clipboard
-+ expandable panels) -> ~NNNKB (iter 5) -> ~NNNKB (iter 6). Numbers
-are unoptimized (wasm-opt still disabled until the bundled binaryen
-catches up with rustc 1.95's nontrapping-fptoint).
++ expandable panels) -> ~NNNKB (iter 5) -> ~NNNKB (iter 6) ->
+~NNNKB (iter 7). Numbers are unoptimized (wasm-opt still disabled
+until the bundled binaryen catches up with rustc 1.95's
+nontrapping-fptoint).
 
-Remaining before Stage 4 is fully [x]: port the Remove + Hide
-selector lists and the removed-element evidence panel. Those still
-render via `popup.js` onto `#remove-list` / `#hide-list` /
-`#remove-evidence` roots.
+Remaining before Stage 4 is fully [x]: verify cold-open render time
+against the 100ms budget in DevTools Performance (no code changes
+expected, only measurement).
 
 ## Stage 3: Main-world hooks in Rust (0.10.0)
 

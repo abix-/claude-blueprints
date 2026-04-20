@@ -11,7 +11,10 @@
 //! iterations.
 
 use crate::chrome_bridge;
-use crate::types::{BlockDiagnostic, BlockedUrl, Suggestion, SuggestionDiag, SuggestionLayer};
+use crate::types::{
+    BlockDiagnostic, BlockedUrl, RemovedElement, Suggestion, SuggestionDiag, SuggestionLayer,
+};
+use indexmap::IndexMap;
 use js_sys::Reflect;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -117,6 +120,21 @@ pub struct PopupSnapshot {
     /// status, and any broken-pattern hint.
     #[serde(default)]
     pub block_diagnostics: Vec<BlockDiagnostic>,
+    /// Remove-layer selectors observed on this tab, mapped to their
+    /// match counts. `IndexMap` preserves the insertion order the
+    /// content script reported so the popup's list matches the order
+    /// the user authored the selectors in the site config.
+    #[serde(default)]
+    pub remove_selectors: IndexMap<String, u32>,
+    /// Hide-layer selectors observed on this tab, mapped to their
+    /// match counts. Same ordering guarantee as `remove_selectors`.
+    #[serde(default)]
+    pub hide_selectors: IndexMap<String, u32>,
+    /// Recently-removed DOM elements reported by the content script.
+    /// Rendered as a collapsible evidence panel under the Removed
+    /// section.
+    #[serde(default)]
+    pub removed_elements: Vec<RemovedElement>,
 }
 
 /// WASM entry. Called by `popup.js` once per popup open.
@@ -182,6 +200,14 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
                         blocked_urls=snap.blocked_urls.clone()
                         diagnostics=snap.block_diagnostics.clone()
                         block_count=snap.block_count
+                    />
+                    <RemovedSection
+                        selectors=snap.remove_selectors.clone()
+                        removed_elements=snap.removed_elements.clone()
+                    />
+                    <HiddenSection
+                        selectors=snap.hide_selectors.clone()
+                        remove_selectors=snap.remove_selectors.clone()
                     />
                 </div>
             }.into_any()
@@ -453,6 +479,202 @@ fn RuleRow(diag: BlockDiagnostic) -> impl IntoView {
             {hint}
         </div>
     }.into_any()
+}
+
+/// Removed (DOM) section. Replaces the `#remove-count` / `#remove-list`
+/// / `#remove-evidence` renderers. Lists configured Remove-layer
+/// selectors with their match counts, plus a collapsible evidence
+/// panel of recently-detached elements.
+#[component]
+fn RemovedSection(
+    selectors: IndexMap<String, u32>,
+    removed_elements: Vec<RemovedElement>,
+) -> impl IntoView {
+    let total: u32 = selectors.values().sum();
+    let has_selectors = !selectors.is_empty();
+    let has_evidence = !removed_elements.is_empty();
+    let count_class = if total == 0 { "count zero" } else { "count" };
+
+    let selector_rows: Vec<_> = selectors
+        .into_iter()
+        .map(|(sel, n)| {
+            let title = sel.clone();
+            view! {
+                <li>
+                    <span class="sel" title=title>{sel}</span>
+                    <span class="n">{n}</span>
+                </li>
+            }
+        })
+        .collect();
+
+    view! {
+        <details class="section">
+            <summary class="section-head">
+                <span class="section-name">"Removed (DOM)"</span>
+                <span class=count_class>{total}</span>
+            </summary>
+            <ul>
+                {if has_selectors {
+                    selector_rows.into_any()
+                } else {
+                    view! {
+                        <div class="no-sels">"No remove selectors configured"</div>
+                    }.into_any()
+                }}
+            </ul>
+            {if has_evidence {
+                view! { <RemovedEvidence removed_elements=removed_elements /> }.into_any()
+            } else { view! { <div /> }.into_any() }}
+        </details>
+    }
+}
+
+/// Collapsible evidence list for the Removed section. Split into its
+/// own component so the toggle/copy state is scoped to one section.
+#[component]
+fn RemovedEvidence(removed_elements: Vec<RemovedElement>) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let copy_label = RwSignal::new("Copy");
+    let total = removed_elements.len();
+
+    // Newest first, joined to newline-separated TSV.
+    let copy_payload: String = removed_elements
+        .iter()
+        .rev()
+        .map(|ev| {
+            format!(
+                "{}\t{}\t(via {})",
+                time_only(&ev.t),
+                if ev.el.is_empty() { "?".to_string() } else { ev.el.clone() },
+                if ev.selector.is_empty() { "?".to_string() } else { ev.selector.clone() },
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let on_copy = move |_| {
+        let ok = clipboard_write(&copy_payload);
+        copy_label.set(if ok { "Copied" } else { "Failed" });
+        let label = copy_label;
+        if let Some(window) = web_sys::window() {
+            let cb = Closure::<dyn Fn()>::new(move || label.set("Copy"));
+            let _ = window
+                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(),
+                    1500,
+                );
+            cb.forget();
+        }
+    };
+
+    let rows: Vec<_> = removed_elements
+        .iter()
+        .rev()
+        .map(|ev| {
+            let ts = time_only(&ev.t);
+            let title = format!("{} -> {}", ev.selector, ev.el);
+            let el = if ev.el.is_empty() { "?".to_string() } else { ev.el.clone() };
+            let sel = if ev.selector.is_empty() {
+                "?".to_string()
+            } else {
+                ev.selector.clone()
+            };
+            let body = format!("{}  (via {})", el, sel);
+            view! {
+                <li>
+                    <span class="ts">{ts}</span>
+                    <span title=title>{body}</span>
+                </li>
+            }
+        })
+        .collect();
+
+    let toggle_text = move || {
+        let plural = if total == 1 { "" } else { "s" };
+        let verb = if open.get() { "Hide" } else { "Show" };
+        format!("{} {} removed element{}", verb, total, plural)
+    };
+
+    view! {
+        <div class="evidence">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span class="evidence-toggle"
+                      on:click=move |_| open.update(|v| *v = !*v)>
+                    {toggle_text}
+                </span>
+                <button on:click=on_copy
+                        title="Copy evidence to clipboard"
+                        style="flex:0 0 auto;padding:2px 10px;font-size:10px;cursor:pointer;border:1px solid #ccc;background:#fff;border-radius:4px;">
+                    {move || copy_label.get()}
+                </button>
+            </div>
+            {move || if open.get() {
+                view! {
+                    <ul class="evidence-list">{rows.clone()}</ul>
+                }.into_any()
+            } else { view! { <span /> }.into_any() }}
+        </div>
+    }
+}
+
+/// Hidden (CSS) section. Lists Hide-layer selectors with their match
+/// counts. Selectors that also appear in `remove_selectors` render
+/// with a "- (removed)" italic marker when their count is zero -
+/// the Remove layer detached the node before the CSS rule could
+/// match, which is expected overlap, not a bug.
+#[component]
+fn HiddenSection(
+    selectors: IndexMap<String, u32>,
+    remove_selectors: IndexMap<String, u32>,
+) -> impl IntoView {
+    let total: u32 = selectors.values().sum();
+    let has_selectors = !selectors.is_empty();
+    let count_class = if total == 0 { "count zero" } else { "count" };
+
+    let remove_keys: std::collections::HashSet<String> =
+        remove_selectors.keys().cloned().collect();
+
+    let selector_rows: Vec<_> = selectors
+        .into_iter()
+        .map(|(sel, n)| {
+            let title = sel.clone();
+            let overlaps = n == 0 && remove_keys.contains(&sel);
+            let n_view = if overlaps {
+                view! {
+                    <span class="n" style="font-style:italic;color:#999;">
+                        "- (removed)"
+                    </span>
+                }.into_any()
+            } else {
+                view! { <span class="n">{n}</span> }.into_any()
+            };
+            view! {
+                <li>
+                    <span class="sel" title=title>{sel}</span>
+                    {n_view}
+                </li>
+            }
+        })
+        .collect();
+
+    view! {
+        <details class="section">
+            <summary class="section-head">
+                <span class="section-name">"Hidden (CSS)"</span>
+                <span class=count_class>{total}</span>
+            </summary>
+            <ul>
+                {if has_selectors {
+                    selector_rows.into_any()
+                } else {
+                    view! {
+                        <div class="no-sels">"No hide selectors configured"</div>
+                    }.into_any()
+                }}
+            </ul>
+        </details>
+    }
 }
 
 /// HH:MM:SS from an ISO timestamp. Uses the browser's JS Date so

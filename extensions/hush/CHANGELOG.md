@@ -29,9 +29,20 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
   `BlockDiagnostic` types in `src/types.rs`. ~170 LOC of JS deleted
   (`renderBlockedList`, `renderBlockDiagnostics`, `escapeHtml`) plus
   the four `#block-*` DOM anchors in `popup.html`.
+- Iter 7: `RemovedSection` + `RemovedEvidence` + `HiddenSection`
+  components port the last two diagnostic sections. `PopupSnapshot`
+  carries `remove_selectors` / `hide_selectors` as
+  `IndexMap<String, u32>` so selector insertion order survives the
+  JS -> Rust boundary. New `RemovedElement` type. `renderSelectorList`,
+  `renderRemovedEvidence`, `makeCopyButton`, `timeOnly` deleted from
+  `popup.js`; the `#sections` container (plus `#remove-count` /
+  `#remove-list` / `#remove-evidence` / `#hide-count` / `#hide-list`)
+  removed from `popup.html`. All popup diagnostic sections now live
+  inside the Leptos tree.
 
-Remaining before Stage 4 is fully complete: port the Remove + Hide
-selector lists and the removed-element evidence panel.
+Remaining before Stage 4 is fully complete: verify cold-popup-open
+render time against the 100ms budget (measurement pass, no code
+changes expected).
 
 ## [0.10.0] - 2026-04-19
 

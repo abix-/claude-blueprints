@@ -396,26 +396,8 @@
   <!-- Suggestions list + detector enable/scan/rescan controls are
        rendered by the Leptos component tree at #rust-popup-root above. -->
 
-  <!-- Blocked (network) section is rendered by the Leptos BlockedSection
-       component at #rust-popup-root above (stage 4 iter 6). Remove + Hide
-       sections still live here until the next iteration. -->
-  <div id="sections" class="sections" hidden>
-    <details class="section">
-      <summary class="section-head">
-        <span class="section-name">Removed (DOM)</span>
-        <span id="remove-count" class="count zero">0</span>
-      </summary>
-      <ul id="remove-list"></ul>
-      <div id="remove-evidence" class="evidence" hidden></div>
-    </details>
-    <details class="section">
-      <summary class="section-head">
-        <span class="section-name">Hidden (CSS)</span>
-        <span id="hide-count" class="count zero">0</span>
-      </summary>
-      <ul id="hide-list"></ul>
-    </details>
-  </div>
+  <!-- Blocked / Removed / Hidden sections all render inside the Leptos
+       tree at #rust-popup-root above (stage 4 iter 6 + iter 7). -->
 
   <footer>
     <button id="options">Open options</button>

@@ -152,6 +152,21 @@ pub struct BlockDiagnostic {
     pub matching_urls: Vec<String>,
 }
 
+/// One DOM-removed element observation recorded by `content.js` when a
+/// Remove-layer selector matches and the node is detached. Popup shows
+/// these in a collapsible evidence panel newest-first.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RemovedElement {
+    #[serde(default)]
+    pub t: String,
+    /// The Remove-layer CSS selector that matched the node.
+    #[serde(default)]
+    pub selector: String,
+    /// Short human-readable description of the element (tag + id/class).
+    #[serde(default)]
+    pub el: String,
+}
+
 /// Persistent allowlist in `chrome.storage.local`. All three lists are
 /// independent user-editable arrays. `suggestions` is the per-key
 /// cross-session allowlist populated by the popup's "Allow" button;

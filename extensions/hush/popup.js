@@ -1,9 +1,9 @@
 // Popup is an ES module (popup.html uses type="module"). Import the
 // wasm-bindgen glue statically so instantiation starts at parse time.
 // The returned `wasmReady` promise is awaited in main() before mounting
-// the Leptos subtree. Remaining JS renderers (remove + hide sections,
-// removed-element evidence) get ported to Leptos in the next stage 4
-// iteration; their #remove-* / #hide-* DOM anchors live in popup.html.
+// the Leptos subtree. All per-section renderers live in Rust now
+// (src/ui_popup.rs); this file is just wasm init + chrome API queries
+// + footer button handlers.
 import initWasm, { initEngine, mountPopup, refreshPopupSuggestions } from "./dist/pkg/hush.js";
 
 const wasmReady = initWasm().then(() => {
@@ -19,10 +19,11 @@ async function main() {
   const tabId = tab && tab.id;
   const hostname = tab && tab.url ? safeHostname(tab.url) : "";
 
-  // #match + suggestion list + detector CTA are now rendered by the
-  // Leptos tree at #rust-popup-root. Remaining JS-owned elements are
-  // listed here.
-  const sectionsEl = document.getElementById("sections");
+  // The entire popup body (matched-site header, activity, suggestions,
+  // detector CTA, and the three diagnostic sections) is rendered by the
+  // Leptos tree at #rust-popup-root. This file owns footer buttons,
+  // the unmatched placeholder, and the chrome API queries that feed
+  // mountPopup.
   const unmatchedEl = document.getElementById("unmatched");
   const createSiteBtn = document.getElementById("create-site");
 
@@ -97,20 +98,10 @@ async function main() {
   if (!isMatched) {
     unmatchedEl.hidden = false;
     createSiteBtn.style.display = "inline-block";
-  } else {
-    sectionsEl.hidden = false;
-
-    // Block section (list + evidence + diagnostics) is rendered by the
-    // Leptos tree at #rust-popup-root via the snapshot below. Remove +
-    // Hide sections still live in JS and get ported in the next stage
-    // 4 iteration.
-    renderSelectorList("remove", stats.remove || {}, null);
-    renderRemovedEvidence(stats.removedElements || []);
-    const removeKeys = new Set(Object.keys(stats.remove || {}));
-    renderSelectorList("hide", stats.hide || {}, removeKeys);
   }
 
-  // Suggestions list + detector CTA are rendered by the Leptos tree.
+  // All diagnostic sections (Blocked, Removed, Hidden) render inside
+  // the Leptos tree via mountPopup. No JS-side per-section DOM work left.
 
   // Hand everything the Leptos root needs in one snapshot.
   const sumCounts = (m) => Object.values(m || {}).reduce((a, b) => a + (Number(b) || 0), 0);
@@ -129,132 +120,11 @@ async function main() {
       isMatched,
       blockedUrls: stats.blockedUrls || [],
       blockDiagnostics: (diagResp && diagResp.diagnostics) || [],
+      removeSelectors: stats.remove || {},
+      hideSelectors: stats.hide || {},
+      removedElements: stats.removedElements || [],
     });
   } catch (e) { console.error("[Hush popup] mountPopup failed", e); }
-}
-
-// --- Deleted in Stage 4 iter 3 (moved to src/ui_popup.rs) ---
-// renderSuggestions, refreshSuggestions, renderSuggList, renderSuggRow
-// now live in Rust Leptos components.
-
-function renderSelectorList(kind, entries, overlapSet) {
-  const countEl = document.getElementById(kind + "-count");
-  const listEl = document.getElementById(kind + "-list");
-  const keys = Object.keys(entries || {});
-  const total = keys.reduce((a, k) => a + (entries[k] || 0), 0);
-  countEl.textContent = String(total);
-  countEl.classList.toggle("zero", total === 0);
-  listEl.innerHTML = "";
-  if (!keys.length) {
-    const p = document.createElement("div");
-    p.className = "no-sels";
-    p.textContent = "No " + kind + " selectors configured";
-    listEl.appendChild(p);
-    return;
-  }
-  for (const key of keys) {
-    const li = document.createElement("li");
-    const sel = document.createElement("span");
-    sel.className = "sel";
-    sel.title = key;
-    sel.textContent = key;
-    const n = document.createElement("span");
-    n.className = "n";
-    const count = entries[key] || 0;
-    if (count === 0 && overlapSet && overlapSet.has(key)) {
-      n.textContent = "- (removed)";
-      n.style.fontStyle = "italic";
-      n.style.color = "#999";
-    } else {
-      n.textContent = String(count);
-    }
-    li.appendChild(sel);
-    li.appendChild(n);
-    listEl.appendChild(li);
-  }
-}
-
-function renderRemovedEvidence(removedElements) {
-  const container = document.getElementById("remove-evidence");
-  if (!removedElements.length) {
-    container.hidden = true;
-    return;
-  }
-  container.hidden = false;
-  container.innerHTML = "";
-  const header = document.createElement("div");
-  header.style.cssText = "display:flex;align-items:center;gap:8px;";
-  const toggle = document.createElement("span");
-  toggle.className = "evidence-toggle";
-  toggle.textContent = "Show " + removedElements.length + " removed element" +
-    (removedElements.length === 1 ? "" : "s");
-  header.appendChild(toggle);
-  const copyBtn = makeCopyButton(() =>
-    removedElements
-      .slice()
-      .reverse()
-      .map(ev => timeOnly(ev.t) + "\t" + (ev.el || "?") + "\t(via " + (ev.selector || "?") + ")")
-      .join("\n")
-  );
-  header.appendChild(copyBtn);
-  container.appendChild(header);
-  const list = document.createElement("ul");
-  list.className = "evidence-list";
-  list.hidden = true;
-  const items = removedElements.slice().reverse();
-  for (const ev of items) {
-    const li = document.createElement("li");
-    const ts = document.createElement("span");
-    ts.className = "ts";
-    ts.textContent = timeOnly(ev.t);
-    const body = document.createElement("span");
-    body.title = (ev.selector || "") + " -> " + (ev.el || "");
-    body.textContent = (ev.el || "?") + "  (via " + (ev.selector || "?") + ")";
-    li.appendChild(ts);
-    li.appendChild(body);
-    list.appendChild(li);
-  }
-  container.appendChild(list);
-  toggle.addEventListener("click", () => {
-    list.hidden = !list.hidden;
-    toggle.textContent = (list.hidden ? "Show " : "Hide ") +
-      removedElements.length + " removed element" +
-      (removedElements.length === 1 ? "" : "s");
-  });
-}
-
-// Small "Copy" button that copies the result of getText() to the clipboard
-// and briefly shows "Copied" feedback. Used across evidence sections.
-function makeCopyButton(getText) {
-  const btn = document.createElement("button");
-  btn.textContent = "Copy";
-  btn.title = "Copy evidence to clipboard";
-  btn.style.cssText = "flex:0 0 auto;padding:2px 10px;font-size:10px;cursor:pointer;border:1px solid #ccc;background:#fff;border-radius:4px;";
-  btn.addEventListener("click", async (e) => {
-    e.stopPropagation();
-    const orig = btn.textContent;
-    try {
-      await navigator.clipboard.writeText(getText());
-      btn.textContent = "Copied";
-    } catch (err) {
-      btn.textContent = "Failed";
-    }
-    setTimeout(() => { btn.textContent = orig; }, 1500);
-  });
-  return btn;
-}
-
-// renderBlockedList + renderBlockDiagnostics were ported to the Leptos
-// BlockedSection component in src/ui_popup.rs (stage 4 iter 6). See
-// popup.html for the removed #block-* DOM anchors.
-
-function timeOnly(iso) {
-  try {
-    const d = new Date(iso);
-    return d.toTimeString().slice(0, 8);
-  } catch (e) {
-    return "";
-  }
 }
 
 function findConfigEntry(config, host) {

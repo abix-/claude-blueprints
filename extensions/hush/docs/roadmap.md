@@ -81,9 +81,11 @@ popup open under 100 ms.*
 - [x] Port the blocked-URL list and block-rule diagnostics panel
       (`BlockedSection` component, new `BlockedUrl` + `BlockDiagnostic`
       types)
-- [ ] Port the Remove + Hide selector lists and the removed-element
-      evidence panel (still `popup.js` renderers targeting
-      `#remove-list` / `#hide-list` / `#remove-evidence`)
+- [x] Port the Remove + Hide selector lists and the removed-element
+      evidence panel (`RemovedSection` + `RemovedEvidence` +
+      `HiddenSection` components, new `RemovedElement` type,
+      `IndexMap<String, u32>` selector maps). `#sections` div deleted
+      from `popup.html`.
 - [ ] Verify cold-open render time in DevTools Performance against the
       100ms budget
 
