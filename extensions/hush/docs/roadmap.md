@@ -53,7 +53,13 @@ module with 9 unit tests for the shadow heuristic. Phase B
 dead-vs-no-hits distinction) is deferred.
 Stage 13: **Rule simulate** — test-match UI. Given a URL or a
 DOM snippet, show which rule would fire (block / allow / remove
-/ hide / spoof) and why.
+/ hide / spoof / neuter / silence) and why.
+Stage 14: **Neuter + silence shipped** — two new main-world
+actions for session-replay neutralization. Neuter denies the
+capture surface (addEventListener) at document_start; silence
+intercepts exfil (fetch/XHR/beacon) with fake-success. Replay-
+listener detector upgraded to suggest neuter instead of URL
+block.
 
 ## Next up (priority order)
 

@@ -966,22 +966,35 @@ pub(crate) fn detect_from_js_calls(
     }
 
     // Listener density: 12+ interaction listeners from one origin in <60s.
+    // Emits a `neuter` suggestion (not block) — neuter denies the
+    // listener registrations upstream so no capture loop runs. The
+    // rule's match value is the script-origin URL pattern, not the
+    // request URL — main-world enforcement checks the stack origin
+    // against it at addEventListener call time.
     for (origin, info) in &s.listener_types_by_origin {
         if info.count >= 12 && info.types.len() >= 3 && s.seconds_since_first < 60 {
+            if origin.is_empty() {
+                continue;
+            }
+            let value = block_value(origin);
             let types: Vec<&str> = info.types.iter().map(String::as_str).collect();
-            emit_origin_block(
-                ctx,
-                &mut out,
-                origin,
-                format!(
+            out.push(ctx.finish(BuildSuggestionInput {
+                key: format!("neuter::{value}::listener-density"),
+                layer: SuggestionLayer::Neuter,
+                value: value.clone(),
+                reason: format!(
                     "session replay pattern ({} interaction listeners attached: {})",
                     info.count,
                     types.join(", ")
                 ),
-                80,
-                "listener-density",
-                LearnKind::ReplayListener,
-            );
+                confidence: 80,
+                count: info.count,
+                evidence: vec![],
+                from_frame: None,
+                learn: LearnKind::ReplayListener.text().to_string(),
+                kind: LearnKind::ReplayListener.tag().to_string(),
+                ..ctx.ctx_fields()
+            }));
         }
     }
 

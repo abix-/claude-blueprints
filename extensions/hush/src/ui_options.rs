@@ -761,6 +761,16 @@ fn SiteDetailBody(
         <LayerSection
             config=config
             domain=domain.clone()
+            layer=LayerKind::Neuter
+        />
+        <LayerSection
+            config=config
+            domain=domain.clone()
+            layer=LayerKind::Silence
+        />
+        <LayerSection
+            config=config
+            domain=domain.clone()
             layer=LayerKind::Remove
         />
         <LayerSection
@@ -781,6 +791,8 @@ fn SiteDetailBody(
 enum LayerKind {
     Block,
     Allow,
+    Neuter,
+    Silence,
     Remove,
     Hide,
     Spoof,
@@ -791,6 +803,8 @@ impl LayerKind {
         match self {
             Self::Block => "Block (network)",
             Self::Allow => "Allow (exception)",
+            Self::Neuter => "Neuter (script capture)",
+            Self::Silence => "Silence (script exfil)",
             Self::Remove => "Remove (DOM)",
             Self::Hide => "Hide (CSS)",
             Self::Spoof => "Spoof (fingerprint)",
@@ -807,6 +821,21 @@ impl LayerKind {
                  broader Block rule via DNR priority; CSS selectors here exclude \
                  matching nodes from the Remove and Hide passes. Use this to carve \
                  an allowance out of a global rule on a single site."
+            }
+            Self::Neuter => {
+                "Script-origin URL patterns. Interaction-event listeners \
+                 (click/keydown/mouse/scroll/touch) registered from a matching \
+                 script origin are silently denied before any capture code runs. \
+                 Upstream defense for session-replay vendors: no listener, no \
+                 capture, no exfil, no CPU burn. Legitimate site listeners from \
+                 other origins register normally."
+            }
+            Self::Silence => {
+                "Script-origin URL patterns. Outbound fetch / XHR / sendBeacon \
+                 calls from a matching script origin are intercepted and fake- \
+                 succeeded (204 No Content). Fallback for bundled first-party \
+                 replay libraries where Neuter can't match by origin without \
+                 false-positives on legitimate listeners."
             }
             Self::Remove => {
                 "CSS selectors whose matching elements are physically removed from the \
@@ -828,6 +857,8 @@ impl LayerKind {
         match self {
             Self::Block => "Add URL pattern like ||ads.example.com",
             Self::Allow => "Add URL pattern or CSS selector to exempt",
+            Self::Neuter => "Add script-origin URL pattern like ||hotjar.com",
+            Self::Silence => "Add script-origin URL pattern like ||hotjar.com",
             Self::Remove => "Add CSS selector like .modal-overlay",
             Self::Hide => "Add CSS selector like .popup",
             Self::Spoof => "Add kind tag like webgl-unmasked",
@@ -837,6 +868,8 @@ impl LayerKind {
         match self {
             Self::Block => &cfg.block,
             Self::Allow => &cfg.allow,
+            Self::Neuter => &cfg.neuter,
+            Self::Silence => &cfg.silence,
             Self::Remove => &cfg.remove,
             Self::Hide => &cfg.hide,
             Self::Spoof => &cfg.spoof,
@@ -846,6 +879,8 @@ impl LayerKind {
         match self {
             Self::Block => &mut cfg.block,
             Self::Allow => &mut cfg.allow,
+            Self::Neuter => &mut cfg.neuter,
+            Self::Silence => &mut cfg.silence,
             Self::Remove => &mut cfg.remove,
             Self::Hide => &mut cfg.hide,
             Self::Spoof => &mut cfg.spoof,

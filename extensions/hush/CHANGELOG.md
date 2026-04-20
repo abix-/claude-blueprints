@@ -7,6 +7,57 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-20
+
+### Stage 14: neuter + silence actions (replay-vendor kill chain)
+- Two new actions added to `SiteConfig` alongside
+  block/allow/remove/hide/spoof:
+  - **`neuter`**: script-origin URL filter. Main-world wraps
+    `EventTarget.prototype.addEventListener` at document_start and
+    denies interaction-event registrations (click, keydown/up,
+    mousedown/up/move, scroll, wheel, touch*, keypress, input)
+    whose caller stack origin matches. Listeners that don't
+    register never fire — no CPU burn per keystroke, no capture,
+    no exfil. Legitimate site listeners from other origins pass.
+  - **`silence`**: script-origin URL filter. Main-world intercepts
+    outbound fetch / `XMLHttpRequest.send` / `navigator.sendBeacon`
+    calls whose stack origin matches and fake-succeeds them
+    (fetch → 204; XHR → readystatechange to state 4 status 204;
+    beacon → `true`). Fallback for bundled first-party replay
+    where neuter can't match by origin without false-positives.
+- `mainworld.js` gains `stackOriginHost()`, `matchesUrlFilter()`,
+  `findFilterMatch()` helpers — 40-line pure-JS mirror of
+  `src/stack.rs::script_origin_from_stack` (mainworld can't call
+  WASM, CSP). Dataset carriers `dataset.hushNeuter` /
+  `dataset.hushSilence` hold the comma-separated merged rule
+  list; content.js writes them right after `dataset.hushSpoof`
+  using the existing write-and-read-at-call-time pattern.
+- `content.js` relays `__hush_neuter_hit__` / `__hush_silence_hit__`
+  CustomEvents as `hush:neuter-hit` / `hush:silence-hit` messages.
+  Background emits unified `FirewallEvent { action: "neuter"|
+  "silence" }` through the existing per-tab log. Dedup is per
+  (origin, page) so a busy exfil-er emits one log event per page
+  load, not one per call.
+- `handle_accept_suggestion` accepts `layer: "neuter"` and
+  `layer: "silence"`. Options editor gains matching sections
+  grouped after Allow (script-origin actions cluster together).
+  Popup firewall-log enumerates both new actions with distinct
+  badge colors (neuter = indigo, silence = teal).
+- Replay-listener detector now emits `SuggestionLayer::Neuter`
+  suggestions with `key = "neuter::<origin>::listener-density"`
+  so accepting the suggestion authors a neuter rule instead of
+  the old block-the-URL rule. The replay-vendor detector (global
+  sentinels) keeps emitting `Block` — vendor origins are already
+  host-distinct so a URL block still makes sense there.
+- `background.js` schema migration `FIELDS` gains `"neuter"` and
+  `"silence"` so any future import/export round-trips cleanly.
+- Tests: `neuter_and_silence_roundtrip_through_site_config` and
+  `merged_site_config_merges_neuter_and_silence` lock the schema
+  and merge behaviour.
+- Deferred: MutationObserver / PerformanceObserver / ResizeObserver
+  neuter variants, vendor-global no-op, neuter/silence allow-
+  overrides. See roadmap for the follow-ups.
+
 ## [0.11.0] - 2026-04-20
 
 ### Stage 9 phase 1: RuleEntry schema migration

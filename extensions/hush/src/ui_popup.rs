@@ -336,11 +336,15 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
         {
             let any_rules = !snap.global_rules.block.is_empty()
                 || !snap.global_rules.allow.is_empty()
+                || !snap.global_rules.neuter.is_empty()
+                || !snap.global_rules.silence.is_empty()
                 || !snap.global_rules.remove.is_empty()
                 || !snap.global_rules.hide.is_empty()
                 || !snap.global_rules.spoof.is_empty()
                 || !snap.site_rules.block.is_empty()
                 || !snap.site_rules.allow.is_empty()
+                || !snap.site_rules.neuter.is_empty()
+                || !snap.site_rules.silence.is_empty()
                 || !snap.site_rules.remove.is_empty()
                 || !snap.site_rules.hide.is_empty()
                 || !snap.site_rules.spoof.is_empty();
@@ -608,6 +612,8 @@ fn FirewallLog(
                 .iter()
                 .map(|e| ("block", e))
                 .chain(cfg.allow.iter().map(|e| ("allow", e)))
+                .chain(cfg.neuter.iter().map(|e| ("neuter", e)))
+                .chain(cfg.silence.iter().map(|e| ("silence", e)))
                 .chain(cfg.remove.iter().map(|e| ("remove", e)))
                 .chain(cfg.hide.iter().map(|e| ("hide", e)))
                 .chain(cfg.spoof.iter().map(|e| ("spoof", e)));
@@ -743,6 +749,8 @@ fn FirewallLog(
                     .iter()
                     .map(|m| ("block", m.value.as_str()))
                     .chain(cfg.allow.iter().map(|m| ("allow", m.value.as_str())))
+                    .chain(cfg.neuter.iter().map(|m| ("neuter", m.value.as_str())))
+                    .chain(cfg.silence.iter().map(|m| ("silence", m.value.as_str())))
                     .chain(cfg.remove.iter().map(|m| ("remove", m.value.as_str())))
                     .chain(cfg.hide.iter().map(|m| ("hide", m.value.as_str())))
                     .chain(cfg.spoof.iter().map(|m| ("spoof", m.value.as_str())));
@@ -892,6 +900,8 @@ fn FirewallLog(
                     <option value="" selected=true>"all actions"</option>
                     <option value="block">"block"</option>
                     <option value="allow">"allow"</option>
+                    <option value="neuter">"neuter"</option>
+                    <option value="silence">"silence"</option>
                     <option value="remove">"remove"</option>
                     <option value="hide">"hide"</option>
                     <option value="spoof">"spoof"</option>
@@ -971,6 +981,9 @@ fn FirewallLogRow(row: RuleRow, events: Vec<FirewallEvent>) -> impl IntoView {
 
     let (badge_bg, badge_fg, badge_label) = match row.action.as_str() {
         "block" => ("#d85c4f", "#fff", "BLOCK"),
+        "allow" => ("#2f9e4a", "#fff", "ALLOW"),
+        "neuter" => ("#6b5cd4", "#fff", "NEUTER"),
+        "silence" => ("#4fa89a", "#fff", "SILENCE"),
         "remove" => ("#d89a4f", "#fff", "REMOVE"),
         "hide" => ("#6b8ad4", "#fff", "HIDE"),
         "spoof" => ("#8a4fc3", "#fff", "SPOOF"),

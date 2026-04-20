@@ -41,8 +41,8 @@ A Hush rule is a **(scope, action, match)** triple:
 | Dimension | Values | What it means |
 |---|---|---|
 | Scope | `global` \| `<domain>` | Which tabs the rule evaluates on |
-| Action | `block` \| `allow` \| `remove` \| `hide` \| `spoof` | What the rule does when it matches |
-| Match | URL pattern, CSS selector, or fingerprint kind | What the rule looks at |
+| Action | `block` \| `allow` \| `neuter` \| `silence` \| `remove` \| `hide` \| `spoof` | What the rule does when it matches |
+| Match | URL pattern, CSS selector, script-origin URL pattern, or fingerprint kind | What the rule looks at |
 
 Rules also carry optional metadata used by the log and the editor:
 
@@ -69,15 +69,30 @@ Rules also carry optional metadata used by the log and the editor:
    user write "globally block `||doubleclick.net`, but allow
    `doubleclick.net/adx/` on this one site" — impossible in earlier
    versions.
-3. **Remove (DOM)** — CSS selectors whose matching elements are
+3. **Neuter (script capture)** — script-origin URL filters
+   matched against the initiating-script stack host. At
+   document_start, main-world wraps
+   `EventTarget.prototype.addEventListener` to deny
+   interaction-event registrations from matching origins.
+   Listeners that don't register never fire — no CPU burn per
+   keystroke, no capture, no exfil. Upstream defense for
+   session-replay vendors.
+4. **Silence (script exfil)** — script-origin URL filters,
+   enforcement in main-world. Intercepts outbound `fetch` /
+   `XMLHttpRequest.send` / `navigator.sendBeacon` calls whose
+   caller stack origin matches, and fake-succeeds them (204 No
+   Content / XHR state-4 status-204 / beacon-true). Fallback for
+   bundled first-party replay where Neuter can't match by origin
+   without false-positives.
+5. **Remove (DOM)** — CSS selectors whose matching elements are
    physically deleted via `element.remove()`. A `MutationObserver`
    re-applies on every DOM mutation so SPA routers and infinite-scroll
    insertions can't sneak the element back in.
-4. **Hide (CSS)** — CSS selectors applied with
+6. **Hide (CSS)** — CSS selectors applied with
    `display: none !important` via a user stylesheet injected at
    `document_start`. The element stays in the DOM; it doesn't
    render. Mildest action.
-5. **Spoof (fingerprint)** — kind tags (e.g. `webgl-unmasked`) that
+7. **Spoof (fingerprint)** — kind tags (e.g. `webgl-unmasked`) that
    swap the real value returned by a fingerprinting API for a
    bland identical-across-users default. First case: WebGL
    `UNMASKED_VENDOR_WEBGL` / `UNMASKED_RENDERER_WEBGL` returning
