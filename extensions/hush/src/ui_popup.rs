@@ -1930,7 +1930,15 @@ where
     // doesn't fire the same message twice.
     let busy = RwSignal::new(false);
 
-    let add_action = {
+    // Shared accept closure factory — one call site, parameterised
+    // by scope. Lands the rule under either the tab's site or the
+    // reserved `__global__` entry. After the write succeeds, reload
+    // the tab so the new rule actually takes effect: DNR rules only
+    // apply to future requests, content-script passes only run on
+    // load, and main-world hooks install at document_start. Without
+    // the reload the user sees their rule in options but nothing
+    // changes visibly until they refresh manually.
+    let make_accept = |scope: &'static str| {
         let hostname = hostname.clone();
         let layer = layer_str.to_string();
         let value = suggestion.value.clone();
@@ -1947,19 +1955,35 @@ where
             let kind = kind.clone();
             let on_mutated = on_mutated.clone();
             spawn_local(async move {
-                if let Err(e) =
-                    chrome_bridge::accept_suggestion(&hostname, &layer, &value, &kind).await
+                match chrome_bridge::accept_suggestion(
+                    &hostname, &layer, &value, &kind, scope,
+                )
+                .await
                 {
-                    web_sys::console::error_1(&JsValue::from_str(&format!(
-                        "[Hush popup] accept_suggestion: {:?}",
-                        e
-                    )));
+                    Ok(()) => {
+                        if let Some(tid) = tab_id {
+                            if let Err(e) = chrome_bridge::reload_tab(tid) {
+                                web_sys::console::warn_1(&JsValue::from_str(&format!(
+                                    "[Hush popup] reload_tab: {:?}",
+                                    e
+                                )));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        web_sys::console::error_1(&JsValue::from_str(&format!(
+                            "[Hush popup] accept_suggestion: {:?}",
+                            e
+                        )));
+                    }
                 }
                 busy.set(false);
                 on_mutated();
             });
         }
     };
+    let add_action_site = make_accept("site");
+    let add_action_global = make_accept("global");
 
     let dismiss_action = {
         let key = suggestion.key.clone();
@@ -2071,13 +2095,23 @@ where
             <div style="display:flex; gap: 6px; margin-top: 6px;">
                 <button
                     disabled=move || busy.get()
-                    on:click=add_action
+                    on:click=add_action_site
                     style="padding: 4px 10px; font-size: 11px;
                            background: #2b7cff; color: #fff;
                            border: 1px solid #2b7cff; border-radius: 3px;
                            cursor: pointer;"
-                    title="Write this suggestion into the matched site's config">
-                    "+ Add"
+                    title="Write this suggestion into the matched site's config and reload the tab">
+                    "+ Add site"
+                </button>
+                <button
+                    disabled=move || busy.get()
+                    on:click=add_action_global
+                    style="padding: 4px 10px; font-size: 11px;
+                           background: #3b4e7a; color: #fff;
+                           border: 1px solid #3b4e7a; border-radius: 3px;
+                           cursor: pointer;"
+                    title="Write this suggestion under the global scope (applies on every tab) and reload">
+                    "+ Add global"
                 </button>
                 <button
                     disabled=move || busy.get()

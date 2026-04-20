@@ -77,6 +77,10 @@ struct AcceptSuggestionMsg<'a> {
     /// `auto:<kind>` into the resulting `RuleEntry.tags` so the
     /// firewall log can filter by detector origin.
     kind: &'a str,
+    /// `"site"` (default) writes under the matched hostname's
+    /// SiteConfig. `"global"` writes under the reserved
+    /// `__global__` scope so the rule applies to every tab.
+    scope: &'a str,
 }
 
 #[derive(Serialize)]
@@ -120,12 +124,15 @@ struct OkResp {
     ok: bool,
 }
 
-/// POST the accept-suggestion action, then refetch.
+/// POST the accept-suggestion action, then refetch. `scope` is
+/// `"site"` or `"global"` — controls which SiteConfig the new
+/// rule lands under.
 pub async fn accept_suggestion(
     hostname: &str,
     layer: &str,
     value: &str,
     kind: &str,
+    scope: &str,
 ) -> Result<(), JsValue> {
     let _: OkResp = send(&AcceptSuggestionMsg {
         type_: "hush:accept-suggestion",
@@ -133,6 +140,7 @@ pub async fn accept_suggestion(
         layer,
         value,
         kind,
+        scope,
     })
     .await?;
     Ok(())

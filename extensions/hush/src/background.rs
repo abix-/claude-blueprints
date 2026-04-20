@@ -1809,6 +1809,10 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
         .ok()
         .and_then(|v| v.as_string())
         .unwrap_or_default();
+    let scope = Reflect::get(msg, &JsValue::from_str("scope"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .unwrap_or_else(|| "site".to_string());
     if hostname.is_empty() || layer.is_empty() || value.is_empty() {
         let reply = Object::new();
         let _ = Reflect::set(&reply, &JsValue::from_str("ok"), &JsValue::FALSE);
@@ -1822,8 +1826,19 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
     }
     spawn_local(async move {
         let mut config = load_config().await.unwrap_or_default();
-        // Find existing matching key (exact or suffix) or insert new one.
-        let target_key = if config.contains_key(&hostname) {
+        // Pick the target scope. `scope = "global"` writes under the
+        // reserved `__global__` entry; anything else resolves to the
+        // matched site's hostname (exact or suffix match) or creates
+        // a new site entry.
+        let target_key = if scope == "global" {
+            if !config.contains_key(crate::types::GLOBAL_SCOPE_KEY) {
+                config.insert(
+                    crate::types::GLOBAL_SCOPE_KEY.to_string(),
+                    crate::types::SiteConfig::default(),
+                );
+            }
+            crate::types::GLOBAL_SCOPE_KEY.to_string()
+        } else if config.contains_key(&hostname) {
             hostname.clone()
         } else {
             let mut found: Option<String> = None;
