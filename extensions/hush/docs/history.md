@@ -5,6 +5,24 @@ complete in [roadmap.md](roadmap.md). Present-tense feature behavior
 lives in [completed.md](completed.md) and the per-subsystem docs;
 this file is chronology.
 
+## Stage 5 (in progress): Options + content-script cleanup
+
+**Iter 1 (options scaffold + preference toggles)**: new
+`src/ui_options.rs` mirrors the shape of `src/ui_popup.rs`.
+`mountOptions(snap)` wasm-bindgen export takes an `OptionsSnapshot`
+with the two boolean preferences (`debug`, `suggestionsEnabled`) and
+mounts a Leptos subtree at `#rust-options-root`. `SettingsToggles`
+owns the two checkboxes; each click calls the newly-generalized
+`chrome_bridge::set_option_bool(key, value)` helper (extracted from
+the old `enable_detector` body). `StatusBanner` renders the
+transient green/red save-confirmation message via an
+`RwSignal<Option<StatusMsg>>` stored in a `thread_local!` - `options.js`
+and any other legacy JS handler can publish messages into the same
+banner via the exported `setOptionsStatus(msg, ok)` wasm function.
+`options.js` converted from a classic `<script src>` to
+`<script type="module">` so the static `import initWasm, { ... } from
+"./dist/pkg/hush.js"` works the same way `popup.js` does.
+
 ## Stage 4 (in progress): Popup UI in Leptos
 
 Framework pick: Leptos 0.8. Smallest bundle of the Rust WASM web

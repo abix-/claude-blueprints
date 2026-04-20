@@ -497,18 +497,14 @@ iframe[src*="tracker.example.com"]
   </section>
 
   <div class="settings-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
-    <label>
-      <input type="checkbox" id="suggestions-toggle">
-      Enable behavioral suggestions <span style="color:#888; font-size:12px;">(opt-in; adds a small per-scan CPU cost; see "How Hush works" above)</span>
-    </label>
-    <label>
-      <input type="checkbox" id="debug-toggle">
-      Enable verbose console logging <span style="color:#888; font-size:12px;">(off by default)</span>
-    </label>
+    <!-- Preference toggles (suggestions / debug) + shared status banner
+         render inside the Leptos tree. See src/ui_options.rs. The
+         export/reset toolbar still lives in options.js until a later
+         stage 5 iteration ports it. -->
+    <div id="rust-options-root"></div>
     <div class="toolbar" style="margin-top: 4px;">
       <button id="export">Export JSON</button>
       <button id="reset" class="danger">Reset to defaults</button>
-      <span id="status" class="status" style="display:none"></span>
     </div>
   </div>
 
@@ -567,6 +563,6 @@ iframe[src*="tracker.example.com"]
     </div>
   </details>
 
-  <script src="options.js"></script>
+  <script type="module" src="options.js"></script>
 </body>
 </html>

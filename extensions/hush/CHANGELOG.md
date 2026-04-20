@@ -44,6 +44,17 @@ Remaining before Stage 4 is fully complete: verify cold-popup-open
 render time against the 100ms budget (measurement pass, no code
 changes expected).
 
+### Stage 5 progress: options + content-script porting to Leptos / web_sys
+- Iter 1 scaffold: `src/ui_options.rs` + `mountOptions` wasm-bindgen
+  export + `<div id="rust-options-root">` in `options.html` +
+  `options.js` converted to an ES module. `SettingsToggles` component
+  owns the behavioral-suggestions and verbose-logging checkboxes;
+  `StatusBanner` owns the transient save-confirmation message.
+  `chrome_bridge::enable_detector` refactored into the generalized
+  `set_option_bool(key, value)` helper the toggles share. Exported
+  `setOptionsStatus(msg, ok)` so the remaining JS handlers
+  (export/reset/JSON/allowlist) feed the same banner.
+
 ## [0.10.0] - 2026-04-19
 
 ### Licensing

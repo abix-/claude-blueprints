@@ -1,3 +1,15 @@
+// Options page is an ES module so it can statically import the
+// wasm-bindgen glue (matches popup.js pattern from stage 4). The
+// Leptos tree mounted via mountOptions owns the two preference
+// toggles + status banner. The rest (site list, per-site editor,
+// allowlist textareas, JSON editor, export/reset) is still rendered
+// here and gets ported in follow-up stage 5 iterations.
+import initWasm, { initEngine, mountOptions, setOptionsStatus } from "./dist/pkg/hush.js";
+
+const wasmReady = initWasm().then(() => {
+  try { initEngine(); } catch (e) { console.error("[Hush options] initEngine failed", e); }
+}).catch(e => console.error("[Hush options] wasm init failed", e));
+
 const STORAGE_KEY = "config";
 const OPTIONS_KEY = "options";
 const ALLOWLIST_KEY = "allowlist";
@@ -15,8 +27,6 @@ async function loadDefaultAllowlist() {
 const siteListEl = document.getElementById("site-list");
 const detailEl = document.getElementById("detail");
 const addSiteBtn = document.getElementById("add-site");
-const debugToggleEl = document.getElementById("debug-toggle");
-const suggestionsToggleEl = document.getElementById("suggestions-toggle");
 const allowlistIframesEl = document.getElementById("allowlist-iframes");
 const allowlistOverlaysEl = document.getElementById("allowlist-overlays");
 const allowlistSuggestionsEl = document.getElementById("allowlist-suggestions");
@@ -24,7 +34,6 @@ const allowlistSaveBtn = document.getElementById("allowlist-save");
 const allowlistResetBtn = document.getElementById("allowlist-reset");
 const exportBtn = document.getElementById("export");
 const resetBtn = document.getElementById("reset");
-const statusEl = document.getElementById("status");
 const jsonEl = document.getElementById("json-config");
 const jsonApplyBtn = document.getElementById("json-apply");
 const jsonRefreshBtn = document.getElementById("json-refresh");
@@ -32,12 +41,11 @@ const jsonRefreshBtn = document.getElementById("json-refresh");
 let config = {};
 let selectedDomain = null;
 
+// Route status feedback through the Leptos StatusBanner. Before wasm
+// is ready, swallow the call; the Leptos tree boots within a frame
+// of first user interaction.
 function setStatus(msg, ok) {
-  statusEl.textContent = msg;
-  statusEl.className = "status " + (ok ? "ok" : "err");
-  statusEl.style.display = "inline-block";
-  clearTimeout(setStatus._t);
-  setStatus._t = setTimeout(() => { statusEl.style.display = "none"; }, 3500);
+  try { setOptionsStatus(msg, !!ok); } catch (e) { /* wasm not ready yet */ }
 }
 
 async function loadAll() {
@@ -49,13 +57,22 @@ async function loadAll() {
   const data = await chrome.storage.local.get([STORAGE_KEY, OPTIONS_KEY, ALLOWLIST_KEY]);
   config = data[STORAGE_KEY] || {};
   const opts = data[OPTIONS_KEY] || {};
-  debugToggleEl.checked = !!opts.debug;
-  suggestionsToggleEl.checked = !!opts.suggestionsEnabled;
   const al = data[ALLOWLIST_KEY] || DEFAULT_ALLOWLIST;
   allowlistIframesEl.value = (al.iframes || []).join("\n");
   allowlistOverlaysEl.value = (al.overlays || []).join("\n");
   allowlistSuggestionsEl.value = (al.suggestions || []).join("\n");
   render();
+
+  // Mount the Leptos preference toggles + status banner with initial
+  // values read from storage. A re-mount is idempotent because the
+  // Leptos tree re-reads `chrome.storage.local` on each user action.
+  try {
+    await wasmReady;
+    mountOptions({
+      debug: !!opts.debug,
+      suggestionsEnabled: !!opts.suggestionsEnabled,
+    });
+  } catch (e) { console.error("[Hush options] mountOptions failed", e); }
 }
 
 function linesToList(text) {
@@ -271,26 +288,11 @@ addSiteBtn.addEventListener("click", async () => {
   render();
 });
 
-debugToggleEl.addEventListener("change", async () => {
-  const data = await chrome.storage.local.get(OPTIONS_KEY);
-  const options = data[OPTIONS_KEY] || {};
-  options.debug = debugToggleEl.checked;
-  await chrome.storage.local.set({ [OPTIONS_KEY]: options });
-  setStatus(debugToggleEl.checked ? "Verbose logging ON" : "Verbose logging OFF", true);
-});
-
-suggestionsToggleEl.addEventListener("change", async () => {
-  const data = await chrome.storage.local.get(OPTIONS_KEY);
-  const options = data[OPTIONS_KEY] || {};
-  options.suggestionsEnabled = suggestionsToggleEl.checked;
-  await chrome.storage.local.set({ [OPTIONS_KEY]: options });
-  setStatus(
-    suggestionsToggleEl.checked
-      ? "Behavioral suggestions ON (reload tabs to start scanning)"
-      : "Behavioral suggestions OFF",
-    true
-  );
-});
+// The suggestions + debug toggles are owned by the Leptos
+// SettingsToggles component now (src/ui_options.rs). Toggle clicks
+// flip the matching field in chrome.storage.local["options"] via
+// chrome_bridge::set_option_bool and surface status through the
+// shared StatusBanner.
 
 exportBtn.addEventListener("click", async () => {
   const data = await chrome.storage.local.get(STORAGE_KEY);

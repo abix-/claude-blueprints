@@ -96,8 +96,17 @@ script's DOM scans (hidden iframes, sticky overlays) run through
 `web_sys` bindings with the same thresholds, and the remaining JS
 totals under 100 lines across all bootstrap shims.*
 
-- [ ] Port options page to Leptos (site list, per-site editor, three
-      allowlist sections, raw JSON editor, debug/suggestions toggles)
+- Port options page to Leptos (site list, per-site editor, three
+  allowlist sections, raw JSON editor, debug/suggestions toggles)
+    - [x] Scaffold: `src/ui_options.rs` + `mountOptions` +
+          `<div id="rust-options-root">` + `options.js` module
+          conversion; preference toggles (`SettingsToggles`) and
+          shared status banner (`StatusBanner`) ported. Exported
+          `setOptionsStatus` so the remaining JS handlers surface
+          feedback through the same banner.
+    - [ ] Port export / reset / JSON editor toolbar
+    - [ ] Port allowlist textareas (iframes / overlays / suggestions)
+    - [ ] Port site list + per-site editor (the large chunk)
 - [ ] Port `content.js` DOM scans via `web_sys::Document` and
       `web_sys::Element` + `getComputedStyle`
 - [ ] Port `MutationObserver` installation via

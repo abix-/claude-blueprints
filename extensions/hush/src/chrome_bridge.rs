@@ -145,10 +145,10 @@ pub async fn get_suggestions(tab_id: i32) -> Result<Vec<Suggestion>, JsValue> {
     Ok(resp.suggestions)
 }
 
-/// Enable the behavioral-suggestion detector by merging
-/// `{suggestionsEnabled: true}` into `chrome.storage.local["options"]`.
-/// Preserves every other option field already set.
-pub async fn enable_detector() -> Result<(), JsValue> {
+/// Merge a single boolean field into `chrome.storage.local["options"]`.
+/// Read-modify-write so other option fields are preserved. Errors
+/// propagate the underlying `JsValue` so callers can surface them.
+pub async fn set_option_bool(key: &str, value: bool) -> Result<(), JsValue> {
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
     let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
     let storage = Reflect::get(&chrome, &JsValue::from_str("storage"))?;
@@ -167,7 +167,11 @@ pub async fn enable_detector() -> Result<(), JsValue> {
         .ok()
         .filter(|v| !v.is_undefined() && !v.is_null())
         .unwrap_or_else(|| js_sys::Object::new().into());
-    Reflect::set(&opts, &JsValue::from_str("suggestionsEnabled"), &JsValue::TRUE)?;
+    Reflect::set(
+        &opts,
+        &JsValue::from_str(key),
+        &JsValue::from_bool(value),
+    )?;
 
     // Write it back via chrome.storage.local.set({options: {...}}).
     let set_payload = js_sys::Object::new();
@@ -181,6 +185,12 @@ pub async fn enable_detector() -> Result<(), JsValue> {
         .map_err(|_| JsValue::from_str("chrome.storage.local.set did not return a Promise"))?;
     JsFuture::from(set_promise).await?;
     Ok(())
+}
+
+/// Enable the behavioral-suggestion detector. Thin wrapper over
+/// [`set_option_bool`] so popup callers read naturally.
+pub async fn enable_detector() -> Result<(), JsValue> {
+    set_option_bool("suggestionsEnabled", true).await
 }
 
 /// Ask the content script in tab `tab_id` to run one behavioral scan
