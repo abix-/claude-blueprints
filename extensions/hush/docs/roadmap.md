@@ -149,6 +149,55 @@ totals under 100 lines across all bootstrap shims.*
       stubs; `background.js` (988) is the service worker, out of
       Stage 5 scope.
 
+### Stage 7: Firewall-style rule engine surface
+
+*Done when: rules have explicit scope (global OR site-specific),
+every rule hit emits a uniform firewall-log event (`rule_id`,
+`action`, `scope`, `match`, `observed_at`, `evidence`), and the
+popup / options UI exposes per-rule hit counts and a sortable event
+history. The Palo-Alto-style "firewall log" mental model is the
+user-visible interface shape; see [architecture.md](architecture.md)
+for the background and rationale.*
+
+- [ ] Add a `global` scope to the config schema. Probably a
+      top-level `global: SiteConfig` field in the stored JSON
+      (IndexMap key collision-safe because domains can't start
+      with an underscore). Site-scoped rules layer on top.
+- [ ] Assign every stored rule a stable `rule_id`. Migration:
+      generate IDs on first load post-upgrade and persist them.
+- [ ] Unified firewall-log event shape. Extend the per-tab state
+      to hold a ring buffer of hit events per rule. Replace the
+      ad-hoc `blockedUrls` / `removedElements` / `hide` count
+      surfaces with views over the unified log.
+- [ ] New popup tab: "Firewall log". Each row: rule ID, scope,
+      action, match, hit count, most-recent match timestamp.
+      Click-to-expand shows the last 50 events with full evidence.
+- [ ] Per-rule disable toggle in the options editor. Implementation:
+      a boolean field on every rule row; rules whose `disabled =
+      true` are skipped at evaluation time (DNR sync excludes them,
+      content-script applier skips them).
+- [ ] Rule import/export profiles (later). Named bundles users can
+      merge into their config — e.g. "news-site baseline".
+
+### Stage 8: More spoof kinds
+
+*Done when: Canvas, Audio, and Font-enumeration fingerprint signals
+have spoof implementations alongside the existing `webgl-unmasked`
+kind. Each follows the same content-script → dataset marker →
+main-world-hook pattern the WebGL case established.*
+
+- [ ] `canvas` spoof: return a fixed hash from
+      `HTMLCanvasElement.toDataURL` / `toBlob` /
+      `CanvasRenderingContext2D.getImageData` when the site opts in.
+      Trade-off: some sites use canvas for legitimate rendering
+      (image resize, drawing apps); spoof must be opt-in per site.
+- [ ] `audio` spoof: stub `OfflineAudioContext` so fingerprinting
+      constructors get back a predictable-output context. Same
+      opt-in caveat as canvas.
+- [ ] `font-enum` spoof: cap `measureText` to returning metrics
+      from a fixed allowlist (core system fonts only), neutralizing
+      installed-font probing.
+
 ## Out of scope (for now)
 
 Explicitly not in the current stage list. Pulled back in via new stages

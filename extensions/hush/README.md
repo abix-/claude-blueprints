@@ -1,15 +1,30 @@
 # Hush
 
-Per-site element hiding, DOM removal, and network blocking for Chrome (MV3).
+**Firewall-style rule engine for Chrome.** Every website you load is
+running code that is not on your side — ad networks, analytics vendors,
+session-replay capture, first-party telemetry pipelines, fingerprinters
+reading your GPU model and installed fonts. Public blocklists catch the
+cross-site cases, but site-specific anti-user behavior is a gap public
+lists can't fill. Hush is the tool for that gap: a per-site (and soon
+global) rule engine that decides what the page is allowed to do. The
+mental model — **rules, scopes, actions, hit logs** — is borrowed from
+network firewalls like Palo Alto, even though the enforcement points
+(DNR, DOM, CSS, prototype hooks) are all inside Chrome.
 
-Lets you write a small per-domain config and applies three independent layers of
-defense against whatever a site is doing that you don't want: promo popups,
-tracker scripts, heavy animated widgets, chat stickers, iframe-based widget
-frameworks, etc.
+Read [docs/architecture.md](docs/architecture.md) for the full mental
+model, threat model, and rule taxonomy. The short version:
 
-## What it does
+## The rule model
 
-Three layers, in order of aggressiveness:
+A Hush rule is a **(scope, action, match)** triple.
+
+- **Scope**: `<domain>` (applies to that hostname + suffixes) or
+  `global` (planned — applies everywhere).
+- **Action**: `block`, `remove`, `hide`, or `spoof`.
+- **Match**: URL pattern, CSS selector, or fingerprint kind tag,
+  depending on the action.
+
+The four actions, in order of aggressiveness:
 
 1. **Block (network)** — URL patterns registered with
    `chrome.declarativeNetRequest`. Matching requests are rejected by the browser
@@ -28,7 +43,15 @@ Three layers, in order of aggressiveness:
    compositing. Mildest layer; leaves the element in the DOM and its
    JavaScript running.
 
-Each site entry specifies any combination of the three. A site entry for
+4. **Spoof (fingerprint)** — intercept specific fingerprinting APIs and
+   return bland identical-across-users values instead of blocking the site.
+   First signal: `webgl-unmasked` returns `"Google Inc."` /
+   `"ANGLE (Generic)"` from
+   `WebGLRenderingContext.getParameter(UNMASKED_VENDOR_WEBGL)` /
+   `getParameter(UNMASKED_RENDERER_WEBGL)` so fingerprinting code gets a
+   useless value while legitimate rendering code keeps working.
+
+Each site entry specifies any combination of the four. A site entry for
 `example.com` also applies to `www.example.com`, `m.example.com`, and any
 other subdomain via exact-or-suffix matching.
 
@@ -61,12 +84,13 @@ copy-paste between machines. The UI and the JSON view edit the same storage.
   "example.com": {
     "block":  ["||ads.example.com"],
     "remove": [".modal-overlay"],
-    "hide":   [".popup", ".newsletter-signup", "[class*=\"AdBanner\"]"]
+    "hide":   [".popup", ".newsletter-signup", "[class*=\"AdBanner\"]"],
+    "spoof":  ["webgl-unmasked"]
   }
 }
 ```
 
-Keys are domain names. Each site has three optional arrays:
+Keys are domain names. Each site has four optional arrays:
 
 - `block` — uBlock-style URL patterns (`||domain.com`, `*.cdn.example.com`,
   path wildcards, etc.). Rules are declared under a site in your config but
@@ -82,6 +106,10 @@ Keys are domain names. Each site has three optional arrays:
   (Reddit selectors only touch Reddit's DOM, not embedded iframe contents).
 - `hide` — CSS selectors. Matching elements get `display: none !important`
   via a user stylesheet. Per-frame application, same as `remove`.
+- `spoof` — kind tags identifying fingerprint signals to neutralize.
+  Currently supported: `webgl-unmasked`. Applied via main-world hook;
+  the site's JS still sees a string (not a thrown error), just a
+  uselessly-bland one.
 
 Your personal config lives in `chrome.storage.local` and never lands on disk
 as text. The seeded `sites.json` is a generic example only.
@@ -111,29 +139,14 @@ The popup footer has:
 
 ## Architecture
 
-```
-hush/
-  manifest.json     MV3 manifest. Permissions: declarativeNetRequest,
-                    declarativeNetRequestFeedback, storage, webNavigation,
-                    host_permissions <all_urls>.
-  background.js     Service worker. Loads config, registers dynamic DNR rules,
-                    maintains a per-tab activity stats Map, listens for
-                    onRuleMatchedDebug to count blocked requests, serves
-                    stats/debug info to the popup. Stats are persisted to
-                    chrome.storage.session so they survive SW idle restarts.
-  content.js        Runs at document_start on every page. Finds the matching
-                    site config, applies remove + hide layers, reports stats
-                    back to background.js via runtime messages. Uses a single
-                    MutationObserver for both layers.
-  options.html      Two-pane editor + three-layer explainer + raw JSON
-                    escape hatch.
-  options.js        UI logic for the options page.
-  popup.html        Per-tab activity view + debug button.
-  popup.js          UI logic for the popup; queries background.js for stats.
-  sites.json        Seed config bundled with the extension. Generic example
-                    only; loaded into chrome.storage.local on first install.
-  README.md         This file.
-```
+See [docs/architecture.md](docs/architecture.md) for the rule model,
+runtime data flow, rule lifecycle, detector-to-rule pipeline, and the
+per-file tour of the codebase. The short version: all logic lives in
+Rust compiled to WASM (`src/`). The JS shims are 18–34 line bootstraps
+(`background.js`, `content.js`, `popup.js`, `options.js`) plus
+`mainworld.js` (main-world hook stubs, which can't load WASM because
+strict-CSP pages block WebAssembly compilation in content-script
+context).
 
 ## Behavioral suggestions (opt-in)
 
