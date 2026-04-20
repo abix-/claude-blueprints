@@ -96,8 +96,11 @@ script's DOM scans (hidden iframes, sticky overlays) run through
 `web_sys` bindings with the same thresholds, and the remaining JS
 totals under 100 lines across all bootstrap shims.*
 
-- Port options page to Leptos (site list, per-site editor, three
-  allowlist sections, raw JSON editor, debug/suggestions toggles)
+- [x] Port options page to Leptos. All UI (preference toggles, site
+      list + per-site editor, three allowlist sections, raw JSON
+      editor, Export/Reset toolbar) renders via Leptos components in
+      `src/ui_options.rs`. `options.js` is a 34-line bootstrap that
+      reads three storage keys and calls `mountOptions(snapshot)`.
     - [x] Scaffold: `src/ui_options.rs` + `mountOptions` +
           `<div id="rust-options-root">` + `options.js` module
           conversion; preference toggles (`SettingsToggles`) and
@@ -118,6 +121,12 @@ totals under 100 lines across all bootstrap shims.*
           `chrome_bridge::get_default_allowlist`). Mounts at a
           second root `#rust-allowlist-root` inside the existing
           `<details>` wrapper.
+    - [x] Port site list + per-site editor (`ConfigEditor` +
+          `SiteList` + `SiteListRow` + `SiteDetail` + `SiteDetailBody`
+          + `LayerSection` components). The full `Config` lives in a
+          single `RwSignal<IndexMap<String, SiteConfig>>` that the
+          editor mutates in place and persists via
+          `chrome_bridge::set_config` on every change.
     - [ ] Port site list + per-site editor (the large chunk)
 - [ ] Port `content.js` DOM scans via `web_sys::Document` and
       `web_sys::Element` + `getComputedStyle`

@@ -7,6 +7,25 @@ this file is chronology.
 
 ## Stage 5 (in progress): Options + content-script cleanup
 
+**Iter 5 (site list + per-site editor)**: the last big
+per-site-config UI port. `ConfigEditor` owns the full
+`Config = IndexMap<String, SiteConfig>` as an `RwSignal` plus a
+`selected: RwSignal<Option<String>>`. The sidebar `SiteList` +
+`SiteListRow` iterate domain keys in sorted order and update their
+"hide N / rm N / blk N" badges reactively. `SiteDetail` +
+`SiteDetailBody` own the domain rename input (via
+`HTMLInputElement`), the delete-site button, and three
+`LayerSection`s (Block / Remove / Hide) that each render an entries
+list with per-row delete and an Add input + button. Every mutation
+calls a `persist_config` helper that writes the current signal
+value to `chrome.storage.local["config"]` via the new
+`chrome_bridge::set_config<C: Serialize>` helper - one save path
+for every path through the editor. `options.js` collapsed from 285
+lines to 34: a single `main()` that reads three storage keys and
+hands the snapshot to `mountOptions`. The old `.two-pane` /
+`.sidebar` / `.detail` HTML scaffolding dropped in favor of a
+single `#rust-config-root` div.
+
 **Iter 4 (JSON editor)**: raw JSON textarea + Apply + Refresh moved
 into the Leptos `JsonEditor` component at a third mount point
 `#rust-json-root`. New `chrome_bridge::set_config_from_json` parses

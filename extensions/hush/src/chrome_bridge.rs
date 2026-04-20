@@ -320,6 +320,29 @@ pub async fn get_default_allowlist() -> Result<(Vec<String>, Vec<String>, Vec<St
     ))
 }
 
+/// Write a full config object to `chrome.storage.local["config"]`.
+/// Accepts any Serialize type so the ui_options editor can hand in a
+/// typed `Config` (IndexMap) without reshaping it to JS first.
+pub async fn set_config<C: serde::Serialize + ?Sized>(config: &C) -> Result<(), JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let storage = Reflect::get(&chrome, &JsValue::from_str("storage"))?;
+    let local = Reflect::get(&storage, &JsValue::from_str("local"))?;
+    let set_fn: js_sys::Function = Reflect::get(&local, &JsValue::from_str("set"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set is not a function"))?;
+    let js_config = serde_wasm_bindgen::to_value(config)
+        .map_err(|e| JsValue::from_str(&format!("set_config serialize: {e}")))?;
+    let payload = js_sys::Object::new();
+    Reflect::set(&payload, &JsValue::from_str("config"), &js_config)?;
+    let set_promise: Promise = set_fn
+        .call1(&local, &payload.into())?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set did not return a Promise"))?;
+    JsFuture::from(set_promise).await?;
+    Ok(())
+}
+
 /// Parse a JSON string as a config object (top-level must be a
 /// non-array object; arbitrary site keys below). Writes the parsed
 /// value into `chrome.storage.local["config"]`. Rejects the write

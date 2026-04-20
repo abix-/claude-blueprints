@@ -73,6 +73,16 @@ changes expected).
   validates the top-level shape, writes to `chrome.storage.local`.
   Apply reloads the page so the still-JS-owned site list re-reads
   storage.
+- Iter 5: site list + per-site editor ported. `ConfigEditor` owns
+  the full `Config` tree and the selected-domain signal; `SiteList`
+  + `SiteListRow` render the sidebar with reactive per-layer
+  counts; `SiteDetail` handles rename + delete; `LayerSection`
+  renders one of the three Block / Remove / Hide fieldsets with
+  add + delete. Every mutation persists via new
+  `chrome_bridge::set_config<C: Serialize>`. `options.js` collapsed
+  from 285 lines to 34 (pure bootstrap); the `.two-pane` /
+  `.sidebar` / `.detail` HTML removed in favor of a single
+  `#rust-config-root` div.
 
 ## [0.10.0] - 2026-04-19
 

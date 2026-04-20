@@ -330,19 +330,9 @@
   <h1>Hush</h1>
   <p class="tagline">Per-site element hiding, DOM removal, and network blocking.</p>
 
-  <div class="two-pane">
-    <aside class="sidebar">
-      <h2>Configured sites</h2>
-      <ul id="site-list" class="site-list"></ul>
-      <div class="sidebar-actions">
-        <button id="add-site" class="primary" style="width:100%">+ Add site</button>
-      </div>
-    </aside>
-
-    <section id="detail" class="detail">
-      <div class="detail-empty">Select a site on the left, or add a new one.</div>
-    </section>
-  </div>
+  <!-- Site list sidebar + per-site editor are rendered by the Leptos
+       ConfigEditor component (src/ui_options.rs). -->
+  <div id="rust-config-root"></div>
 
   <section class="how">
     <h2>How Hush works</h2>

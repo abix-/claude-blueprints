@@ -10,6 +10,7 @@
 //! the page.
 
 use crate::chrome_bridge;
+use crate::types::{Config, SiteConfig};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde::Deserialize;
@@ -29,6 +30,12 @@ pub struct OptionsSnapshot {
     /// (falls back to empty arrays if the key is absent).
     #[serde(default)]
     pub allowlist: AllowlistSnapshot,
+    /// Full site config. Populated on mount from
+    /// `chrome.storage.local["config"]` so the Leptos site-list +
+    /// per-site editor can own the state reactively from that point
+    /// on.
+    #[serde(default)]
+    pub config: Config,
 }
 
 /// Three independent user-editable allowlists. `iframes` is a list of
@@ -114,10 +121,20 @@ pub fn mount_options(snapshot: JsValue) -> Result<(), JsValue> {
         }
     }
 
+    // Site list + per-site editor.
+    if let Some(config_root) = document.get_element_by_id("rust-config-root") {
+        if let Ok(el) = config_root.dyn_into::<web_sys::HtmlElement>() {
+            let cfg = snap.config.clone();
+            std::mem::forget(leptos::mount::mount_to(el, move || {
+                view! { <ConfigEditor initial=cfg.clone() /> }
+            }));
+        }
+    }
+
     // Tertiary root: raw JSON editor. Reads the initial config text
     // synchronously from `chrome.storage.local` when its Refresh
-    // handler fires so it stays in sync with whatever the JS-owned
-    // site list has done.
+    // handler fires so it stays in sync with the config editor's
+    // mutations.
     if let Some(json_root) = document.get_element_by_id("rust-json-root") {
         if let Ok(el) = json_root.dyn_into::<web_sys::HtmlElement>() {
             std::mem::forget(leptos::mount::mount_to(el, move || {
@@ -412,6 +429,486 @@ fn AllowlistEditor(snap: AllowlistSnapshot) -> impl IntoView {
             </div>
         </div>
     }
+}
+
+/// Top-level site configuration editor. Owns the full `Config` map
+/// and the currently-selected domain as reactive signals. Hosts the
+/// sidebar `SiteList` and the right-pane `SiteDetail`.
+#[component]
+fn ConfigEditor(initial: Config) -> impl IntoView {
+    let config = RwSignal::new(initial);
+    let selected = RwSignal::new(Option::<String>::None);
+
+    view! {
+        <div class="two-pane">
+            <aside class="sidebar">
+                <h2>"Configured sites"</h2>
+                <SiteList config=config selected=selected />
+            </aside>
+            <section class="detail">
+                <SiteDetail config=config selected=selected />
+            </section>
+        </div>
+    }
+}
+
+/// Sidebar listing the configured domains. Domains are iterated in
+/// sorted order - matches the `Object.keys(config).sort()` the old JS
+/// site list used. Each row shows per-layer entry counts and is
+/// click-to-select; the "+ Add site" button at the bottom prompts
+/// for a domain name and seeds an empty triple.
+#[component]
+fn SiteList(
+    config: RwSignal<Config>,
+    selected: RwSignal<Option<String>>,
+) -> impl IntoView {
+    let on_add = move |_| {
+        let window = match web_sys::window() {
+            Some(w) => w,
+            None => return,
+        };
+        let input = match window
+            .prompt_with_message_and_default("New site domain (e.g. example.com):", "")
+        {
+            Ok(Some(s)) => s,
+            _ => return,
+        };
+        let name = input.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        if config.with(|c| c.contains_key(&name)) {
+            set_options_status("Site already exists".into(), false);
+            selected.set(Some(name));
+            return;
+        }
+        config.update(|c| {
+            c.insert(name.clone(), SiteConfig::default());
+        });
+        selected.set(Some(name));
+        persist_config(config);
+    };
+
+    view! {
+        <ul class="site-list">
+            {move || {
+                let mut keys: Vec<String> = config.with(|c| c.keys().cloned().collect());
+                keys.sort();
+                if keys.is_empty() {
+                    view! {
+                        <div class="site-list-empty">
+                            "No sites yet. Click '+ Add site' to start."
+                        </div>
+                    }.into_any()
+                } else {
+                    keys.into_iter().map(|domain| {
+                        view! {
+                            <SiteListRow
+                                config=config
+                                selected=selected
+                                domain=domain
+                            />
+                        }
+                    }).collect::<Vec<_>>().into_any()
+                }
+            }}
+        </ul>
+        <div class="sidebar-actions">
+            <button on:click=on_add
+                    class="primary"
+                    style="width:100%; padding: 6px 10px; background: #2b7cff;
+                           color: white; border: 1px solid #2b7cff;
+                           border-radius: 5px; cursor: pointer;">
+                "+ Add site"
+            </button>
+        </div>
+    }
+}
+
+/// Single row in the site list. Reads counts reactively so adding a
+/// layer entry updates the badge without re-sorting the full list.
+#[component]
+fn SiteListRow(
+    config: RwSignal<Config>,
+    selected: RwSignal<Option<String>>,
+    domain: String,
+) -> impl IntoView {
+    let row_domain = domain.clone();
+    let click_domain = domain.clone();
+    let on_click = move |_| {
+        selected.set(Some(click_domain.clone()));
+    };
+
+    let badges = {
+        let d = row_domain.clone();
+        move || {
+            let (h, r, b) = config.with(|c| match c.get(&d) {
+                Some(entry) => (entry.hide.len(), entry.remove.len(), entry.block.len()),
+                None => (0, 0, 0),
+            });
+            format!("hide {}  rm {}  blk {}", h, r, b)
+        }
+    };
+
+    let class_name = {
+        let d = row_domain.clone();
+        move || {
+            if selected.with(|s| s.as_deref() == Some(d.as_str())) {
+                "selected".to_string()
+            } else {
+                String::new()
+            }
+        }
+    };
+
+    view! {
+        <li class=class_name on:click=on_click>
+            <span>{row_domain}</span>
+            <span class="badges">{badges}</span>
+        </li>
+    }
+}
+
+/// Right-pane detail for the currently-selected site. Shows the
+/// domain rename input, a delete-site button, and the three
+/// layer sections (Block / Remove / Hide).
+#[component]
+fn SiteDetail(
+    config: RwSignal<Config>,
+    selected: RwSignal<Option<String>>,
+) -> impl IntoView {
+    move || {
+        let current = selected.get();
+        let Some(domain) = current else {
+            return view! {
+                <div class="detail-empty">
+                    "Select a site on the left, or add a new one."
+                </div>
+            }
+            .into_any();
+        };
+        if !config.with(|c| c.contains_key(&domain)) {
+            return view! {
+                <div class="detail-empty">
+                    "Select a site on the left, or add a new one."
+                </div>
+            }
+            .into_any();
+        }
+        view! {
+            <SiteDetailBody
+                config=config
+                selected=selected
+                domain=domain.clone()
+            />
+        }
+        .into_any()
+    }
+}
+
+/// Inner per-site body. Split out so the rename input + layer
+/// sections can take an owned `domain` string and rebuild cleanly
+/// when the selected signal flips.
+#[component]
+fn SiteDetailBody(
+    config: RwSignal<Config>,
+    selected: RwSignal<Option<String>>,
+    domain: String,
+) -> impl IntoView {
+    let domain_input = RwSignal::new(domain.clone());
+    let domain_original = domain.clone();
+
+    // Reset the input when the selected domain changes (e.g. user
+    // clicks a different site before committing a rename).
+    {
+        let original = domain_original.clone();
+        Effect::new(move |_| {
+            if selected.with(|s| s.as_deref() != Some(original.as_str())) {
+                domain_input.set(original.clone());
+            }
+        });
+    }
+
+    let on_rename = {
+        let original = domain_original.clone();
+        move |_| {
+            let next = domain_input.get().trim().to_string();
+            if next.is_empty() || next == original {
+                domain_input.set(original.clone());
+                return;
+            }
+            if config.with(|c| c.contains_key(&next)) {
+                set_options_status(format!("A site named '{}' already exists", next), false);
+                domain_input.set(original.clone());
+                return;
+            }
+            config.update(|c| {
+                if let Some(entry) = c.shift_remove(&original) {
+                    c.insert(next.clone(), entry);
+                }
+            });
+            selected.set(Some(next));
+            persist_config(config);
+            set_options_status("Renamed site".into(), true);
+        }
+    };
+
+    let on_delete = {
+        let original = domain_original.clone();
+        move |_| {
+            let window = match web_sys::window() {
+                Some(w) => w,
+                None => return,
+            };
+            let prompt = format!("Delete all rules for '{}'?", original);
+            if !window.confirm_with_message(&prompt).unwrap_or(false) {
+                return;
+            }
+            config.update(|c| {
+                c.shift_remove(&original);
+            });
+            selected.set(None);
+            persist_config(config);
+            set_options_status("Site deleted".into(), true);
+        }
+    };
+
+    view! {
+        <div class="domain-row">
+            <input type="text"
+                   spellcheck="false"
+                   prop:value=move || domain_input.get()
+                   on:input=move |ev| {
+                       let val = ev.target()
+                           .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+                           .map(|i| i.value())
+                           .unwrap_or_default();
+                       domain_input.set(val);
+                   }
+                   on:change=on_rename
+            />
+            <button class="danger" on:click=on_delete>
+                "Delete site"
+            </button>
+        </div>
+        <LayerSection
+            config=config
+            domain=domain.clone()
+            layer=LayerKind::Block
+        />
+        <LayerSection
+            config=config
+            domain=domain.clone()
+            layer=LayerKind::Remove
+        />
+        <LayerSection
+            config=config
+            domain=domain.clone()
+            layer=LayerKind::Hide
+        />
+    }
+}
+
+/// Which of the three config-layer arrays a `LayerSection` edits.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LayerKind {
+    Block,
+    Remove,
+    Hide,
+}
+
+impl LayerKind {
+    fn title(&self) -> &'static str {
+        match self {
+            Self::Block => "Block (network)",
+            Self::Remove => "Remove (DOM)",
+            Self::Hide => "Hide (CSS)",
+        }
+    }
+    fn help(&self) -> &'static str {
+        match self {
+            Self::Block => {
+                "URL patterns blocked at the network layer. Matching requests never \
+                 leave the browser."
+            }
+            Self::Remove => {
+                "CSS selectors whose matching elements are physically removed from the \
+                 DOM (and kept out as the page mutates)."
+            }
+            Self::Hide => {
+                "CSS selectors applied with display: none !important. Elements stay in \
+                 the DOM but don't render."
+            }
+        }
+    }
+    fn placeholder(&self) -> &'static str {
+        match self {
+            Self::Block => "Add URL pattern like ||ads.example.com",
+            Self::Remove => "Add CSS selector like .modal-overlay",
+            Self::Hide => "Add CSS selector like .popup",
+        }
+    }
+    fn read<'a>(&self, cfg: &'a SiteConfig) -> &'a [String] {
+        match self {
+            Self::Block => &cfg.block,
+            Self::Remove => &cfg.remove,
+            Self::Hide => &cfg.hide,
+        }
+    }
+    fn modify<'a>(&self, cfg: &'a mut SiteConfig) -> &'a mut Vec<String> {
+        match self {
+            Self::Block => &mut cfg.block,
+            Self::Remove => &mut cfg.remove,
+            Self::Hide => &mut cfg.hide,
+        }
+    }
+}
+
+/// One of the three `<fieldset>` editors on a site's detail page.
+/// Lists the current entries with a delete button on each row, plus
+/// an Add input + button at the bottom. All mutations go through
+/// the shared `config` signal and persist via `set_config`.
+#[component]
+fn LayerSection(
+    config: RwSignal<Config>,
+    domain: String,
+    layer: LayerKind,
+) -> impl IntoView {
+    let draft = RwSignal::new(String::new());
+
+    // Entry rows are derived reactively from the config signal.
+    let rows = {
+        let domain = domain.clone();
+        move || {
+            let entries: Vec<String> = config.with(|c| {
+                c.get(&domain)
+                    .map(|cfg| layer.read(cfg).to_vec())
+                    .unwrap_or_default()
+            });
+            if entries.is_empty() {
+                view! {
+                    <li class="entries-empty">"(none)"</li>
+                }
+                .into_any()
+            } else {
+                entries
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, text)| {
+                        let d = domain.clone();
+                        let title = text.clone();
+                        let body = text.clone();
+                        let on_del = move |_| {
+                            let d = d.clone();
+                            config.update(|c| {
+                                if let Some(entry) = c.get_mut(&d) {
+                                    let arr = layer.modify(entry);
+                                    if idx < arr.len() {
+                                        arr.remove(idx);
+                                    }
+                                }
+                            });
+                            persist_config(config);
+                        };
+                        view! {
+                            <li>
+                                <span class="text" title=title>{body}</span>
+                                <button class="del"
+                                        title="Delete"
+                                        on:click=on_del>
+                                    "\u{00d7}"
+                                </button>
+                            </li>
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .into_any()
+            }
+        }
+    };
+
+    // Shared add logic. Both the click handler and the Enter-key
+    // handler delegate here so there's one source of truth for the
+    // dedup + push + clear-draft sequence.
+    let add_entry = {
+        let domain = domain.clone();
+        move || {
+            let value = draft.get().trim().to_string();
+            if value.is_empty() {
+                return;
+            }
+            let already = config.with(|c| {
+                c.get(&domain)
+                    .map(|cfg| layer.read(cfg).iter().any(|v| v == &value))
+                    .unwrap_or(false)
+            });
+            if already {
+                set_options_status("Already in the list".into(), false);
+                return;
+            }
+            let d = domain.clone();
+            let v = value.clone();
+            config.update(|c| {
+                if let Some(entry) = c.get_mut(&d) {
+                    layer.modify(entry).push(v);
+                }
+            });
+            draft.set(String::new());
+            persist_config(config);
+        }
+    };
+
+    let on_click = {
+        let add_entry = add_entry.clone();
+        move |_| add_entry()
+    };
+
+    let on_keydown = {
+        let add_entry = add_entry.clone();
+        move |ev: web_sys::KeyboardEvent| {
+            if ev.key() == "Enter" {
+                add_entry();
+            }
+        }
+    };
+
+    view! {
+        <fieldset class="layer-section">
+            <legend>{layer.title()}</legend>
+            <p class="layer-help">{layer.help()}</p>
+            <ul class="entries">
+                {rows}
+            </ul>
+            <div class="add-row">
+                <input type="text"
+                       spellcheck="false"
+                       placeholder=layer.placeholder()
+                       prop:value=move || draft.get()
+                       on:input=move |ev| {
+                           let val = ev.target()
+                               .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+                               .map(|i| i.value())
+                               .unwrap_or_default();
+                           draft.set(val);
+                       }
+                       on:keydown=on_keydown
+                />
+                <button on:click=on_click>"+ Add"</button>
+            </div>
+        </fieldset>
+    }
+}
+
+/// Persist the current `Config` signal value to
+/// `chrome.storage.local["config"]`. Fire-and-forget - any storage
+/// errors surface through the status banner so the user can retry.
+fn persist_config(config: RwSignal<Config>) {
+    let snapshot = config.get_untracked();
+    spawn_local(async move {
+        if let Err(e) = chrome_bridge::set_config(&snapshot).await {
+            set_options_status(format!("Save failed: {:?}", e), false);
+        }
+    });
 }
 
 /// Raw JSON editor: one `<textarea>` + Apply + Refresh buttons.
