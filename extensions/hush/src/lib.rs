@@ -53,7 +53,7 @@ pub fn build_suggestion_wasm(input: JsValue) -> Result<JsValue, JsValue> {
     let parsed: BuildSuggestionInput =
         serde_wasm_bindgen::from_value(input).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let suggestion = build_suggestion(&parsed);
-    serde_wasm_bindgen::to_value(&suggestion).map_err(|e| JsValue::from_str(&e.to_string()))
+    crate::chrome_bridge::to_js(&suggestion).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// WASM-exported per-signal teaching text lookup. Accepts the signal
@@ -107,5 +107,5 @@ pub fn compute_suggestions_wasm(
     let allowlist: Allowlist =
         serde_wasm_bindgen::from_value(allowlist).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let suggestions = compute_suggestions(&state, &config, &allowlist);
-    serde_wasm_bindgen::to_value(&suggestions).map_err(|e| JsValue::from_str(&e.to_string()))
+    crate::chrome_bridge::to_js(&suggestions).map_err(|e| JsValue::from_str(&e.to_string()))
 }

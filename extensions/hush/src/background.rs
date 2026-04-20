@@ -633,7 +633,7 @@ fn schedule_persist_stats() {
                         .map(|(k, v)| (k.to_string(), v.clone()))
                         .collect()
                 });
-                match serde_wasm_bindgen::to_value(&snapshot) {
+                match crate::chrome_bridge::to_js(&snapshot) {
                     Ok(v) => {
                         if let Err(e) = storage_session_set_one(SESSION_TABSTATS_KEY, &v).await {
                             log_error(&format!("persist tabStats failed: {:?}", e));
@@ -712,7 +712,7 @@ fn schedule_persist_behavior() {
                         .map(|(k, v)| (k.to_string(), v.clone()))
                         .collect()
                 });
-                match serde_wasm_bindgen::to_value(&snapshot) {
+                match crate::chrome_bridge::to_js(&snapshot) {
                     Ok(v) => {
                         if let Err(e) = storage_session_set_one(SESSION_BEHAVIOR_KEY, &v).await {
                             log_error(&format!("persist behavior failed: {:?}", e));
@@ -1337,7 +1337,7 @@ fn handle_get_tab_stats(msg: &JsValue, sender: &JsValue, send_response: &JsValue
     let reply = Object::new();
     if let Some(id) = tab_id {
         let stats = STATE.with(|s| s.borrow().tab_stats.get(&id).cloned().unwrap_or_default());
-        if let Ok(v) = serde_wasm_bindgen::to_value(&stats) {
+        if let Ok(v) = crate::chrome_bridge::to_js(&stats) {
             let _ = Reflect::set(&reply, &JsValue::from_str("stats"), &v);
         }
     } else {
@@ -1353,7 +1353,7 @@ fn handle_get_rule_diagnostics(msg: &JsValue, sender: &JsValue, send_response: &
         .and_then(|v| v.as_string());
     let diag = compute_rule_diagnostics(tab_id, hostname.as_deref());
     let reply = Object::new();
-    if let Ok(v) = serde_wasm_bindgen::to_value(&diag) {
+    if let Ok(v) = crate::chrome_bridge::to_js(&diag) {
         let _ = Reflect::set(&reply, &JsValue::from_str("diagnostics"), &v);
     }
     call_send_response(send_response, &reply.into());
@@ -1386,7 +1386,7 @@ fn handle_get_suggestions(msg: &JsValue, sender: &JsValue, send_response: JsValu
         });
         update_badge(tab_id);
         let reply = Object::new();
-        if let Ok(v) = serde_wasm_bindgen::to_value(&suggestions) {
+        if let Ok(v) = crate::chrome_bridge::to_js(&suggestions) {
             let _ = Reflect::set(&reply, &JsValue::from_str("suggestions"), &v);
         }
         match page_host {
@@ -1472,7 +1472,7 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
             }
         }
         // Write back.
-        if let Ok(v) = serde_wasm_bindgen::to_value(&config) {
+        if let Ok(v) = crate::chrome_bridge::to_js(&config) {
             if let Err(e) = storage_local_set_one(STORAGE_KEY, &v).await {
                 log_error(&format!("accept-suggestion set config failed: {:?}", e));
             }
@@ -1536,7 +1536,7 @@ fn handle_allowlist_add_suggestion(msg: &JsValue, send_response: JsValue) {
         if !al.suggestions.iter().any(|k| k == &key) {
             al.suggestions.push(key.clone());
         }
-        if let Ok(v) = serde_wasm_bindgen::to_value(&al) {
+        if let Ok(v) = crate::chrome_bridge::to_js(&al) {
             if let Err(e) = storage_local_set_one(ALLOWLIST_KEY, &v).await {
                 log_error(&format!("allowlist-add set failed: {:?}", e));
             }
@@ -1697,7 +1697,7 @@ fn handle_get_debug_info(msg: &JsValue, send_response: JsValue) {
         let matched_cfg = matched_domain
             .as_ref()
             .and_then(|d| config.get(d))
-            .map(|c| serde_wasm_bindgen::to_value(c).unwrap_or(JsValue::NULL))
+            .map(|c| crate::chrome_bridge::to_js(c).unwrap_or(JsValue::NULL))
             .unwrap_or(JsValue::NULL);
         let _ = Reflect::set(&reply, &JsValue::from_str("matchedConfig"), &matched_cfg);
 
@@ -1724,12 +1724,12 @@ fn handle_get_debug_info(msg: &JsValue, send_response: JsValue) {
             let _ = Reflect::set(
                 &activity,
                 &JsValue::from_str("hide"),
-                &serde_wasm_bindgen::to_value(&stats.hide).unwrap_or(JsValue::NULL),
+                &crate::chrome_bridge::to_js(&stats.hide).unwrap_or(JsValue::NULL),
             );
             let _ = Reflect::set(
                 &activity,
                 &JsValue::from_str("remove"),
-                &serde_wasm_bindgen::to_value(&stats.remove).unwrap_or(JsValue::NULL),
+                &crate::chrome_bridge::to_js(&stats.remove).unwrap_or(JsValue::NULL),
             );
             let recent_blocks_arr = Array::new();
             let start = stats.blocked_urls.len().saturating_sub(10);
@@ -1758,7 +1758,7 @@ fn handle_get_debug_info(msg: &JsValue, send_response: JsValue) {
             let recent_removed: Vec<&RemovedElement> = stats.removed_elements.iter().rev().take(10).collect();
             let recent_removed_arr = Array::new();
             for r in recent_removed.iter().rev() {
-                recent_removed_arr.push(&serde_wasm_bindgen::to_value(*r).unwrap_or(JsValue::NULL));
+                recent_removed_arr.push(&crate::chrome_bridge::to_js(*r).unwrap_or(JsValue::NULL));
             }
             let _ = Reflect::set(
                 &activity,
@@ -1820,7 +1820,7 @@ fn handle_get_debug_info(msg: &JsValue, send_response: JsValue) {
             let _ = Reflect::set(
                 &summary,
                 &JsValue::from_str("jsCallsByKind"),
-                &serde_wasm_bindgen::to_value(&by_kind).unwrap_or(JsValue::NULL),
+                &crate::chrome_bridge::to_js(&by_kind).unwrap_or(JsValue::NULL),
             );
             let _ = Reflect::set(
                 &summary,
@@ -1835,7 +1835,7 @@ fn handle_get_debug_info(msg: &JsValue, send_response: JsValue) {
             let _ = Reflect::set(
                 &summary,
                 &JsValue::from_str("suggestions"),
-                &serde_wasm_bindgen::to_value(&b.suggestions).unwrap_or(JsValue::NULL),
+                &crate::chrome_bridge::to_js(&b.suggestions).unwrap_or(JsValue::NULL),
             );
             let _ = Reflect::set(&reply, &JsValue::from_str("behavior"), &summary);
         } else {
@@ -1856,7 +1856,7 @@ fn handle_get_debug_info(msg: &JsValue, send_response: JsValue) {
         let _ = Reflect::set(
             &reply,
             &JsValue::from_str("recentLogs"),
-            &serde_wasm_bindgen::to_value(&logs).unwrap_or(JsValue::NULL),
+            &crate::chrome_bridge::to_js(&logs).unwrap_or(JsValue::NULL),
         );
         call_send_response(&send_response, &reply.into());
     });

@@ -13,6 +13,20 @@
 //! wrapping.
 
 use crate::types::{BlockDiagnostic, Config, Suggestion};
+
+/// Serialize a value to `JsValue` using the map-as-object mode.
+///
+/// The default `serde_wasm_bindgen::to_value` emits Rust maps
+/// (HashMap / IndexMap) as JS `Map` objects per the ECMAScript
+/// spec, but `chrome.storage.local` stores values as JSON and
+/// refuses `Map` — it reads back as `{}`. This helper forces
+/// `serialize_maps_as_objects(true)` so every write is a plain
+/// JS object + JSON-compatible. Safe for non-map types too
+/// (no-op there).
+pub fn to_js<T: Serialize + ?Sized>(v: &T) -> Result<JsValue, serde_wasm_bindgen::Error> {
+    let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+    v.serialize(&serializer)
+}
 use js_sys::{Promise, Reflect};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -37,7 +51,7 @@ where
     R: for<'de> Deserialize<'de>,
 {
     let payload =
-        serde_wasm_bindgen::to_value(msg).map_err(|e| JsValue::from_str(&format!("sendMessage serialize: {e}")))?;
+        to_js(msg).map_err(|e| JsValue::from_str(&format!("sendMessage serialize: {e}")))?;
     let (runtime, func) = send_fn()?;
     let promise: Promise = func
         .call1(&runtime, &payload)?
@@ -331,8 +345,8 @@ pub async fn set_config<C: serde::Serialize + ?Sized>(config: &C) -> Result<(), 
     let set_fn: js_sys::Function = Reflect::get(&local, &JsValue::from_str("set"))?
         .dyn_into()
         .map_err(|_| JsValue::from_str("chrome.storage.local.set is not a function"))?;
-    let js_config = serde_wasm_bindgen::to_value(config)
-        .map_err(|e| JsValue::from_str(&format!("set_config serialize: {e}")))?;
+    let js_config =
+        to_js(config).map_err(|e| JsValue::from_str(&format!("set_config serialize: {e}")))?;
     let payload = js_sys::Object::new();
     Reflect::set(&payload, &JsValue::from_str("config"), &js_config)?;
     let set_promise: Promise = set_fn
@@ -515,7 +529,7 @@ pub async fn get_debug_info(tab_id: Option<i32>) -> Result<JsValue, JsValue> {
         #[serde(rename = "tabId")]
         tab_id: Option<i32>,
     }
-    let payload = serde_wasm_bindgen::to_value(&Msg {
+    let payload = to_js(&Msg {
         type_: "hush:get-debug-info",
         tab_id,
     })
