@@ -54,6 +54,13 @@ changes expected).
   `set_option_bool(key, value)` helper the toggles share. Exported
   `setOptionsStatus(msg, ok)` so the remaining JS handlers
   (export/reset/JSON/allowlist) feed the same banner.
+- Iter 2: `ConfigToolbar` component ports the Export JSON + Reset to
+  defaults buttons. `chrome_bridge::get_config_json` pretty-prints
+  `chrome.storage.local["config"]` via `js_sys::JSON::stringify`;
+  `chrome_bridge::reset_config_to_defaults` fetches `sites.json` and
+  writes it back. Export downloads via a `web_sys::Blob` + synthetic
+  anchor click; Reset calls `window.location().reload()` so the
+  still-JS-owned site list + JSON editor re-read storage.
 
 ## [0.10.0] - 2026-04-19
 

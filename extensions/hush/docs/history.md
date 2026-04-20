@@ -7,6 +7,19 @@ this file is chronology.
 
 ## Stage 5 (in progress): Options + content-script cleanup
 
+**Iter 2 (config toolbar)**: Export JSON + Reset to defaults ported
+to the Leptos `ConfigToolbar` component. Two new chrome_bridge
+helpers: `get_config_json` reads `chrome.storage.local["config"]` and
+stringifies with `js_sys::JSON::stringify_with_replacer_and_space` so
+indentation matches the old JS `JSON.stringify(config, null, 2)`;
+`reset_config_to_defaults` hits `chrome.runtime.getURL("sites.json")`
++ `fetch` + `.json()` + writes the seed back to storage. Export
+triggers a download by creating a `web_sys::Blob::new_with_str_sequence`,
+an object URL, and a synthetic anchor click. Reset issues
+`window.location().reload()` so the still-JS-owned site list + JSON
+editor pick up the new config from storage. `options.html` lost the
+`<div class="toolbar">` wrapper that held the two buttons.
+
 **Iter 1 (options scaffold + preference toggles)**: new
 `src/ui_options.rs` mirrors the shape of `src/ui_popup.rs`.
 `mountOptions(snap)` wasm-bindgen export takes an `OptionsSnapshot`

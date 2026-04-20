@@ -193,6 +193,86 @@ pub async fn enable_detector() -> Result<(), JsValue> {
     set_option_bool("suggestionsEnabled", true).await
 }
 
+/// Read the full `config` object from `chrome.storage.local` and return
+/// it as a pretty-printed JSON string. Used by the options-page Export
+/// button to seed the download.
+pub async fn get_config_json() -> Result<String, JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+    let storage = Reflect::get(&chrome, &JsValue::from_str("storage"))?;
+    let local = Reflect::get(&storage, &JsValue::from_str("local"))?;
+    let get_fn: js_sys::Function = Reflect::get(&local, &JsValue::from_str("get"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.get is not a function"))?;
+    let get_promise: Promise = get_fn
+        .call1(&local, &JsValue::from_str("config"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.get did not return a Promise"))?;
+    let reply = JsFuture::from(get_promise).await?;
+    let config = Reflect::get(&reply, &JsValue::from_str("config"))
+        .ok()
+        .filter(|v| !v.is_undefined() && !v.is_null())
+        .unwrap_or_else(|| js_sys::Object::new().into());
+    // `JSON.stringify(obj, null, 2)` for pretty-printed output.
+    let json = js_sys::JSON::stringify_with_replacer_and_space(
+        &config,
+        &JsValue::NULL,
+        &JsValue::from_f64(2.0),
+    )?;
+    Ok(json.as_string().unwrap_or_default())
+}
+
+/// Fetch the shipped `sites.json` seed (via `chrome.runtime.getURL`) and
+/// write it to `chrome.storage.local["config"]`, replacing whatever's
+/// there. Used by the options-page "Reset to defaults" button.
+pub async fn reset_config_to_defaults() -> Result<(), JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let chrome = Reflect::get(&window, &JsValue::from_str("chrome"))?;
+
+    // chrome.runtime.getURL("sites.json") -> extension-scoped URL string.
+    let runtime = Reflect::get(&chrome, &JsValue::from_str("runtime"))?;
+    let get_url_fn: js_sys::Function = Reflect::get(&runtime, &JsValue::from_str("getURL"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.runtime.getURL is not a function"))?;
+    let url = get_url_fn
+        .call1(&runtime, &JsValue::from_str("sites.json"))?
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("chrome.runtime.getURL returned non-string"))?;
+
+    // fetch(url) -> Response -> json().
+    let fetch_fn: js_sys::Function = Reflect::get(&window, &JsValue::from_str("fetch"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("window.fetch is not a function"))?;
+    let fetch_promise: Promise = fetch_fn
+        .call1(&window, &JsValue::from_str(&url))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("fetch did not return a Promise"))?;
+    let response = JsFuture::from(fetch_promise).await?;
+    let json_fn: js_sys::Function = Reflect::get(&response, &JsValue::from_str("json"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("Response.json is not a function"))?;
+    let json_promise: Promise = json_fn
+        .call0(&response)?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("Response.json did not return a Promise"))?;
+    let seed = JsFuture::from(json_promise).await?;
+
+    // chrome.storage.local.set({config: seed}).
+    let storage = Reflect::get(&chrome, &JsValue::from_str("storage"))?;
+    let local = Reflect::get(&storage, &JsValue::from_str("local"))?;
+    let set_fn: js_sys::Function = Reflect::get(&local, &JsValue::from_str("set"))?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set is not a function"))?;
+    let payload = js_sys::Object::new();
+    Reflect::set(&payload, &JsValue::from_str("config"), &seed)?;
+    let set_promise: Promise = set_fn
+        .call1(&local, &payload.into())?
+        .dyn_into()
+        .map_err(|_| JsValue::from_str("chrome.storage.local.set did not return a Promise"))?;
+    JsFuture::from(set_promise).await?;
+    Ok(())
+}
+
 /// Ask the content script in tab `tab_id` to run one behavioral scan
 /// immediately. Message shape matches the JS popup's existing
 /// `chrome.tabs.sendMessage(tabId, { type: "hush:scan-once" })` call.

@@ -97,8 +97,149 @@ fn OptionsRoot(snap: OptionsSnapshot) -> impl IntoView {
             initial_suggestions=snap.suggestions_enabled
             status=status
         />
+        <ConfigToolbar status=status />
         <StatusBanner status=status />
     }
+}
+
+/// Export + Reset buttons for the site config. Matches the JS
+/// `exportBtn` / `resetBtn` behavior:
+///
+/// - Export: read `chrome.storage.local["config"]` as JSON, create a
+///   `Blob`, trigger a download via a synthetic anchor click, revoke
+///   the object URL.
+/// - Reset: `confirm()` with the user, fetch `sites.json`, write it
+///   into `chrome.storage.local["config"]`, then reload the options
+///   page so the JS-owned site list and JSON editor re-read storage.
+#[component]
+fn ConfigToolbar(status: RwSignal<Option<StatusMsg>>) -> impl IntoView {
+    let busy = RwSignal::new(false);
+
+    let on_export = move |_| {
+        if busy.get() {
+            return;
+        }
+        busy.set(true);
+        spawn_local(async move {
+            match chrome_bridge::get_config_json().await {
+                Ok(json) => {
+                    if let Err(e) = trigger_json_download(&json, "hush-config.json") {
+                        status.set(Some(StatusMsg {
+                            text: format!("Export failed: {:?}", e),
+                            ok: false,
+                        }));
+                    } else {
+                        status.set(Some(StatusMsg {
+                            text: "Downloaded hush-config.json".into(),
+                            ok: true,
+                        }));
+                    }
+                }
+                Err(e) => {
+                    status.set(Some(StatusMsg {
+                        text: format!("Export failed: {:?}", e),
+                        ok: false,
+                    }));
+                }
+            }
+            set_auto_hide(status);
+            busy.set(false);
+        });
+    };
+
+    let on_reset = move |_| {
+        if busy.get() {
+            return;
+        }
+        let window = match web_sys::window() {
+            Some(w) => w,
+            None => return,
+        };
+        let ok = window
+            .confirm_with_message(
+                "Reset all sites to the shipped defaults? This will replace your current config.",
+            )
+            .unwrap_or(false);
+        if !ok {
+            return;
+        }
+        busy.set(true);
+        spawn_local(async move {
+            match chrome_bridge::reset_config_to_defaults().await {
+                Ok(()) => {
+                    // Reload the page so the JS-owned site list + JSON
+                    // editor re-read chrome.storage.local and reflect
+                    // the new config. Once those get ported to Leptos
+                    // this becomes a signal update instead.
+                    if let Some(window) = web_sys::window() {
+                        let _ = window.location().reload();
+                    }
+                }
+                Err(e) => {
+                    status.set(Some(StatusMsg {
+                        text: format!("Reset failed: {:?}", e),
+                        ok: false,
+                    }));
+                    set_auto_hide(status);
+                    busy.set(false);
+                }
+            }
+        });
+    };
+
+    view! {
+        <div class="rust-config-toolbar"
+             style="display:flex; gap: 8px; margin-top: 4px;">
+            <button on:click=on_export
+                    disabled=move || busy.get()
+                    style="padding: 6px 14px; font-size: 13px; cursor: pointer;
+                           background: #fff; border: 1px solid #ccc;
+                           border-radius: 5px;">
+                "Export JSON"
+            </button>
+            <button on:click=on_reset
+                    disabled=move || busy.get()
+                    style="padding: 6px 14px; font-size: 13px; cursor: pointer;
+                           background: #fff; color: #8a1616;
+                           border: 1px solid #d7b7b7; border-radius: 5px;">
+                "Reset to defaults"
+            </button>
+        </div>
+    }
+}
+
+/// Trigger a browser download of `content` under `filename`. Uses a
+/// synthetic `<a download>` anchor plus `URL.createObjectURL` to avoid
+/// needing a server roundtrip.
+fn trigger_json_download(content: &str, filename: &str) -> Result<(), JsValue> {
+    use js_sys::Array;
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let document = window
+        .document()
+        .ok_or_else(|| JsValue::from_str("no document"))?;
+
+    let parts = Array::new();
+    parts.push(&JsValue::from_str(content));
+    // No MIME type arg: the `.json` filename on the anchor is what
+    // drives the browser's save dialog. Avoiding options also dodges
+    // needing the `BlobPropertyBag` web-sys feature flag.
+    let blob = web_sys::Blob::new_with_str_sequence(&parts)?;
+    let url = web_sys::Url::create_object_url_with_blob(&blob)?;
+
+    let anchor = document
+        .create_element("a")?
+        .dyn_into::<web_sys::HtmlAnchorElement>()
+        .map_err(|_| JsValue::from_str("failed to cast anchor"))?;
+    anchor.set_href(&url);
+    anchor.set_download(filename);
+    let body = document
+        .body()
+        .ok_or_else(|| JsValue::from_str("no body"))?;
+    body.append_child(&anchor)?;
+    anchor.click();
+    body.remove_child(&anchor)?;
+    web_sys::Url::revoke_object_url(&url)?;
+    Ok(())
 }
 
 /// Two preference checkboxes: enable behavioral suggestions, enable

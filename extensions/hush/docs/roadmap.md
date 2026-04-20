@@ -104,7 +104,13 @@ totals under 100 lines across all bootstrap shims.*
           shared status banner (`StatusBanner`) ported. Exported
           `setOptionsStatus` so the remaining JS handlers surface
           feedback through the same banner.
-    - [ ] Port export / reset / JSON editor toolbar
+    - [x] Port Export JSON + Reset to defaults buttons
+          (`ConfigToolbar` component; `chrome_bridge::get_config_json`
+          + `reset_config_to_defaults` helpers). Reset reloads the
+          page so the JS-owned site list and JSON editor re-read
+          `chrome.storage.local`.
+    - [ ] Port JSON editor (Apply / Refresh buttons, `<textarea>`
+          sync with site-list state)
     - [ ] Port allowlist textareas (iframes / overlays / suggestions)
     - [ ] Port site list + per-site editor (the large chunk)
 - [ ] Port `content.js` DOM scans via `web_sys::Document` and

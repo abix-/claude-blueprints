@@ -32,8 +32,6 @@ const allowlistOverlaysEl = document.getElementById("allowlist-overlays");
 const allowlistSuggestionsEl = document.getElementById("allowlist-suggestions");
 const allowlistSaveBtn = document.getElementById("allowlist-save");
 const allowlistResetBtn = document.getElementById("allowlist-reset");
-const exportBtn = document.getElementById("export");
-const resetBtn = document.getElementById("reset");
 const jsonEl = document.getElementById("json-config");
 const jsonApplyBtn = document.getElementById("json-apply");
 const jsonRefreshBtn = document.getElementById("json-refresh");
@@ -294,34 +292,11 @@ addSiteBtn.addEventListener("click", async () => {
 // chrome_bridge::set_option_bool and surface status through the
 // shared StatusBanner.
 
-exportBtn.addEventListener("click", async () => {
-  const data = await chrome.storage.local.get(STORAGE_KEY);
-  const json = JSON.stringify(data[STORAGE_KEY] || {}, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "hush-config.json";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  setStatus("Downloaded hush-config.json", true);
-});
-
-resetBtn.addEventListener("click", async () => {
-  if (!confirm("Reset all sites to the shipped defaults? This will replace your current config.")) return;
-  try {
-    const seed = await fetch(chrome.runtime.getURL("sites.json")).then(r => r.json());
-    config = seed;
-    selectedDomain = null;
-    await save();
-    render();
-    setStatus("Reset to defaults", true);
-  } catch (e) {
-    setStatus("Reset failed: " + e.message, false);
-  }
-});
+// The Export JSON + Reset to defaults buttons moved into the Leptos
+// ConfigToolbar component (src/ui_options.rs). Export builds a Blob
+// via web_sys and triggers a synthetic anchor click; Reset fetches
+// sites.json and reloads the page so the remaining JS-owned UI
+// re-reads chrome.storage.local.
 
 jsonApplyBtn.addEventListener("click", async () => {
   let parsed;

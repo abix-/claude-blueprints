@@ -497,15 +497,10 @@ iframe[src*="tracker.example.com"]
   </section>
 
   <div class="settings-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
-    <!-- Preference toggles (suggestions / debug) + shared status banner
-         render inside the Leptos tree. See src/ui_options.rs. The
-         export/reset toolbar still lives in options.js until a later
-         stage 5 iteration ports it. -->
+    <!-- Preference toggles (suggestions / debug), Export / Reset
+         toolbar, and shared status banner all render inside the
+         Leptos tree. See src/ui_options.rs. -->
     <div id="rust-options-root"></div>
-    <div class="toolbar" style="margin-top: 4px;">
-      <button id="export">Export JSON</button>
-      <button id="reset" class="danger">Reset to defaults</button>
-    </div>
   </div>
 
   <details class="advanced">
