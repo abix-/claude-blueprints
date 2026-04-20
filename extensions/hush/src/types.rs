@@ -111,6 +111,47 @@ pub struct BuildSuggestionInput {
     pub existing_hide: Arc<[String]>,
 }
 
+/// One blocked URL observation recorded by the service worker when a
+/// DNR rule fires. Popup shows these grouped by pattern with a
+/// collapsible per-URL list.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BlockedUrl {
+    #[serde(default)]
+    pub t: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub pattern: String,
+    #[serde(
+        rename = "resourceType",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub resource_type: Option<String>,
+}
+
+/// Per-rule diagnostic entry from `computeRuleDiagnostics` in
+/// background.js. Drives the popup's "Block rules" panel: each
+/// configured block rule's fire count, status, and (when the rule
+/// looks broken) a hint with URLs that matched the keyword but
+/// didn't fire the rule.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BlockDiagnostic {
+    #[serde(default)]
+    pub pattern: String,
+    #[serde(rename = "sourceDomain", default)]
+    pub source_domain: String,
+    #[serde(default)]
+    pub fired: u32,
+    #[serde(default)]
+    pub keyword: String,
+    /// "firing", "no-traffic", or "pattern-broken".
+    #[serde(default)]
+    pub status: String,
+    #[serde(rename = "matchingUrls", default)]
+    pub matching_urls: Vec<String>,
+}
+
 /// Persistent allowlist in `chrome.storage.local`. All three lists are
 /// independent user-editable arrays. `suggestions` is the per-key
 /// cross-session allowlist populated by the popup's "Allow" button;

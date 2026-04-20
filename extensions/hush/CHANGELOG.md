@@ -22,9 +22,16 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 - Iter 5: `DetectorCta` component owns the Enable / Scan-once /
   Rescan row with `chrome.storage.local` + `chrome.tabs.sendMessage`
   from Rust. `#suggestions-block` deleted from `popup.html`.
+- Iter 6: `BlockedSection` component ports the Blocked (network)
+  section. Groups blocked URLs by pattern, adds a collapsible
+  evidence list with a Copy button, and renders per-rule diagnostics
+  (firing / no-traffic / pattern-broken). New `BlockedUrl` +
+  `BlockDiagnostic` types in `src/types.rs`. ~170 LOC of JS deleted
+  (`renderBlockedList`, `renderBlockDiagnostics`, `escapeHtml`) plus
+  the four `#block-*` DOM anchors in `popup.html`.
 
-Remaining before Stage 4 is fully complete: port the blocked-URL
-list, removed-element evidence, and block-rule diagnostics sections.
+Remaining before Stage 4 is fully complete: port the Remove + Hide
+selector lists and the removed-element evidence panel.
 
 ## [0.10.0] - 2026-04-19
 

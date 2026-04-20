@@ -1,9 +1,9 @@
 // Popup is an ES module (popup.html uses type="module"). Import the
 // wasm-bindgen glue statically so instantiation starts at parse time.
 // The returned `wasmReady` promise is awaited in main() before mounting
-// the Leptos subtree. Over subsequent commits, the per-section JS
-// renderers below get ported to Leptos components and their
-// corresponding `#block-list` / `#sugg-list` roots disappear.
+// the Leptos subtree. Remaining JS renderers (remove + hide sections,
+// removed-element evidence) get ported to Leptos in the next stage 4
+// iteration; their #remove-* / #hide-* DOM anchors live in popup.html.
 import initWasm, { initEngine, mountPopup, refreshPopupSuggestions } from "./dist/pkg/hush.js";
 
 const wasmReady = initWasm().then(() => {
@@ -100,9 +100,10 @@ async function main() {
   } else {
     sectionsEl.hidden = false;
 
-    // Render in aggressiveness order: block > remove > hide.
-    renderBlockedList(stats.blockedUrls || [], stats.block || 0);
-    renderBlockDiagnostics((diagResp && diagResp.diagnostics) || []);
+    // Block section (list + evidence + diagnostics) is rendered by the
+    // Leptos tree at #rust-popup-root via the snapshot below. Remove +
+    // Hide sections still live in JS and get ported in the next stage
+    // 4 iteration.
     renderSelectorList("remove", stats.remove || {}, null);
     renderRemovedEvidence(stats.removedElements || []);
     const removeKeys = new Set(Object.keys(stats.remove || {}));
@@ -125,6 +126,9 @@ async function main() {
       tabId,
       suggestions,
       detectorEnabled,
+      isMatched,
+      blockedUrls: stats.blockedUrls || [],
+      blockDiagnostics: (diagResp && diagResp.diagnostics) || [],
     });
   } catch (e) { console.error("[Hush popup] mountPopup failed", e); }
 }
@@ -240,170 +244,9 @@ function makeCopyButton(getText) {
   return btn;
 }
 
-function renderBlockedList(blockedUrls, blockCount) {
-  const countEl = document.getElementById("block-count");
-  const listEl = document.getElementById("block-list");
-  const evidenceEl = document.getElementById("block-evidence");
-
-  countEl.textContent = String(blockCount);
-  countEl.classList.toggle("zero", blockCount === 0);
-  listEl.innerHTML = "";
-
-  const byPattern = {};
-  for (const b of blockedUrls) {
-    const key = b.pattern || "(unknown rule)";
-    byPattern[key] = (byPattern[key] || 0) + 1;
-  }
-  const patterns = Object.keys(byPattern);
-  if (!patterns.length) {
-    const p = document.createElement("div");
-    p.className = "no-sels";
-    p.textContent = blockCount > 0
-      ? "Blocked, but URL evidence not yet captured (try reloading)"
-      : "No network blocks yet";
-    listEl.appendChild(p);
-  } else {
-    for (const pattern of patterns) {
-      const li = document.createElement("li");
-      const sel = document.createElement("span");
-      sel.className = "sel";
-      sel.title = pattern;
-      sel.textContent = pattern;
-      const n = document.createElement("span");
-      n.className = "n";
-      n.textContent = String(byPattern[pattern]);
-      li.appendChild(sel);
-      li.appendChild(n);
-      listEl.appendChild(li);
-    }
-  }
-
-  if (!blockedUrls.length) {
-    evidenceEl.hidden = true;
-    return;
-  }
-  evidenceEl.hidden = false;
-  evidenceEl.innerHTML = "";
-  const header = document.createElement("div");
-  header.style.cssText = "display:flex;align-items:center;gap:8px;";
-  const toggle = document.createElement("span");
-  toggle.className = "evidence-toggle";
-  toggle.textContent = "Show " + blockedUrls.length + " blocked URL" +
-    (blockedUrls.length === 1 ? "" : "s");
-  header.appendChild(toggle);
-  const copyBtn = makeCopyButton(() =>
-    blockedUrls
-      .slice()
-      .reverse()
-      .map(b => timeOnly(b.t) + "\t[" + (b.resourceType || "?") + "]\t" + b.url + "\t(pattern: " + (b.pattern || "?") + ")")
-      .join("\n")
-  );
-  header.appendChild(copyBtn);
-  evidenceEl.appendChild(header);
-  const list = document.createElement("ul");
-  list.className = "evidence-list";
-  list.hidden = true;
-  const items = blockedUrls.slice().reverse();
-  for (const b of items) {
-    const li = document.createElement("li");
-    const ts = document.createElement("span");
-    ts.className = "ts";
-    ts.textContent = timeOnly(b.t);
-    const body = document.createElement("span");
-    const resType = b.resourceType ? " [" + b.resourceType + "]" : "";
-    body.title = b.url;
-    body.textContent = b.url + resType;
-    li.appendChild(ts);
-    li.appendChild(body);
-    list.appendChild(li);
-  }
-  evidenceEl.appendChild(list);
-  toggle.addEventListener("click", () => {
-    list.hidden = !list.hidden;
-    toggle.textContent = (list.hidden ? "Show " : "Hide ") +
-      blockedUrls.length + " blocked URL" +
-      (blockedUrls.length === 1 ? "" : "s");
-  });
-}
-
-// Per-rule diagnostic panel inside the Blocked section. Shows each configured
-// block rule with its fire count and status, plus a hint if the pattern looks
-// broken (observed traffic that matches the pattern's keyword but no fires).
-function renderBlockDiagnostics(diagnostics) {
-  const container = document.getElementById("block-diagnostics");
-  if (!container) return;
-  container.innerHTML = "";
-  if (!diagnostics.length) {
-    container.hidden = true;
-    return;
-  }
-  container.hidden = false;
-
-  const title = document.createElement("div");
-  title.className = "diagnostics-title";
-  title.textContent = "Block rules (" + diagnostics.length + ")";
-  container.appendChild(title);
-
-  for (const d of diagnostics) {
-    const row = document.createElement("div");
-    row.className = "rule-row";
-
-    const patternEl = document.createElement("div");
-    patternEl.className = "rule-pattern";
-    patternEl.title = d.pattern;
-    patternEl.textContent = d.pattern;
-    row.appendChild(patternEl);
-
-    const meta = document.createElement("div");
-    meta.className = "rule-meta";
-    const fired = document.createElement("span");
-    fired.className = "rule-fired";
-    fired.textContent = "fired " + d.fired + "x  |  declared under " + (d.sourceDomain || "-");
-    meta.appendChild(fired);
-    const statusLabel = {
-      "firing": "FIRING",
-      "no-traffic": "no traffic",
-      "pattern-broken": "PATTERN BROKEN?"
-    }[d.status] || d.status;
-    const status = document.createElement("span");
-    status.className = "rule-status " + d.status;
-    status.textContent = statusLabel;
-    meta.appendChild(status);
-    row.appendChild(meta);
-
-    if (d.status === "pattern-broken" && d.matchingUrls && d.matchingUrls.length) {
-      const hint = document.createElement("div");
-      hint.className = "rule-hint";
-      hint.innerHTML = "<b>Diagnosis:</b> this page requested URLs containing " +
-        "<code>" + escapeHtml(d.keyword) + "</code> but the rule never fired. " +
-        "Your pattern probably doesn't match. Try a simpler form - e.g., drop wildcards, " +
-        "or use the distinctive substring anchored with <code>||domain</code>.";
-      const urls = document.createElement("div");
-      urls.className = "urls";
-      urls.innerHTML = "<div style=\"margin-top:6px;color:#999\">URLs that should have matched:</div>";
-      for (const u of d.matchingUrls) {
-        const line = document.createElement("div");
-        line.title = u;
-        line.textContent = u;
-        urls.appendChild(line);
-      }
-      hint.appendChild(urls);
-      row.appendChild(hint);
-    } else if (d.status === "no-traffic" && d.fired === 0) {
-      const hint = document.createElement("div");
-      hint.className = "rule-hint";
-      hint.style.background = "#f0f0f0";
-      hint.style.color = "#666";
-      hint.innerHTML = "<b>No matching traffic yet.</b> Either the site hasn't requested " +
-        "this URL in the current session, or a DOM Remove rule is killing the element " +
-        "before it can fetch. Not necessarily a bug - scroll/reload the page to generate " +
-        "more traffic if you want to verify.";
-      row.appendChild(hint);
-    }
-
-    container.appendChild(row);
-  }
-}
+// renderBlockedList + renderBlockDiagnostics were ported to the Leptos
+// BlockedSection component in src/ui_popup.rs (stage 4 iter 6). See
+// popup.html for the removed #block-* DOM anchors.
 
 function timeOnly(iso) {
   try {
@@ -430,16 +273,6 @@ function safeHostname(url) {
   } catch (e) {
     return "";
   }
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#39;"
-  }[c]));
 }
 
 main();

@@ -11,7 +11,7 @@
 //! iterations.
 
 use crate::chrome_bridge;
-use crate::types::{Suggestion, SuggestionDiag, SuggestionLayer};
+use crate::types::{BlockDiagnostic, BlockedUrl, Suggestion, SuggestionDiag, SuggestionLayer};
 use js_sys::Reflect;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -103,6 +103,20 @@ pub struct PopupSnapshot {
     /// Whether the behavioral detector is enabled in user options.
     /// Affects the "enable detector" CTA copy.
     pub detector_enabled: bool,
+    /// True when a site config matched this tab's hostname. Hides the
+    /// per-section diagnostic panels when there's no config to
+    /// interpret them against.
+    #[serde(default)]
+    pub is_matched: bool,
+    /// Recent DNR-rule fires for this tab. Rendered as a by-pattern
+    /// summary plus a collapsible URL list.
+    #[serde(default)]
+    pub blocked_urls: Vec<BlockedUrl>,
+    /// Per-rule diagnostic rows for the Blocked section. Each entry
+    /// represents one configured block rule with its fire count,
+    /// status, and any broken-pattern hint.
+    #[serde(default)]
+    pub block_diagnostics: Vec<BlockDiagnostic>,
 }
 
 /// WASM entry. Called by `popup.js` once per popup open.
@@ -161,7 +175,301 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
             detector_enabled=snap.detector_enabled
             tab_id=tab_id
         />
+        {if snap.is_matched {
+            view! {
+                <div class="rust-sections" style="padding: 4px 0;">
+                    <BlockedSection
+                        blocked_urls=snap.blocked_urls.clone()
+                        diagnostics=snap.block_diagnostics.clone()
+                        block_count=snap.block_count
+                    />
+                </div>
+            }.into_any()
+        } else { view! { <div /> }.into_any() }}
     }
+}
+
+/// Blocked (network) section. Replaces the `#block-count` / `#block-list`
+/// / `#block-evidence` / `#block-diagnostics` renderers that previously
+/// lived in `popup.js`. Groups recent blocked URLs by pattern, shows a
+/// collapsible per-URL evidence list, and renders the per-rule
+/// diagnostic panel with "firing" / "no traffic" / "pattern broken"
+/// status badges plus a broken-pattern hint when present.
+#[component]
+fn BlockedSection(
+    blocked_urls: Vec<BlockedUrl>,
+    diagnostics: Vec<BlockDiagnostic>,
+    block_count: u32,
+) -> impl IntoView {
+    let evidence_open = RwSignal::new(false);
+    let copy_label = RwSignal::new("Copy");
+
+    // Group URLs by pattern for the summary list.
+    let mut by_pattern: Vec<(String, u32)> = Vec::new();
+    {
+        use std::collections::BTreeMap;
+        let mut map: BTreeMap<String, u32> = BTreeMap::new();
+        for b in &blocked_urls {
+            let key = if b.pattern.is_empty() {
+                "(unknown rule)".to_string()
+            } else {
+                b.pattern.clone()
+            };
+            *map.entry(key).or_insert(0) += 1;
+        }
+        for (k, v) in map {
+            by_pattern.push((k, v));
+        }
+    }
+
+    let has_patterns = !by_pattern.is_empty();
+    let has_urls = !blocked_urls.is_empty();
+    let has_diag = !diagnostics.is_empty();
+    let blocked_len = blocked_urls.len();
+
+    let count_class = if block_count == 0 { "count zero" } else { "count" };
+
+    // Evidence copy payload: reverse order so newest first, join with newlines.
+    let copy_payload: String = blocked_urls
+        .iter()
+        .rev()
+        .map(|b| {
+            format!(
+                "{}\t[{}]\t{}\t(pattern: {})",
+                time_only(&b.t),
+                b.resource_type.clone().unwrap_or_else(|| "?".into()),
+                b.url,
+                if b.pattern.is_empty() { "?".into() } else { b.pattern.clone() },
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let on_copy = move |_| {
+        let ok = clipboard_write(&copy_payload);
+        copy_label.set(if ok { "Copied" } else { "Failed" });
+        let label = copy_label;
+        if let Some(window) = web_sys::window() {
+            let cb = Closure::<dyn Fn()>::new(move || label.set("Copy"));
+            let _ = window
+                .set_timeout_with_callback_and_timeout_and_arguments_0(
+                    cb.as_ref().unchecked_ref(),
+                    1500,
+                );
+            cb.forget();
+        }
+    };
+
+    // Newest first for the visible evidence list too.
+    let evidence_rows: Vec<_> = blocked_urls
+        .iter()
+        .rev()
+        .map(|b| {
+            let ts = time_only(&b.t);
+            let rtype_suffix = b
+                .resource_type
+                .as_ref()
+                .map(|t| format!(" [{}]", t))
+                .unwrap_or_default();
+            let title = b.url.clone();
+            let body = format!("{}{}", b.url, rtype_suffix);
+            view! {
+                <li>
+                    <span class="ts">{ts}</span>
+                    <span title=title>{body}</span>
+                </li>
+            }
+        })
+        .collect();
+
+    view! {
+        <details class="section" open=true>
+            <summary class="section-head">
+                <span class="section-name">"Blocked (network)"</span>
+                <span class=count_class>{block_count}</span>
+            </summary>
+            <ul>
+                {if has_patterns {
+                    by_pattern.into_iter().map(|(pattern, n)| {
+                        let title = pattern.clone();
+                        view! {
+                            <li>
+                                <span class="sel" title=title>{pattern}</span>
+                                <span class="n">{n}</span>
+                            </li>
+                        }
+                    }).collect::<Vec<_>>().into_any()
+                } else {
+                    let msg = if block_count > 0 {
+                        "Blocked, but URL evidence not yet captured (try reloading)"
+                    } else {
+                        "No network blocks yet"
+                    };
+                    view! {
+                        <div class="no-sels">{msg}</div>
+                    }.into_any()
+                }}
+            </ul>
+            {if has_urls {
+                let toggle_text = move || {
+                    let plural = if blocked_len == 1 { "" } else { "s" };
+                    let verb = if evidence_open.get() { "Hide" } else { "Show" };
+                    format!("{} {} blocked URL{}", verb, blocked_len, plural)
+                };
+                view! {
+                    <div class="evidence">
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span class="evidence-toggle"
+                                  on:click=move |_| evidence_open.update(|v| *v = !*v)>
+                                {toggle_text}
+                            </span>
+                            <button on:click=on_copy
+                                    title="Copy evidence to clipboard"
+                                    style="flex:0 0 auto;padding:2px 10px;font-size:10px;cursor:pointer;border:1px solid #ccc;background:#fff;border-radius:4px;">
+                                {move || copy_label.get()}
+                            </button>
+                        </div>
+                        {move || if evidence_open.get() {
+                            view! {
+                                <ul class="evidence-list">
+                                    {evidence_rows.clone()}
+                                </ul>
+                            }.into_any()
+                        } else { view! { <span /> }.into_any() }}
+                    </div>
+                }.into_any()
+            } else { view! { <div /> }.into_any() }}
+            {if has_diag {
+                let diag_len = diagnostics.len();
+                let rows: Vec<_> = diagnostics.into_iter().map(|d| {
+                    view! { <RuleRow diag=d /> }
+                }).collect();
+                view! {
+                    <div class="diagnostics">
+                        <div class="diagnostics-title">
+                            "Block rules (" {diag_len} ")"
+                        </div>
+                        {rows}
+                    </div>
+                }.into_any()
+            } else { view! { <div /> }.into_any() }}
+        </details>
+    }
+}
+
+/// One row in the Block-rules diagnostic panel. Rendered as a standalone
+/// component so the conditional hint (broken-pattern vs. no-traffic) can
+/// be expressed as straight view branches without cloning the whole
+/// parent context.
+#[component]
+fn RuleRow(diag: BlockDiagnostic) -> impl IntoView {
+    let status_label = match diag.status.as_str() {
+        "firing" => "FIRING",
+        "no-traffic" => "no traffic",
+        "pattern-broken" => "PATTERN BROKEN?",
+        other => {
+            // Fallback: render whatever the backend sent. Lets future
+            // status values land without a Rust change.
+            return view! {
+                <div class="rule-row">
+                    <div class="rule-pattern" title=diag.pattern.clone()>
+                        {diag.pattern.clone()}
+                    </div>
+                    <div class="rule-meta">
+                        <span class="rule-fired">
+                            "fired " {diag.fired} "x  |  declared under "
+                            {if diag.source_domain.is_empty() {
+                                "-".to_string()
+                            } else { diag.source_domain.clone() }}
+                        </span>
+                        <span class=format!("rule-status {other}")>
+                            {other.to_string()}
+                        </span>
+                    </div>
+                </div>
+            }.into_any();
+        }
+    };
+    let status_class = format!("rule-status {}", diag.status);
+    let source = if diag.source_domain.is_empty() {
+        "-".to_string()
+    } else {
+        diag.source_domain.clone()
+    };
+
+    let hint = if diag.status == "pattern-broken" && !diag.matching_urls.is_empty() {
+        let urls: Vec<_> = diag
+            .matching_urls
+            .iter()
+            .map(|u| {
+                let title = u.clone();
+                view! { <div title=title>{u.clone()}</div> }
+            })
+            .collect();
+        view! {
+            <div class="rule-hint">
+                <b>"Diagnosis: "</b>
+                "this page requested URLs containing "
+                <code>{diag.keyword.clone()}</code>
+                " but the rule never fired. Your pattern probably doesn't match. "
+                "Try a simpler form - e.g., drop wildcards, or use the distinctive "
+                "substring anchored with "
+                <code>"||domain"</code>
+                "."
+                <div class="urls">
+                    <div style="margin-top:6px;color:#999">
+                        "URLs that should have matched:"
+                    </div>
+                    {urls}
+                </div>
+            </div>
+        }.into_any()
+    } else if diag.status == "no-traffic" && diag.fired == 0 {
+        view! {
+            <div class="rule-hint"
+                 style="background:#f0f0f0;color:#666;">
+                <b>"No matching traffic yet. "</b>
+                "Either the site hasn't requested this URL in the current "
+                "session, or a DOM Remove rule is killing the element before "
+                "it can fetch. Not necessarily a bug - scroll/reload the page "
+                "to generate more traffic if you want to verify."
+            </div>
+        }.into_any()
+    } else {
+        view! { <div /> }.into_any()
+    };
+
+    view! {
+        <div class="rule-row">
+            <div class="rule-pattern" title=diag.pattern.clone()>
+                {diag.pattern.clone()}
+            </div>
+            <div class="rule-meta">
+                <span class="rule-fired">
+                    "fired " {diag.fired} "x  |  declared under " {source}
+                </span>
+                <span class=status_class>{status_label}</span>
+            </div>
+            {hint}
+        </div>
+    }.into_any()
+}
+
+/// HH:MM:SS from an ISO timestamp. Uses the browser's JS Date so
+/// locale + timezone match the rest of the UI. Returns an empty
+/// string for unparseable input.
+fn time_only(iso: &str) -> String {
+    let d = js_sys::Date::new(&JsValue::from_str(iso));
+    if d.get_time().is_nan() {
+        return String::new();
+    }
+    let s = d.to_time_string();
+    // Format is "HH:MM:SS GMT...". Slice to 8 chars for time only.
+    s.as_string()
+        .unwrap_or_default()
+        .chars()
+        .take(8)
+        .collect()
 }
 
 /// Call-to-action row under the suggestions list. When the behavioral

@@ -78,9 +78,12 @@ popup open under 100 ms.*
       with `chrome_bridge::enable_detector` + `scan_once`
 - [x] Expose `refreshPopupSuggestions` wasm-bindgen export so button
       actions can refresh the Leptos signal without remounting
-- [ ] Port the blocked-URL list, removed-element evidence, and
-      block-rule diagnostics sections (still `popup.js` renderers
-      targeting `#block-list` / `#remove-evidence` / `#block-diagnostics`)
+- [x] Port the blocked-URL list and block-rule diagnostics panel
+      (`BlockedSection` component, new `BlockedUrl` + `BlockDiagnostic`
+      types)
+- [ ] Port the Remove + Hide selector lists and the removed-element
+      evidence panel (still `popup.js` renderers targeting
+      `#remove-list` / `#hide-list` / `#remove-evidence`)
 - [ ] Verify cold-open render time in DevTools Performance against the
       100ms budget
 

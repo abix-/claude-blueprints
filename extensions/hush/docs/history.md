@@ -56,16 +56,26 @@ merges `suggestionsEnabled: true`, writes back) and `scan_once`
 handlers for `#sugg-enable` / `#sugg-scan-once` / `#sugg-rescan` and
 the `<div id="suggestions-block">` wrapper from `popup.html`.
 
+**Iter 6 (Blocked section)**: the Blocked (network) section ported to
+Leptos as `BlockedSection`. Groups recent blocked URLs by pattern,
+renders a collapsible per-URL evidence list with a Copy button, and
+shows the per-rule diagnostic panel (firing / no-traffic /
+pattern-broken status badges plus broken-pattern hints). New types
+`BlockedUrl` + `BlockDiagnostic` landed in `src/types.rs`. Deleted the
+JS renderers `renderBlockedList` + `renderBlockDiagnostics` +
+`escapeHtml` (~170 LOC) and the `#block-count` / `#block-list` /
+`#block-evidence` / `#block-diagnostics` DOM anchors in `popup.html`.
+
 Bundle trajectory: ~552KB (pre-Leptos) -> ~580KB (iter 2) -> ~652KB
 (iter 3, adds signals + async runtime) -> ~688KB (iter 4, clipboard
-+ expandable panels) -> ~NNNKB (iter 5). Numbers are unoptimized
-(wasm-opt still disabled until the bundled binaryen catches up with
-rustc 1.95's nontrapping-fptoint).
++ expandable panels) -> ~NNNKB (iter 5) -> ~NNNKB (iter 6). Numbers
+are unoptimized (wasm-opt still disabled until the bundled binaryen
+catches up with rustc 1.95's nontrapping-fptoint).
 
-Remaining before Stage 4 is fully [x]: port the blocked-URL list,
-removed-element evidence, and block-rule diagnostics sections. Those
-still render via `popup.js` onto `#block-list` / `#remove-evidence` /
-`#block-diagnostics` roots.
+Remaining before Stage 4 is fully [x]: port the Remove + Hide
+selector lists and the removed-element evidence panel. Those still
+render via `popup.js` onto `#remove-list` / `#hide-list` /
+`#remove-evidence` roots.
 
 ## Stage 3: Main-world hooks in Rust (0.10.0)
 
