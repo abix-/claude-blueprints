@@ -19,8 +19,8 @@
 use crate::canon::pattern_keyword;
 use crate::compute::compute_suggestions as rust_compute_suggestions;
 use crate::types::{
-    Allowlist, BehaviorState, BlockedUrl, Config, IframeHit, JsCall, RemovedElement, Resource,
-    StickyHit, Suggestion,
+    Allowlist, BehaviorState, BlockedUrl, Config, FirewallEvent, FirewallEvidence, IframeHit,
+    JsCall, RemovedElement, Resource, StickyHit, Suggestion, GLOBAL_SCOPE_KEY,
 };
 use indexmap::IndexMap;
 use js_sys::{Array, Function, Object, Promise, Reflect};
@@ -38,6 +38,10 @@ const MAX_LOG_ENTRIES: usize = 300;
 const MAX_EVIDENCE: usize = 50;
 const MAX_SEEN_RESOURCES: usize = 500;
 const MAX_JS_CALLS: usize = 500;
+/// Per-tab firewall-log event ring buffer cap. Sized so a verbose
+/// site (lots of per-scroll remove events) has enough history for
+/// the popup's firewall-log view without ballooning session storage.
+const MAX_FIREWALL_EVENTS: usize = 500;
 const STORAGE_KEY: &str = "config";
 const OPTIONS_KEY: &str = "options";
 const ALLOWLIST_KEY: &str = "allowlist";
@@ -65,6 +69,10 @@ struct BackgroundState {
     rule_fire_count: HashMap<i32, u32>,
     tab_stats: HashMap<i32, TabStatsEntry>,
     tab_behavior: HashMap<i32, BehaviorState>,
+    /// Per-tab ring buffer of unified firewall-log events.
+    /// Capped at [`MAX_FIREWALL_EVENTS`] per tab so a long-lived
+    /// session doesn't balloon. Newest events appended at the back.
+    tab_events: HashMap<i32, VecDeque<FirewallEvent>>,
     allowlist_cache: Allowlist,
     persist_stats_scheduled: bool,
     persist_behavior_scheduled: bool,
@@ -555,11 +563,25 @@ fn get_stats_mut<R>(tab_id: i32, f: impl FnOnce(&mut TabStatsEntry) -> R) -> R {
     })
 }
 
+/// Append a unified firewall-log event to the per-tab ring buffer.
+/// Caps the buffer at [`MAX_FIREWALL_EVENTS`]; oldest entries drop.
+fn push_firewall_event(tab_id: i32, event: FirewallEvent) {
+    STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        let buf = st.tab_events.entry(tab_id).or_default();
+        buf.push_back(event);
+        while buf.len() > MAX_FIREWALL_EVENTS {
+            buf.pop_front();
+        }
+    });
+}
+
 fn reset_stats(tab_id: i32) {
     STATE.with(|s| {
-        s.borrow_mut()
-            .tab_stats
-            .insert(tab_id, TabStatsEntry::default());
+        let mut st = s.borrow_mut();
+        st.tab_stats.insert(tab_id, TabStatsEntry::default());
+        // Navigation = fresh page = fresh firewall-log window.
+        st.tab_events.remove(&tab_id);
     });
     update_badge(tab_id);
     schedule_persist_stats();
@@ -969,6 +991,7 @@ fn install_tabs_on_removed() -> Result<(), JsValue> {
             let mut st = s.borrow_mut();
             st.tab_stats.remove(&id);
             st.tab_behavior.remove(&id);
+            st.tab_events.remove(&id);
         });
         schedule_persist_stats();
         schedule_persist_behavior();
@@ -1026,10 +1049,11 @@ fn install_dnr_on_rule_matched_debug() -> Result<(), JsValue> {
         if tid < 0 {
             return;
         }
+        let now = iso_now();
         get_stats_mut(tid, |stats| {
             stats.block += 1;
             stats.blocked_urls.push(BlockedUrl {
-                t: iso_now(),
+                t: now.clone(),
                 url: url.clone(),
                 pattern: pattern.clone(),
                 resource_type: resource_type.clone(),
@@ -1038,8 +1062,30 @@ fn install_dnr_on_rule_matched_debug() -> Result<(), JsValue> {
                 let drop = stats.blocked_urls.len() - MAX_EVIDENCE;
                 stats.blocked_urls.drain(..drop);
             }
-            let _ = domain; // attached via rule_patterns lookup; no need to persist per-event
         });
+        // Emit the unified firewall-log event. Scope comes from the
+        // rule's `domain` (source site that authored the rule), which
+        // is `__global__` when the rule lives under the reserved
+        // global-scope entry.
+        let scope = if domain.is_empty() {
+            GLOBAL_SCOPE_KEY.to_string()
+        } else {
+            domain.clone()
+        };
+        push_firewall_event(
+            tid,
+            FirewallEvent {
+                t: now,
+                rule_id: crate::types::rule_id("block", &scope, &pattern),
+                action: "block".to_string(),
+                scope,
+                match_: pattern.clone(),
+                evidence: FirewallEvidence::Block {
+                    url: url.clone(),
+                    resource_type: resource_type.clone(),
+                },
+            },
+        );
         update_badge(tid);
         schedule_persist_stats();
     });
@@ -1118,6 +1164,10 @@ fn handle_message(msg: JsValue, sender: JsValue, send_response: JsValue) -> JsVa
             handle_get_rule_diagnostics(&msg, &sender, &send_response);
             JsValue::FALSE
         }
+        "hush:get-firewall-events" => {
+            handle_get_firewall_events(&msg, &sender, &send_response);
+            JsValue::FALSE
+        }
         "hush:get-suggestions" => {
             handle_get_suggestions(&msg, &sender, send_response.clone());
             JsValue::TRUE
@@ -1167,6 +1217,22 @@ fn handle_stats(msg: &JsValue, sender: &JsValue) {
         .ok()
         .and_then(|v| serde_wasm_bindgen::from_value::<Vec<RemovedElement>>(v).ok())
         .unwrap_or_default();
+    // Snapshot the new removed events before moving them into stats;
+    // the firewall-log emission below needs the per-element detail.
+    let remove_events: Vec<RemovedElement> = new_removed.clone();
+    // Resolve the scope for these remove events. If the tab has a
+    // matched site config, attribute removes to that hostname; if it
+    // only matched `__global__`, or no match info arrived yet, fall
+    // back to the global scope. We can't tell from here whether an
+    // individual selector lived under global vs site scope without
+    // re-reading config, so we approximate with matched_domain.
+    let resolved_scope: String = {
+        let explicit = matched
+            .clone()
+            .flatten()
+            .filter(|s| !s.is_empty());
+        explicit.unwrap_or_else(|| GLOBAL_SCOPE_KEY.to_string())
+    };
     get_stats_mut(tab_id, |s| {
         if let Some(m) = matched {
             s.matched_domain = m;
@@ -1185,6 +1251,19 @@ fn handle_stats(msg: &JsValue, sender: &JsValue) {
             }
         }
     });
+    for ev in remove_events {
+        push_firewall_event(
+            tab_id,
+            FirewallEvent {
+                t: ev.t.clone(),
+                rule_id: crate::types::rule_id("remove", &resolved_scope, &ev.selector),
+                action: "remove".to_string(),
+                scope: resolved_scope.clone(),
+                match_: ev.selector.clone(),
+                evidence: FirewallEvidence::Remove { el: ev.el.clone() },
+            },
+        );
+    }
     update_badge(tab_id);
     schedule_persist_stats();
 }
@@ -1348,6 +1427,26 @@ fn handle_get_tab_stats(msg: &JsValue, sender: &JsValue, send_response: &JsValue
         }
     } else {
         let _ = Reflect::set(&reply, &JsValue::from_str("stats"), &JsValue::NULL);
+    }
+    call_send_response(send_response, &reply.into());
+}
+
+fn handle_get_firewall_events(msg: &JsValue, sender: &JsValue, send_response: &JsValue) {
+    let tab_id = msg_or_sender_tab_id(msg, sender);
+    let events: Vec<FirewallEvent> = if let Some(id) = tab_id {
+        STATE.with(|s| {
+            s.borrow()
+                .tab_events
+                .get(&id)
+                .map(|buf| buf.iter().cloned().collect())
+                .unwrap_or_default()
+        })
+    } else {
+        Vec::new()
+    };
+    let reply = Object::new();
+    if let Ok(v) = crate::chrome_bridge::to_js(&events) {
+        let _ = Reflect::set(&reply, &JsValue::from_str("events"), &v);
     }
     call_send_response(send_response, &reply.into());
 }

@@ -12,7 +12,7 @@
 //! through Leptos's `Action` / `spawn_local` machinery without extra
 //! wrapping.
 
-use crate::types::{BlockDiagnostic, Config, Suggestion};
+use crate::types::{BlockDiagnostic, Config, FirewallEvent, Suggestion};
 
 /// Serialize a value to `JsValue` using the map-as-object mode.
 ///
@@ -584,6 +584,30 @@ pub async fn get_tab_stats(tab_id: i32) -> Result<TabStats, JsValue> {
     })
     .await?;
     Ok(resp.stats)
+}
+
+/// POST `hush:get-firewall-events` and return the per-tab unified
+/// firewall-log event buffer (newest last). Empty on error so the
+/// popup always renders.
+pub async fn get_firewall_events(tab_id: i32) -> Result<Vec<FirewallEvent>, JsValue> {
+    #[derive(Serialize)]
+    struct Msg {
+        #[serde(rename = "type")]
+        type_: &'static str,
+        #[serde(rename = "tabId")]
+        tab_id: i32,
+    }
+    #[derive(Deserialize, Default)]
+    #[serde(default)]
+    struct Resp {
+        events: Vec<FirewallEvent>,
+    }
+    let resp: Resp = send(&Msg {
+        type_: "hush:get-firewall-events",
+        tab_id,
+    })
+    .await?;
+    Ok(resp.events)
 }
 
 /// POST `hush:get-rule-diagnostics` and return the per-rule diagnostic

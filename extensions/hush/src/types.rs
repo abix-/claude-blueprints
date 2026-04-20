@@ -167,6 +167,68 @@ pub struct RemovedElement {
     pub el: String,
 }
 
+/// Unified firewall-log event. Every rule hit (across all actions and
+/// scopes) emits one of these into the per-tab ring buffer. The shape
+/// is the same regardless of action so the popup's firewall-log view
+/// can render them uniformly, sort by timestamp or hit count, and
+/// filter by `action` / `scope` / `rule_id`.
+///
+/// `rule_id` is derived from the rule content as `action::scope::match`,
+/// matching the existing suggestion-key format. This gives a stable
+/// identifier across service-worker restarts and config exports,
+/// without a separate ID-allocation migration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirewallEvent {
+    /// ISO-8601 timestamp of the match.
+    pub t: String,
+    /// Stable per-rule ID: `"{action}::{scope}::{match}"`.
+    #[serde(rename = "ruleId")]
+    pub rule_id: String,
+    /// `"block" | "remove" | "hide" | "spoof"`.
+    pub action: String,
+    /// The rule's scope key: [`GLOBAL_SCOPE_KEY`] or a hostname.
+    pub scope: String,
+    /// The rule's match string: URL pattern, CSS selector, or kind tag.
+    #[serde(rename = "match")]
+    pub match_: String,
+    /// Action-specific supporting data.
+    pub evidence: FirewallEvidence,
+}
+
+/// Action-specific fields attached to a [`FirewallEvent`]. Serialized
+/// untagged so the JS side sees a flat object with only the fields
+/// relevant to the event's action.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum FirewallEvidence {
+    /// Block hit: full URL of the blocked request plus the DNR
+    /// resource type (if the onRuleMatchedDebug event exposed it).
+    Block {
+        url: String,
+        #[serde(rename = "resourceType", default, skip_serializing_if = "Option::is_none")]
+        resource_type: Option<String>,
+    },
+    /// Remove hit: one entry per physically-removed DOM node. The
+    /// `el` string is the output of the content script's
+    /// `describeElement` (tag + id/class + distinguishing
+    /// attributes + text snippet).
+    Remove { el: String },
+    /// No per-hit evidence. Used by `hide` (CSS rules don't fire
+    /// per-element events) and `spoof` (we don't record individual
+    /// fingerprint reads to keep the log focused on user-observable
+    /// actions). Present as an empty variant so the shape stays
+    /// uniform.
+    #[serde(rename = "none")]
+    None {},
+}
+
+/// Build the canonical `rule_id` for a (action, scope, match) triple.
+/// Matches the suggestion-key format so downstream UIs can cross-
+/// reference accepted suggestions with their resulting rule events.
+pub fn rule_id(action: &str, scope: &str, match_: &str) -> String {
+    format!("{action}::{scope}::{match_}")
+}
+
 /// Persistent allowlist in `chrome.storage.local`. All three lists are
 /// independent user-editable arrays. `suggestions` is the per-key
 /// cross-session allowlist populated by the popup's "Allow" button;
