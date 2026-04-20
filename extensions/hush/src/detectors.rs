@@ -46,6 +46,49 @@ impl<'a> DetectCtx<'a> {
     fn finish(&self, input: BuildSuggestionInput) -> Suggestion {
         build_suggestion(&input)
     }
+    /// Returns a `BuildSuggestionInput` with every *context* field
+    /// (tab_hostname, matched_key, config_has_site, existing_*) already
+    /// filled from this `DetectCtx`. Detectors use this with struct
+    /// update syntax to avoid repeating those six fields on every push:
+    ///
+    /// ```ignore
+    /// out.push(ctx.finish(BuildSuggestionInput {
+    ///     key: "...".into(),
+    ///     layer: SuggestionLayer::Block,
+    ///     value: "...".into(),
+    ///     reason: "...".into(),
+    ///     confidence: 95,
+    ///     count: 1,
+    ///     evidence: vec![],
+    ///     from_frame: None,
+    ///     learn: LearnKind::Beacon.text().into(),
+    ///     ..ctx.ctx_fields()
+    /// }));
+    /// ```
+    ///
+    /// Non-context fields are filled with sentinel defaults that the
+    /// struct-update caller is expected to override.
+    fn ctx_fields(&self) -> BuildSuggestionInput {
+        BuildSuggestionInput {
+            // Context (the real purpose of this helper):
+            tab_hostname: self.hostname.to_string(),
+            matched_key: self.matched_key.map(str::to_string),
+            config_has_site: self.config_has_site,
+            existing_block: self.existing_block.to_vec(),
+            existing_remove: self.existing_remove.to_vec(),
+            existing_hide: self.existing_hide.to_vec(),
+            // Sentinel defaults - every detector overrides these:
+            key: String::new(),
+            layer: SuggestionLayer::Block,
+            value: String::new(),
+            reason: String::new(),
+            confidence: 0,
+            count: 0,
+            evidence: Vec::new(),
+            from_frame: None,
+            learn: String::new(),
+        }
+    }
 }
 
 /// Find the first frame in the set that reported from an iframe (i.e.,
@@ -169,12 +212,7 @@ pub(crate) fn detect_beacon(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
             evidence: hits.iter().take(5).map(|h| h.url.clone()).collect(),
             from_frame,
             learn: LearnKind::Beacon.text().to_string(),
-            tab_hostname: ctx.hostname.to_string(),
-            matched_key: ctx.matched_key.map(str::to_string),
-            config_has_site: ctx.config_has_site,
-            existing_block: ctx.existing_block.to_vec(),
-            existing_remove: ctx.existing_remove.to_vec(),
-            existing_hide: ctx.existing_hide.to_vec(),
+            ..ctx.ctx_fields()
         }));
     }
     out
@@ -224,12 +262,7 @@ pub(crate) fn detect_pixels(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
                 .collect(),
             from_frame,
             learn: LearnKind::Pixel.text().to_string(),
-            tab_hostname: ctx.hostname.to_string(),
-            matched_key: ctx.matched_key.map(str::to_string),
-            config_has_site: ctx.config_has_site,
-            existing_block: ctx.existing_block.to_vec(),
-            existing_remove: ctx.existing_remove.to_vec(),
-            existing_hide: ctx.existing_hide.to_vec(),
+            ..ctx.ctx_fields()
         }));
     }
     out
@@ -297,12 +330,7 @@ pub(crate) fn detect_first_party_telemetry(
                 .collect(),
             from_frame,
             learn: LearnKind::FirstPartyTelemetry.text().to_string(),
-            tab_hostname: ctx.hostname.to_string(),
-            matched_key: ctx.matched_key.map(str::to_string),
-            config_has_site: ctx.config_has_site,
-            existing_block: ctx.existing_block.to_vec(),
-            existing_remove: ctx.existing_remove.to_vec(),
-            existing_hide: ctx.existing_hide.to_vec(),
+            ..ctx.ctx_fields()
         }));
     }
     out
@@ -378,12 +406,7 @@ pub(crate) fn detect_polling(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sug
             evidence: vec![info.sample.to_string()],
             from_frame: None,
             learn: LearnKind::Polling.text().to_string(),
-            tab_hostname: ctx.hostname.to_string(),
-            matched_key: ctx.matched_key.map(str::to_string),
-            config_has_site: ctx.config_has_site,
-            existing_block: ctx.existing_block.to_vec(),
-            existing_remove: ctx.existing_remove.to_vec(),
-            existing_hide: ctx.existing_hide.to_vec(),
+            ..ctx.ctx_fields()
         }));
     }
     out
@@ -445,12 +468,7 @@ pub(crate) fn detect_hidden_iframes(
                 .collect(),
             from_frame,
             learn: LearnKind::HiddenIframe.text().to_string(),
-            tab_hostname: ctx.hostname.to_string(),
-            matched_key: ctx.matched_key.map(str::to_string),
-            config_has_site: ctx.config_has_site,
-            existing_block: ctx.existing_block.to_vec(),
-            existing_remove: ctx.existing_remove.to_vec(),
-            existing_hide: ctx.existing_hide.to_vec(),
+            ..ctx.ctx_fields()
         }));
     }
     out
@@ -495,12 +513,7 @@ pub(crate) fn detect_sticky_overlays(
             )],
             from_frame,
             learn: LearnKind::StickyOverlay.text().to_string(),
-            tab_hostname: ctx.hostname.to_string(),
-            matched_key: ctx.matched_key.map(str::to_string),
-            config_has_site: ctx.config_has_site,
-            existing_block: ctx.existing_block.to_vec(),
-            existing_remove: ctx.existing_remove.to_vec(),
-            existing_hide: ctx.existing_hide.to_vec(),
+            ..ctx.ctx_fields()
         }));
     }
     out
@@ -538,12 +551,7 @@ fn emit_origin_block(
         evidence: vec![],
         from_frame: None,
         learn: learn.text().to_string(),
-        tab_hostname: ctx.hostname.to_string(),
-        matched_key: ctx.matched_key.map(str::to_string),
-        config_has_site: ctx.config_has_site,
-        existing_block: ctx.existing_block.to_vec(),
-        existing_remove: ctx.existing_remove.to_vec(),
-        existing_hide: ctx.existing_hide.to_vec(),
+        ..ctx.ctx_fields()
     }));
 }
 
@@ -817,12 +825,7 @@ pub(crate) fn detect_from_js_calls(
             evidence: vec![format!("Global sentinel found in page: window.{sentinel_name}")],
             from_frame: None,
             learn: LearnKind::ReplayVendor.text().to_string(),
-            tab_hostname: ctx.hostname.to_string(),
-            matched_key: ctx.matched_key.map(str::to_string),
-            config_has_site: ctx.config_has_site,
-            existing_block: ctx.existing_block.to_vec(),
-            existing_remove: ctx.existing_remove.to_vec(),
-            existing_hide: ctx.existing_hide.to_vec(),
+            ..ctx.ctx_fields()
         }));
     }
 
@@ -893,12 +896,7 @@ pub(crate) fn detect_from_js_calls(
             ],
             from_frame: None,
             learn: LearnKind::RafWaste.text().to_string(),
-            tab_hostname: ctx.hostname.to_string(),
-            matched_key: ctx.matched_key.map(str::to_string),
-            config_has_site: ctx.config_has_site,
-            existing_block: ctx.existing_block.to_vec(),
-            existing_remove: ctx.existing_remove.to_vec(),
-            existing_hide: ctx.existing_hide.to_vec(),
+            ..ctx.ctx_fields()
         }));
     }
 

@@ -17,6 +17,7 @@ mod main_world;
 mod stack;
 mod suggestion;
 pub mod types;
+mod ui_popup;
 
 pub use allowlist::{is_legit_hidden_iframe, overlay_allowlisted};
 pub use canon::{canonicalize_url, pattern_keyword};

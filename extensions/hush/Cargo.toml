@@ -28,6 +28,7 @@ indexmap = { version = "2.5", features = ["serde"] }
 # Typed bindings to browser Web APIs. Feature set is Stage 3 territory
 # (main-world hook installation via web_sys::CustomEvent + HtmlCanvasElement);
 # listed here so the crate is ready without re-plumbing dependencies.
+leptos = { version = "0.8", features = ["csr"] }
 web-sys = { version = "0.3", features = [
     "Window",
     "Document",

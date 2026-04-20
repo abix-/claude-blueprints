@@ -1,3 +1,21 @@
+// Popup is an ES module (see popup.html) so we can dynamically load the
+// Rust/Leptos runtime. Stage 4 scaffold: mount the Leptos component
+// tree into #rust-popup-root at the top of the popup. Over subsequent
+// commits, the per-section JS renderers below get ported to Leptos
+// components and their corresponding `#block-list` / `#sugg-list` roots
+// disappear. The hybrid coexists until the port is complete.
+(async () => {
+  try {
+    const url = chrome.runtime.getURL("dist/pkg/hush.js");
+    const mod = await import(url);
+    await mod.default();
+    if (typeof mod.initEngine === "function") mod.initEngine();
+    if (typeof mod.mountPopup === "function") mod.mountPopup();
+  } catch (e) {
+    console.error("[Hush popup] leptos mount failed", e);
+  }
+})();
+
 const OPTIONS_KEY = "options";
 const STORAGE_KEY = "config";
 

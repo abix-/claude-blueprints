@@ -384,6 +384,8 @@
     <h1>Hush</h1>
     <div id="match" class="match">Loading...</div>
   </header>
+  <!-- Rust/Leptos component root. popup.js mounts it after WASM init. -->
+  <div id="rust-popup-root"></div>
 
   <div id="unmatched" class="unmatched" hidden>
     No config matched for this site.
@@ -441,6 +443,7 @@
     <button id="debug" title="Copy debug info to clipboard">Debug</button>
   </footer>
 
-  <script src="popup.js"></script>
+  <!-- popup.js is a module so it can `import init, { mountPopup } from "./dist/pkg/hush.js"`. -->
+  <script type="module" src="popup.js"></script>
 </body>
 </html>
