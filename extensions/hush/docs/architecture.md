@@ -42,8 +42,16 @@ A Hush rule is a **(scope, action, match)** triple:
 | Dimension | Values | What it means |
 |---|---|---|
 | Scope | `global` \| `<domain>` | Which tabs the rule evaluates on |
-| Action | `block` \| `remove` \| `hide` \| `spoof` | What the rule does when it matches |
+| Action | `block` \| `allow` \| `remove` \| `hide` \| `spoof` | What the rule does when it matches |
 | Match | URL pattern, CSS selector, or fingerprint kind | What the rule looks at |
+
+Rules also carry optional metadata used by the log and the editor:
+
+| Field | Purpose |
+|---|---|
+| `disabled` | Boolean; skipped by the evaluator without deleting the row |
+| `tags` | Free-form labels (`analytics`, `session-replay`, `auto:fp`). Drives log filters |
+| `comment` | Author's note to future self. Shown in the options editor |
 
 ### Actions (what a rule does)
 
@@ -52,21 +60,49 @@ A Hush rule is a **(scope, action, match)** triple:
    before DNS resolution, TCP connection, or TLS handshake. The
    initiating `fetch()` or iframe load fails locally with
    `net::ERR_BLOCKED_BY_CLIENT`. No bytes reach the network.
-2. **Remove (DOM)** — CSS selectors whose matching elements are
+2. **Allow (exception)** — the counter-rule to Block. Matching
+   requests pass through even if a broader Block rule would cover
+   them. DNR handles the override by giving Allow rules a higher
+   `priority` than Block rules so DNR's own first-match-wins
+   resolution picks Allow. For Remove/Hide, an Allow rule is a
+   selector exclusion: nodes matching an Allow selector are skipped
+   by the content-script applier. This is the primitive that lets a
+   user write "globally block `||doubleclick.net`, but allow
+   `doubleclick.net/adx/` on this one site" — impossible in earlier
+   versions.
+3. **Remove (DOM)** — CSS selectors whose matching elements are
    physically deleted via `element.remove()`. A `MutationObserver`
    re-applies on every DOM mutation so SPA routers and infinite-scroll
    insertions can't sneak the element back in.
-3. **Hide (CSS)** — CSS selectors applied with
+4. **Hide (CSS)** — CSS selectors applied with
    `display: none !important` via a user stylesheet injected at
    `document_start`. The element stays in the DOM; it doesn't
    render. Mildest action.
-4. **Spoof (fingerprint)** — kind tags (e.g. `webgl-unmasked`) that
+5. **Spoof (fingerprint)** — kind tags (e.g. `webgl-unmasked`) that
    swap the real value returned by a fingerprinting API for a
    bland identical-across-users default. First case: WebGL
    `UNMASKED_VENDOR_WEBGL` / `UNMASKED_RENDERER_WEBGL` returning
    `"Google Inc."` / `"ANGLE (Generic)"` instead of your actual
    GPU identity. Lets the page keep rendering while killing the
    fingerprint's entropy contribution.
+
+### Evaluation order
+
+Rules are evaluated **first-match-wins within each action**,
+top-down in authoring order. The options editor lets the user
+reorder rows; order is persisted verbatim in `chrome.storage.local`.
+
+For the Block vs. Allow cross-action case, DNR's own
+priority-resolution takes over: Allow rules get a higher numeric
+`priority` than Block rules, so DNR returns the first matching
+Allow before any Block has a chance to fire. For Remove/Hide,
+the content-script applier walks rules in order and excludes
+nodes matched by an Allow selector from the subsequent
+Remove/Hide passes.
+
+Actions are otherwise orthogonal — Block gates the network,
+Remove touches the DOM, Spoof touches fingerprint APIs — so
+there is no cross-action ordering beyond the Allow/Block override.
 
 ### Scopes (where a rule applies)
 
@@ -98,22 +134,42 @@ A Hush rule is a **(scope, action, match)** triple:
 ### The rule-hit event
 
 Every rule match emits one [`FirewallEvent`](../src/types.rs)
-(`{t, rule_id, action, scope, match, evidence}`) into the
-per-tab ring buffer. The popup's **Firewall log** section reads
-the buffer and aggregates by `rule_id`, showing each rule's hit
-count + last-hit timestamp + expandable recent-evidence list.
+(`{t, rule_id, action, scope, match, tags, disposition, evidence}`)
+into the firewall-log buffer. The popup's **Firewall log** section
+reads the buffer, applies the current filter set (action / tag /
+tab / search substring), and aggregates by `rule_id`, showing each
+rule's hit count + last-hit timestamp + expandable recent-evidence
+list.
 
 | Action | Event shape | Evidence | Status |
 |---|---|---|---|
-| Block | `FirewallEvent` | `{url, resourceType}` | ✅ shipped |
-| Remove | `FirewallEvent` | `{el}` (element description) | ✅ shipped |
-| Hide | `FirewallEvent` | `None` (count-only, no per-element events) | ⏳ next |
-| Spoof | `FirewallEvent` | `None` / kind-specific | ⏳ next |
+| Block | `FirewallEvent` | `{url, resourceType}` | shipped |
+| Allow | `FirewallEvent` | `{url, overriddenRuleId}` | planned (Stage 9) |
+| Remove | `FirewallEvent` | `{el}` (element description) | shipped |
+| Hide | `FirewallEvent` | `None` (count-only, no per-element events) | next |
+| Spoof | `FirewallEvent` | `None` / kind-specific | next |
 
 `rule_id` is derived as `"{action}::{scope}::{match}"` (see
 `src/types.rs::rule_id`) — the same format as suggestion keys, so
 an accepted suggestion's key matches the resulting rule's ID in
-the log.
+the log. `tags` are copied from the matching `RuleEntry` at emit
+time so the log can be filtered by category (e.g. all
+session-replay blocks) without re-reading config. `disposition` is
+`"block"` or `"allow"` and records whether an Allow rule
+overrode a Block; an Allow match records the overridden rule's
+`rule_id` in evidence so the log shows the exception chain.
+
+### Log persistence
+
+The firewall log lives in `chrome.storage.session` under
+`"firewall_log"` as a single FIFO buffer of [`FirewallEvent`]
+objects, capped at 10k entries (≈2MB, well under the 10MB quota).
+Every event carries `tabId` so the popup can pivot between
+"This tab" and "All tabs" views. The session-storage backing
+means the log survives popup close and tab reload but is
+cleared when the browser restarts — aligning with the
+privacy-preserving "no persistent behavioral history" principle
+(the log records user-authored-rule hits, not raw behavior).
 
 ## Runtime data flow
 
@@ -270,7 +326,7 @@ Tracked in [roadmap.md](roadmap.md).
 per-rule IDs, unified `FirewallEvent` ring buffer, Palo-Alto-style
 firewall-log popup section aggregating by `rule_id`.
 
-**Next up** (in priority order):
+**Stage 7 closeout** (quick wins that finish the current surface):
 
 - **Hide + Spoof event emission.** Hide is count-based today
   (CSS selector hit counts, not per-element events); Spoof is
@@ -278,20 +334,42 @@ firewall-log popup section aggregating by `rule_id`.
   actions show up in the firewall log uniformly alongside
   block/remove.
 - **Per-rule disable toggle.** Each rule row gets a switch so the
-  user can mute a rule temporarily without deleting it (useful
-  for "let me see what the site does without this rule for a
-  moment"). DNR sync excludes disabled rules; content-script
-  applier skips them; `compute_suggestions` ignores them for
-  dedup.
+  user can mute a rule temporarily without deleting it. DNR sync
+  excludes disabled rules; content-script applier skips them;
+  `compute_suggestions` ignores them for dedup.
+
+**Stage 8** (fingerprint coverage):
+
+- **More spoof kinds.** `canvas` (return a fixed hash from
+  `toDataURL` / `getImageData`), `audio` (stub
+  `OfflineAudioContext`), `font-enum` (return a fixed allowlist
+  from `measureText`). Each follows the same content-script →
+  dataset → main-world-hook pattern the WebGL spoof uses.
+
+**Stage 9 — PA primitives** (the shape-change that makes Hush a
+real firewall, not a blocker list):
+
+- **Allow action** with DNR priority override + content-script
+  selector exclusion. Enables write-through exceptions to broader
+  Block/Remove rules.
+- **First-match-wins ordering within each action.** Rules become
+  an ordered list; options editor gains up/down reordering.
+- **Persistent searchable firewall log.** Migrate the per-tab
+  ring buffer to a single `chrome.storage.session` buffer
+  (10k cap). Popup gains action / tag / tab / search filters.
+- **Rule tags.** Each `RuleEntry` carries a `tags: Vec<String>`.
+  Detector-origin tags (from accepted suggestions) are prefixed
+  `auto:` so the log can distinguish hand-authored vs. derived
+  rules.
+
+**Stage 10** (serialization on top of the Stage 9 primitives):
+
 - **Rule import/export profiles.** Named rule bundles — e.g.
   "news-site baseline" (telemetry beacons + generic overlay
   killers), "developer baseline" (session-replay vendors + GPU
   fingerprint spoof) — users can merge in on a per-machine basis.
-- **More spoof kinds** (Stage 8). `canvas` (return a fixed hash
-  from `toDataURL` / `getImageData`), `audio` (stub
-  `OfflineAudioContext`), `font-enum` (return a fixed allowlist
-  from `measureText`). Each follows the same content-script →
-  dataset → main-world-hook pattern the WebGL spoof uses.
+  Deferred to after Stage 9 because a profile is only interesting
+  once ordering, tags, and allow-overrides exist to serialize.
 
 ## Design principles
 

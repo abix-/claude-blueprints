@@ -31,18 +31,24 @@ and [history.md](history.md) for retired rollout notes.
 ## Stages
 
 Stages 1-6: [x] Complete (see [history.md](history.md))
-Stage 7: **In progress** — global scope, rule_id / unified event
-platform, and firewall-log popup shipped. Remaining: per-rule
-disable toggle, import/export profiles, spoof/hide event emission
-to cover every action uniformly.
+Stage 7: **Closeout** — global scope, rule_id / unified event
+platform, and firewall-log popup shipped. Remaining: hide/spoof
+event emission + per-rule disable toggle.
+Stage 8: More spoof kinds (`canvas`, `audio`, `font-enum`).
+Stage 9: **PA primitives** — allow action, rule ordering,
+persistent searchable log, rule tags. This is the shape-change
+that makes Hush a real firewall, not a blocker list.
+Stage 10: Rule import/export profiles (rides on Stage 9
+primitives).
 
 ## Next up (priority order)
 
-1. **Stage 7 remainder** — per-rule disable toggle (options editor
-   + evaluator skip), then spoof/hide event emission so every
-   action shows up in the firewall log uniformly.
-2. **Stage 8** — more spoof kinds: `canvas`, `audio`, `font-enum`.
-3. **Rule import/export profiles** — named bundles users can merge.
+1. **Stage 7 closeout** — hide/spoof event emission, then per-rule
+   disable toggle. Cheap; finishes the current surface.
+2. **Stage 9** — PA primitives (allow action, ordering, persistent
+   log, tags). The real architectural move.
+3. **Stage 8** — additional spoof kinds, orthogonal to Stage 9.
+4. **Stage 10** — rule import/export profiles.
 
 ### Stage 3: Main-world hooks in Rust [x] Complete
 
@@ -202,10 +208,10 @@ for the background and rationale.*
       Implementation: a boolean field on every rule row; rules
       whose `disabled = true` are skipped at evaluation time
       (DNR sync excludes them, content-script applier skips
-      them, compute_suggestions ignores them for dedup).
-- [ ] **Then:** rule import/export profiles. Named bundles users
-      can merge into their config — e.g. "news-site baseline",
-      "developer baseline".
+      them, compute_suggestions ignores them for dedup). The
+      schema for this lands as part of Stage 9's `RuleEntry`
+      migration, so the UI work can either piggyback on Stage 9
+      or land as a parallel-array shim first.
 
 ### Stage 8: More spoof kinds
 
@@ -225,6 +231,63 @@ main-world-hook pattern the WebGL case established.*
 - [ ] `font-enum` spoof: cap `measureText` to returning metrics
       from a fixed allowlist (core system fonts only), neutralizing
       installed-font probing.
+
+### Stage 9: PA primitives
+
+*Done when: rules are stored as an ordered list of `RuleEntry`
+objects with `disabled` / `tags` / `comment` metadata; an `allow`
+action exists and overrides `block` via DNR priority and excludes
+selectors from Remove/Hide; first-match-wins ordering is enforced
+per action; the firewall log is persistent in
+`chrome.storage.session` with search + action + tag + tab filters
+in the popup. End-to-end test: a global `block ||doubleclick.net`
+rule + a site-scoped `allow doubleclick.net/adx/` rule results in
+adx requests succeeding on that site only, with an allow event
+in the log referencing the overridden block rule's ID.*
+
+- [ ] Introduce `RuleEntry { value, disabled, tags, comment }`
+      with a backward-compatible `Deserialize` impl that accepts
+      legacy bare-string entries. Convert `SiteConfig.{block,
+      remove, hide, spoof}` to `Vec<RuleEntry>` and add
+      `allow: Vec<RuleEntry>`. Regression test: existing
+      string-only configs round-trip.
+- [ ] Evaluator: `background.rs` DNR sync emits `allow` rules at
+      `priority: 2` and `block` rules at `priority: 1` so DNR's
+      own first-match resolution picks allow. Content-script
+      applier walks rules in order and excludes nodes matched
+      by an `allow` selector from subsequent Remove/Hide
+      passes.
+- [ ] `merged_site_config` preserves order instead of deduping
+      by value. `compute_suggestions` dedup walks the ordered
+      list, consulting `disabled` + effective `allow`
+      overrides.
+- [ ] Persistent log: move `tab_events` from `BackgroundState`
+      to `chrome.storage.session[\"firewall_log\"]` — single
+      FIFO buffer (10k cap) tagged by `tabId`. `FirewallEvent`
+      gains `tags: Vec<String>` and `disposition: "block" |
+      "allow"`; allow events carry the overridden `rule_id` in
+      evidence.
+- [ ] Options UI: up/down reorder buttons on every rule row;
+      new Allow section next to Block/Remove/Hide/Spoof; tag
+      input (comma-separated); comment field.
+- [ ] Popup firewall-log UI: search box (URL / match /
+      rule_id substring), action filter, tag filter chips,
+      "This tab" vs "All tabs" toggle.
+- [ ] Bench: `compute_suggestions` Criterion before/after;
+      expected no regression.
+
+### Stage 10: Rule import/export profiles
+
+*Done when: users can save the current config (or a named
+subset) to a JSON profile file and merge profiles back in with
+conflict resolution (skip, overwrite, rename). Seeded profiles
+ship in the repo: "news-site baseline", "developer baseline",
+"social-media declutter".*
+
+- [ ] Profile export UI: pick rules by scope + tag; serialize to
+      portable JSON including ordering, tags, allow rules.
+- [ ] Profile merge UI: import JSON; per-rule conflict dialog.
+- [ ] Seed profiles in the repo under `profiles/`.
 
 ## Out of scope (for now)
 
