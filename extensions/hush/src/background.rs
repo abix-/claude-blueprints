@@ -216,9 +216,17 @@ async fn storage_session_set_one(key: &str, value: &JsValue) -> Result<(), JsVal
     Ok(())
 }
 
+/// Global scope accessor that works in both Window and
+/// ServiceWorkerGlobalScope contexts. `web_sys::window()` returns
+/// `None` inside a service worker - `js_sys::global()` is the
+/// cross-context fallback.
+fn global_scope() -> JsValue {
+    js_sys::global().into()
+}
+
 fn chrome_root() -> Result<JsValue, JsValue> {
-    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no global scope"))?;
-    Ok(Reflect::get(&window, &JsValue::from_str("chrome"))?)
+    let g = global_scope();
+    Ok(Reflect::get(&g, &JsValue::from_str("chrome"))?)
 }
 
 fn chrome_storage_local() -> Result<JsValue, JsValue> {
@@ -286,12 +294,12 @@ async fn seed_config_if_empty() -> Result<(), JsValue> {
         .call1(&chrome_root()?.dyn_into::<Object>()?.into(), &JsValue::from_str("sites.json"))?
         .as_string()
         .ok_or_else(|| JsValue::from_str("chrome.runtime.getURL returned non-string"))?;
-    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
-    let fetch_fn: Function = Reflect::get(&window, &JsValue::from_str("fetch"))?
+    let g = global_scope();
+    let fetch_fn: Function = Reflect::get(&g, &JsValue::from_str("fetch"))?
         .dyn_into()
         .map_err(|_| JsValue::from_str("fetch is not a function"))?;
     let fetch_promise: Promise = fetch_fn
-        .call1(&window, &JsValue::from_str(&url))?
+        .call1(&g, &JsValue::from_str(&url))?
         .dyn_into()
         .map_err(|_| JsValue::from_str("fetch did not return a Promise"))?;
     let response = JsFuture::from(fetch_promise).await?;
@@ -321,13 +329,13 @@ async fn seed_allowlist_if_empty() -> Result<(), JsValue> {
         )?
         .as_string()
         .unwrap_or_default();
-    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
-    let fetch_fn: Function = Reflect::get(&window, &JsValue::from_str("fetch"))?
+    let g = global_scope();
+    let fetch_fn: Function = Reflect::get(&g, &JsValue::from_str("fetch"))?
         .dyn_into()
         .map_err(|_| JsValue::from_str("fetch is not a function"))?;
     let fetched = async {
         let p: Promise = fetch_fn
-            .call1(&window, &JsValue::from_str(&url))?
+            .call1(&g, &JsValue::from_str(&url))?
             .dyn_into()
             .map_err(|_| JsValue::from_str("fetch did not return a Promise"))?;
         let resp = JsFuture::from(p).await?;
@@ -1921,7 +1929,16 @@ fn iso_now() -> String {
 }
 
 fn set_timeout<F: FnOnce() + 'static>(f: F, ms: i32) {
-    let Some(window) = web_sys::window() else {
+    // setTimeout exists on both Window and ServiceWorkerGlobalScope,
+    // but neither interface is typed via `web_sys::window()` in SW
+    // context. Call the global-scope method via Reflect instead.
+    let g = global_scope();
+    let Ok(set_timeout_fn) = Reflect::get(&g, &JsValue::from_str("setTimeout"))
+        .and_then(|v| {
+            v.dyn_into::<Function>()
+                .map_err(|_| JsValue::from_str("setTimeout is not a function"))
+        })
+    else {
         return;
     };
     let cell = std::cell::Cell::new(Some(f));
@@ -1930,9 +1947,10 @@ fn set_timeout<F: FnOnce() + 'static>(f: F, ms: i32) {
             f();
         }
     });
-    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-        cb.as_ref().unchecked_ref(),
-        ms,
+    let _ = set_timeout_fn.call2(
+        &g,
+        cb.as_ref(),
+        &JsValue::from_f64(ms as f64),
     );
     cb.forget();
 }
