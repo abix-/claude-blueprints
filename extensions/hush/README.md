@@ -186,6 +186,14 @@ fetched; no observations leave the machine.
   `scroll`/etc listeners attached to document/window/body in the first
   minute from a single script origin suggests replay-style capture.
   Confidence 80.
+- **Invisible animation loop** — hot 2D canvas draw ops (`fillRect`,
+  `drawImage`, `fill`, `stroke`, etc.) are hooked and sample the target
+  canvas's visibility (viewport intersection + `display:none` /
+  `visibility:hidden` / `opacity:0` / sub-2px dimensions) at most once per
+  100ms per canvas. If one script origin sustains 20+ invisible-canvas
+  draws over a window of at least 3 seconds with a >= 80% invisibility
+  ratio, a block suggestion is emitted. Catches Lottie-style animations
+  running inside collapsed panels or hidden widgets. Confidence 70.
 
 Each suggestion carries a confidence score (sendBeacon = 95, pixels = 85, polling =
 75, first-party telemetry = 70, sticky overlays = 55) and lists the raw evidence

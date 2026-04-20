@@ -247,6 +247,10 @@
     if ("text" in d) entry.text = String(d.text || "");
     if ("eventType" in d) entry.eventType = String(d.eventType || "");
     if (Array.isArray(d.vendors)) entry.vendors = d.vendors.slice(0, 20);
+    // Tier 5 canvas-draw fields
+    if ("op" in d) entry.op = String(d.op || "");
+    if ("visible" in d) entry.visible = !!d.visible;
+    if ("canvasSel" in d) entry.canvasSel = String(d.canvasSel || "");
     jsCallBuffer.push(entry);
     if (jsCallBuffer.length > MAX_LOCAL_JS_CALLS) {
       jsCallBuffer.splice(0, jsCallBuffer.length - MAX_LOCAL_JS_CALLS);

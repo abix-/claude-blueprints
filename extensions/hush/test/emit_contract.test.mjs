@@ -52,13 +52,39 @@ function makeContext() {
   });
 
   class HTMLCanvasElement {
+    constructor(opts) {
+      opts = opts || {};
+      this.id = opts.id || "";
+      this.className = opts.className || "";
+      this._rect = opts.rect || { x: 0, y: 0, width: 300, height: 150 };
+      this._cs = opts.computedStyle || {};
+    }
     toDataURL() { return "data:image/png;base64,"; }
     toBlob(cb) { if (cb) cb(null); }
+    getBoundingClientRect() {
+      const r = this._rect;
+      return {
+        x: r.x, y: r.y,
+        width: r.width, height: r.height,
+        left: r.x, top: r.y,
+        right: r.x + r.width, bottom: r.y + r.height
+      };
+    }
   }
   class CanvasRenderingContext2D {
-    constructor() { this.font = "10px sans-serif"; }
+    constructor(canvas) {
+      this.canvas = canvas || new HTMLCanvasElement();
+      this.font = "10px sans-serif";
+    }
     getImageData() { return { data: new Uint8ClampedArray(4) }; }
     measureText() { return { width: 0 }; }
+    fillRect() {}
+    strokeRect() {}
+    clearRect() {}
+    drawImage() {}
+    fill() {}
+    stroke() {}
+    putImageData() {}
   }
   class WebGLRenderingContext {
     getParameter() { return null; }
@@ -94,6 +120,8 @@ function makeContext() {
   const window = Object.create(EventTarget.prototype);
   Object.assign(window, {
     fetch: fetchStub,
+    innerWidth: 1280,
+    innerHeight: 800,
     HTMLCanvasElement,
     CanvasRenderingContext2D,
     WebGLRenderingContext,
@@ -104,7 +132,10 @@ function makeContext() {
     EventTarget,
     CustomEvent,
     document,
-    navigator
+    navigator,
+    getComputedStyle(el) {
+      return (el && el._cs) || { display: "block", visibility: "visible", opacity: "1" };
+    }
   });
 
   const ctx = {
@@ -272,6 +303,92 @@ test("replay-global eventually emits vendors array", async () => {
   const names = ev.vendors.map(v => v.vendor).sort();
   assert.ok(names.includes("Hotjar"));
   assert.ok(names.includes("Microsoft Clarity"));
+});
+
+test("canvas-draw emits op, visible, canvasSel for a visible canvas", () => {
+  const { ctx, captured } = makeContext();
+  const canvas = new ctx.HTMLCanvasElement({
+    id: "main-stage",
+    className: "game stage",
+    rect: { x: 0, y: 0, width: 800, height: 600 }
+  });
+  const c = new ctx.CanvasRenderingContext2D(canvas);
+  c.fillRect(0, 0, 10, 10);
+  const ev = captured.find(e => e.kind === "canvas-draw");
+  assert.ok(ev, "canvas-draw event emitted");
+  assert.strictEqual(ev.op, "fillRect");
+  assert.strictEqual(ev.visible, true);
+  assert.strictEqual(ev.canvasSel, "canvas#main-stage.game.stage");
+});
+
+test("canvas-draw marks offscreen canvas as invisible", () => {
+  const { ctx, captured } = makeContext();
+  // Canvas positioned well off-viewport (viewport 1280x800)
+  const canvas = new ctx.HTMLCanvasElement({
+    id: "offscreen",
+    rect: { x: -5000, y: -5000, width: 100, height: 100 }
+  });
+  const c = new ctx.CanvasRenderingContext2D(canvas);
+  c.drawImage({}, 0, 0);
+  const ev = captured.find(e => e.kind === "canvas-draw");
+  assert.ok(ev, "canvas-draw event emitted");
+  assert.strictEqual(ev.visible, false);
+  assert.strictEqual(ev.op, "drawImage");
+});
+
+test("canvas-draw marks display:none canvas as invisible", () => {
+  const { ctx, captured } = makeContext();
+  const canvas = new ctx.HTMLCanvasElement({
+    id: "hidden",
+    rect: { x: 0, y: 0, width: 200, height: 200 },
+    computedStyle: { display: "none", visibility: "visible", opacity: "1" }
+  });
+  const c = new ctx.CanvasRenderingContext2D(canvas);
+  c.fill();
+  const ev = captured.find(e => e.kind === "canvas-draw");
+  assert.ok(ev, "canvas-draw event emitted");
+  assert.strictEqual(ev.visible, false);
+});
+
+test("canvas-draw marks tiny (1x1) canvas as invisible", () => {
+  const { ctx, captured } = makeContext();
+  const canvas = new ctx.HTMLCanvasElement({
+    rect: { x: 0, y: 0, width: 1, height: 1 }
+  });
+  const c = new ctx.CanvasRenderingContext2D(canvas);
+  c.stroke();
+  const ev = captured.find(e => e.kind === "canvas-draw");
+  assert.ok(ev, "canvas-draw event emitted");
+  assert.strictEqual(ev.visible, false);
+});
+
+test("canvas-draw throttles repeat same-canvas calls within 100ms", async () => {
+  const { ctx, captured } = makeContext();
+  const canvas = new ctx.HTMLCanvasElement({
+    rect: { x: 0, y: 0, width: 400, height: 300 }
+  });
+  const c = new ctx.CanvasRenderingContext2D(canvas);
+  for (let i = 0; i < 60; i++) c.fillRect(0, 0, 1, 1); // simulate 60Hz burst
+  const firstCount = captured.filter(e => e.kind === "canvas-draw").length;
+  assert.strictEqual(firstCount, 1, "60 rapid calls produce 1 sample");
+  // Advance past the throttle window
+  await new Promise(r => setTimeout(r, 120));
+  for (let i = 0; i < 60; i++) c.fillRect(0, 0, 1, 1);
+  const secondCount = captured.filter(e => e.kind === "canvas-draw").length;
+  assert.strictEqual(secondCount, 2, "after >100ms, next burst produces 1 more sample");
+});
+
+test("canvas-draw throttle is per-canvas, not global", () => {
+  const { ctx, captured } = makeContext();
+  const a = new ctx.HTMLCanvasElement({ id: "a", rect: { x: 0, y: 0, width: 400, height: 300 } });
+  const b = new ctx.HTMLCanvasElement({ id: "b", rect: { x: 0, y: 0, width: 400, height: 300 } });
+  const ca = new ctx.CanvasRenderingContext2D(a);
+  const cb = new ctx.CanvasRenderingContext2D(b);
+  ca.fillRect(0, 0, 1, 1);
+  cb.fillRect(0, 0, 1, 1);
+  const events = captured.filter(e => e.kind === "canvas-draw");
+  const sels = events.map(e => e.canvasSel).sort();
+  assert.deepStrictEqual(sels, ["canvas#a", "canvas#b"]);
 });
 
 test("every emitted event carries kind and timestamp", async () => {

@@ -710,6 +710,10 @@ function computeSuggestions(state, config) {
   const distinctFontsByOrigin = {};
   const listenerTypesByOrigin = {};
   const replayVendors = new Map();
+  // Tier 5: canvas-draw samples grouped by origin+canvas-selector, so we can
+  // flag the specific invisible target per script instead of just "this
+  // origin paints a lot somewhere."
+  const rafWasteByKey = new Map();
   for (const c of jsCalls) {
     const k = c.kind || "?";
     kindCounts[k] = (kindCounts[k] || 0) + 1;
@@ -734,6 +738,18 @@ function computeSuggestions(state, config) {
       for (const v of c.vendors) {
         if (v && v.vendor) replayVendors.set(v.vendor, (replayVendors.get(v.vendor) || 0) + 1);
       }
+    }
+    if (k === "canvas-draw") {
+      const sel = c.canvasSel || "canvas";
+      const key = origin + "|" + sel;
+      let entry = rafWasteByKey.get(key);
+      if (!entry) {
+        entry = { origin, canvasSel: sel, total: 0, invisible: 0, firstT: c.t, lastT: c.t };
+        rafWasteByKey.set(key, entry);
+      }
+      entry.total += 1;
+      if (c.visible === false) entry.invisible += 1;
+      entry.lastT = c.t;
     }
   }
 
@@ -855,6 +871,45 @@ function computeSuggestions(state, config) {
         "session replay pattern (" + info.count + " interaction listeners attached: " + Array.from(info.types).join(", ") + ")",
         80, "listener-density");
     }
+  }
+
+  // =====================================================================
+  // Tier 5: Invisible animation-loop detection
+  //
+  // If an origin sustains draws to a canvas that is consistently invisible,
+  // the loop is burning CPU for nothing (the original Lottie-in-hidden-panel
+  // user story). Thresholds: at least 20 sampled draws over a window >= 3s,
+  // with >= 80% of samples hitting an invisible canvas. Since main-world
+  // throttles sampling to ~10/sec per canvas, 20 samples means the loop has
+  // been running continuously for at least 2 seconds.
+  // =====================================================================
+  for (const [, info] of rafWasteByKey) {
+    if (info.total < 20) continue;
+    const span = (Date.parse(info.lastT) || 0) - (Date.parse(info.firstT) || 0);
+    if (span < 3000) continue;
+    const invisibleRatio = info.invisible / info.total;
+    if (invisibleRatio < 0.8) continue;
+    if (!info.origin) continue;
+    const value = "||" + info.origin;
+    if (existingBlock.has(value)) continue;
+    const seconds = Math.max(1, Math.round(span / 1000));
+    const ratePerSec = Math.round((info.invisible / seconds) * 10) / 10;
+    out.push({
+      key: "block::" + value + "::raf-waste::" + info.canvasSel,
+      layer: "block",
+      value,
+      reason: "invisible animation loop (" + info.invisible + " draws to " + info.canvasSel + " in " + seconds + "s, ~" + ratePerSec + "/s)",
+      confidence: 70,
+      count: info.invisible,
+      evidence: [
+        info.canvasSel + ": " + info.invisible + "/" + info.total + " samples invisible",
+        "origin: " + info.origin,
+        "window: " + seconds + "s"
+      ],
+      fromIframe: false,
+      frameHostname: null,
+      diag: makeDiag(value, "block", null)
+    });
   }
 
   // 6. Sticky overlays -> hide (medium)

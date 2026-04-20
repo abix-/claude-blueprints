@@ -7,6 +7,30 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-19
+
+### Added
+- **Tier 5 invisible-animation-loop detection** (the original Hush user
+  story). Main-world hooks on the hot 2D canvas draw ops (`fillRect`,
+  `strokeRect`, `clearRect`, `drawImage`, `fill`, `stroke`, `putImageData`)
+  sample visibility of the target canvas (viewport intersection +
+  `display:none` / `visibility:hidden` / `opacity:0` / sub-2px dimensions)
+  and emit `canvas-draw` observations. Background detection: if one script
+  origin sustains 20+ invisible-canvas draws over a window >= 3 seconds
+  with >= 80% invisibility ratio, a block suggestion is emitted at
+  confidence 70 with the canvas selector + sample count in evidence.
+- Sampling is throttled to one observation per canvas per 100ms so 60Hz
+  loops produce ~10 samples/sec per canvas instead of 60. Layout-read cost
+  is bounded.
+- 6 new tests in `test/emit_contract.test.mjs` covering visible / offscreen
+  / `display:none` / 1x1 / throttle / per-canvas-throttle cases.
+
+### Changed
+- `content.js` relay now preserves `op`, `visible`, and `canvasSel` fields
+  from the main-world CustomEvent detail.
+- `docs/heuristic-roadmap.md` moves Tier 5 to the shipped table; next-up
+  is Tier 3 (navigator/screen property reads).
+
 ## [0.5.1] - 2026-04-19
 
 ### Fixed

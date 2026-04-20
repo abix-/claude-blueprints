@@ -6,7 +6,7 @@ Brave Shields, and academic trackers-detection work. Use this doc to pick the
 next tier to implement; each section is self-contained enough to inform a
 plan-mode spec.
 
-## Currently detected (as of Hush 0.5.1)
+## Currently detected (as of Hush 0.6.0)
 
 | Signal | API/Source | Layer | Confidence |
 |---|---|---|---|
@@ -23,6 +23,7 @@ plan-mode spec.
 | **Font enumeration** | main-world hook on `measureText`, 20+ distinct font families per origin | block (origin) | 85 |
 | **Session-replay vendor globals** | main-world poll for `_hjSettings`, `FS`, `clarity`, `LogRocket`, `smartlook`, `mouseflow`, `__posthog` | block (vendor domain) | 95 |
 | **Session-replay listener density** | main-world hook on `addEventListener`, 12+ interaction listeners on document/window/body per origin | block (origin) | 80 |
+| **Invisible animation loop** | main-world hook on 2D canvas draw ops with per-canvas 100ms-throttled visibility sampling; 20+ invisible-canvas draws over >=3s with >=80% invisibility ratio | block (origin) | 70 |
 
 Main-world hooks also capture `fetch`, `XHR`, `sendBeacon`, `WebSocket.send`
 with stack traces and body previews, feeding the above signals and
@@ -246,7 +247,18 @@ identifier into storage that policies don't touch.
 - [Brave Shields ephemeral storage](https://brave.com/shields/)
 - [Brave Privacy Features](https://brave.com/privacy-features/)
 
-### Tier 5 — `requestAnimationFrame` loop detection
+### Tier 5 — `requestAnimationFrame` loop detection (SHIPPED in 0.6.0)
+
+Implementation note: the final design does not hook
+`requestAnimationFrame` itself. Instead, the hot 2D canvas draw ops
+(`fillRect` / `strokeRect` / `clearRect` / `drawImage` / `fill` /
+`stroke` / `putImageData`) are hooked and sample target-canvas visibility
+at most once per 100ms per canvas. This catches both rAF-driven and
+`setInterval`-driven loops, and the per-canvas throttle keeps layout
+reads bounded even when a script paints hundreds of times per frame.
+See `CHANGELOG.md` [0.6.0].
+
+Historical design follows.
 
 **What it is.** A JavaScript `requestAnimationFrame` loop firing at 60Hz with
 no corresponding visible paint activity. The canonical case: a Lottie-canvas
@@ -337,10 +349,9 @@ These are the guardrails from the past chapters:
 ## Recommended implementation order
 
 1. ~~**Tier 1 + Tier 2 together.**~~ Shipped in 0.5.0, fixed in 0.5.1.
-2. **Tier 5 (rAF loop).** Smallest delta, solves the original user complaint,
-   demonstrates the "visible vs not visible" behavioral pattern. Next up.
-3. **Tier 3 (navigator reads).** Most nuanced (legit vs illegit); build after
-   T5 so we have more signal-processing patterns to reuse.
+2. ~~**Tier 5 (rAF loop).**~~ Shipped in 0.6.0 as canvas-draw visibility
+   sampling (not a raw `requestAnimationFrame` hook).
+3. **Tier 3 (navigator reads).** Most nuanced (legit vs illegit); next up.
 4. **Tier 4 (supercookies).** Needs `all_frames: true` cross-origin
    coordination; bigger architectural load.
 5. **Tier 6 (service workers).** Lowest urgency; primarily disclosure rather

@@ -247,6 +247,94 @@
   } catch (e) {}
 
   // =====================================================================
+  // Tier 5: Invisible animation-loop detection
+  //
+  // A script continuously drawing to a canvas that isn't visible is burning
+  // CPU for nothing (the original Hush user story: a 40% CPU Lottie widget
+  // hidden inside a collapsed panel). We hook the hot 2D draw ops and, per
+  // canvas element, sample visibility at most once per 100ms. If an origin
+  // sustains invisible-canvas draws, background surfaces a block suggestion.
+  // Visibility check runs synchronously in the main world since this is the
+  // same document the DOM lives in; layout cost is amortized by throttling.
+  // =====================================================================
+  try {
+    if (typeof CanvasRenderingContext2D !== "undefined") {
+      const _perfNow = (typeof performance !== "undefined" && performance.now)
+        ? performance.now.bind(performance)
+        : Date.now.bind(Date);
+      const lastVisCheck = new WeakMap();
+
+      function canvasVisible(canvas) {
+        if (!canvas || !canvas.getBoundingClientRect) return true;
+        try {
+          const rect = canvas.getBoundingClientRect();
+          if (rect.width < 2 || rect.height < 2) return false;
+          const vw = window.innerWidth || 1;
+          const vh = window.innerHeight || 1;
+          if (rect.right < 0 || rect.bottom < 0 || rect.left > vw || rect.top > vh) return false;
+          const cs = window.getComputedStyle ? window.getComputedStyle(canvas) : null;
+          if (cs) {
+            if (cs.display === "none") return false;
+            if (cs.visibility === "hidden") return false;
+            if (parseFloat(cs.opacity) === 0) return false;
+          }
+          return true;
+        } catch (e) {
+          return true; // unknown -> don't flag
+        }
+      }
+
+      function canvasDescriptor(canvas) {
+        if (!canvas) return "";
+        try {
+          const id = canvas.id ? "#" + canvas.id : "";
+          let cls = "";
+          if (typeof canvas.className === "string") {
+            cls = canvas.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).join(".");
+          }
+          return "canvas" + id + (cls ? "." + cls : "");
+        } catch (e) {
+          return "canvas";
+        }
+      }
+
+      // Draw ops worth sampling. Chosen to cover the common paths without
+      // duplicating signal: fillText/strokeText are handled by the canvas-fp
+      // hooks separately. clearRect is included because the stripchat-style
+      // Lottie pattern hits it every frame.
+      const DRAW_OPS = [
+        "fillRect", "strokeRect", "clearRect",
+        "drawImage", "fill", "stroke", "putImageData"
+      ];
+      for (const op of DRAW_OPS) {
+        const orig = CanvasRenderingContext2D.prototype[op];
+        if (typeof orig !== "function") continue;
+        CanvasRenderingContext2D.prototype[op] = function hushCanvasDraw() {
+          try {
+            const canvas = this && this.canvas;
+            if (canvas) {
+              const now = _perfNow();
+              const last = lastVisCheck.get(canvas) || 0;
+              // Throttle: one sample per canvas per 100ms. 60Hz loops still
+              // produce ~10 samples/sec per canvas - plenty of signal.
+              if (now - last >= 100) {
+                lastVisCheck.set(canvas, now);
+                emit("canvas-draw", {
+                  op,
+                  visible: canvasVisible(canvas),
+                  canvasSel: canvasDescriptor(canvas),
+                  stack: captureStack()
+                });
+              }
+            }
+          } catch (e) {}
+          return orig.apply(this, arguments);
+        };
+      }
+    }
+  } catch (e) {}
+
+  // =====================================================================
   // Tier 2: Session replay detection
   // =====================================================================
 
