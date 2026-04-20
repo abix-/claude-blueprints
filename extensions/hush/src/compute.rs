@@ -64,6 +64,22 @@ pub fn compute_suggestions(
             .map(|e| e.value.clone())
             .collect::<Vec<_>>(),
     );
+    let existing_neuter: Arc<[String]> = Arc::from(
+        merged
+            .neuter
+            .iter()
+            .filter(|e| !e.disabled)
+            .map(|e| e.value.clone())
+            .collect::<Vec<_>>(),
+    );
+    let existing_silence: Arc<[String]> = Arc::from(
+        merged
+            .silence
+            .iter()
+            .filter(|e| !e.disabled)
+            .map(|e| e.value.clone())
+            .collect::<Vec<_>>(),
+    );
     let existing_spoof: Arc<[String]> = Arc::from(
         merged
             .spoof
@@ -80,6 +96,8 @@ pub fn compute_suggestions(
         existing_block,
         existing_remove,
         existing_hide,
+        existing_neuter,
+        existing_silence,
         existing_spoof,
     };
 

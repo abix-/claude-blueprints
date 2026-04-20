@@ -969,6 +969,41 @@ async fn compute_suggestions_for(
     rust_compute_suggestions(state, config, &allowlist)
 }
 
+/// After any config change, re-run compute_suggestions against every
+/// tab's stored behavior state. Without this pass, stale suggestions
+/// stay pinned in `tab_behavior[*].suggestions` until the tab rescans
+/// on its own — so a user who edits rules in options watches old
+/// suggestions linger until they reload the tab manually. Cheap:
+/// same work that runs on every scan, just batched across tabs.
+async fn recompute_all_tab_suggestions() {
+    let config = load_config().await.unwrap_or_default();
+    let snapshots: Vec<(i32, BehaviorState)> = STATE.with(|s| {
+        s.borrow()
+            .tab_behavior
+            .iter()
+            .map(|(k, v)| (*k, v.clone()))
+            .collect()
+    });
+    let mut mutated: Vec<i32> = Vec::new();
+    for (tab_id, state) in snapshots {
+        let fresh = compute_suggestions_for(&state, &config).await;
+        STATE.with(|s| {
+            if let Some(b) = s.borrow_mut().tab_behavior.get_mut(&tab_id) {
+                if b.suggestions.len() != fresh.len()
+                    || !b.suggestions.iter().zip(fresh.iter()).all(|(a, b)| a.key == b.key)
+                {
+                    b.suggestions = fresh;
+                    mutated.push(tab_id);
+                }
+            }
+        });
+    }
+    for tid in mutated {
+        update_badge(tid);
+    }
+    schedule_persist_behavior();
+}
+
 // ---------------------------------------------------------------------------
 // Listeners.
 
@@ -1039,13 +1074,19 @@ fn install_storage_on_changed() -> Result<(), JsValue> {
             STATE.with(|s| s.borrow_mut().debug_logging = debug);
             log(&format!("debug logging -> {debug}"));
         }
-        // config change -> sync DNR rules
+        // config change -> sync DNR rules AND refresh every tab's
+        // cached suggestion list against the new rule set. Without
+        // the recompute, accepted-in-options-editor rules wouldn't
+        // clear their matching suggestion until the user reloaded
+        // the tab. Same problem shape the popup-accept flow
+        // originally had.
         if !Reflect::get(&changes, &JsValue::from_str(STORAGE_KEY))
             .map(|v| v.is_undefined() || v.is_null())
             .unwrap_or(true)
         {
             spawn_local(async {
                 let _ = sync_dynamic_rules().await;
+                recompute_all_tab_suggestions().await;
             });
         }
         // allowlist change -> refresh cache
@@ -1891,13 +1932,33 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
             }
         }
         // Drop from every tab's suggestions + refresh badges.
-        let accepted_key = format!("{}::{}", layer, value);
+        // Detectors now append discriminator suffixes to keys
+        // (e.g. `neuter::||host::listener-density`,
+        // `block::||host::canvas-fp`), so the old
+        // `{layer}::{value}` prefix no longer equals the full key.
+        // Filter by layer + value directly — that's the identity
+        // the user accepted, regardless of key suffix.
+        let layer_enum = match layer.as_str() {
+            "block" => Some(crate::types::SuggestionLayer::Block),
+            "allow" => None, // allow isn't a suggestion layer today
+            "remove" => Some(crate::types::SuggestionLayer::Remove),
+            "hide" => Some(crate::types::SuggestionLayer::Hide),
+            "neuter" => Some(crate::types::SuggestionLayer::Neuter),
+            "silence" => Some(crate::types::SuggestionLayer::Silence),
+            "spoof" => None, // no spoof suggestion layer yet
+            _ => None,
+        };
         let mutated: Vec<i32> = STATE.with(|s| {
             let mut st = s.borrow_mut();
             let mut out = Vec::new();
             for (tab_id, b) in st.tab_behavior.iter_mut() {
                 let before = b.suggestions.len();
-                b.suggestions.retain(|s| s.key != accepted_key);
+                b.suggestions.retain(|sg| {
+                    !(layer_enum
+                        .map(|l| sg.layer == l)
+                        .unwrap_or(false)
+                        && sg.value == value)
+                });
                 if b.suggestions.len() != before {
                     out.push(*tab_id);
                 }

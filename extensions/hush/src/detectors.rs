@@ -156,6 +156,14 @@ pub(crate) struct DetectCtx<'a> {
     pub existing_block: Arc<[String]>,
     pub existing_remove: Arc<[String]>,
     pub existing_hide: Arc<[String]>,
+    /// Enabled neuter rules from the merged config. Lets the
+    /// replay-listener detector skip its Neuter suggestion when
+    /// the user already has one for the same origin.
+    pub existing_neuter: Arc<[String]>,
+    /// Enabled silence rules from the merged config. Symmetric to
+    /// existing_neuter for the silence-suggestion path (not yet
+    /// emitted by any detector, but plumbed so future ones can).
+    pub existing_silence: Arc<[String]>,
     /// Enabled spoof kind tags from the merged config. Lets
     /// fingerprint detectors skip their block suggestions when the
     /// equivalent spoof already neutralizes the signal — e.g. a
@@ -173,6 +181,13 @@ impl<'a> DetectCtx<'a> {
     }
     fn has_hide(&self, v: &str) -> bool {
         self.existing_hide.iter().any(|e| e == v)
+    }
+    fn has_neuter(&self, v: &str) -> bool {
+        self.existing_neuter.iter().any(|e| e == v)
+    }
+    #[allow(dead_code)]
+    fn has_silence(&self, v: &str) -> bool {
+        self.existing_silence.iter().any(|e| e == v)
     }
     fn has_spoof(&self, kind: &str) -> bool {
         self.existing_spoof.iter().any(|e| e == kind)
@@ -991,12 +1006,21 @@ pub(crate) fn detect_from_js_calls(
     // rule's match value is the script-origin URL pattern, not the
     // request URL — main-world enforcement checks the stack origin
     // against it at addEventListener call time.
+    //
+    // Dedup: skip when the user already has a neuter OR block rule
+    // covering this origin. Block is enough because a URL-blocked
+    // script never runs, so no listeners can register in the first
+    // place. Neuter is the exact primitive this suggestion proposes
+    // — duplicate suggestion is pure noise.
     for (origin, info) in &s.listener_types_by_origin {
         if info.count >= 12 && info.types.len() >= 3 && s.seconds_since_first < 60 {
             if origin.is_empty() {
                 continue;
             }
             let value = block_value(origin);
+            if ctx.has_neuter(&value) || ctx.has_block(&value) {
+                continue;
+            }
             let types: Vec<&str> = info.types.iter().map(String::as_str).collect();
             out.push(ctx.finish(BuildSuggestionInput {
                 key: format!("neuter::{value}::listener-density"),
@@ -1083,6 +1107,8 @@ mod tests {
             existing_block: Arc::from([] as [String; 0]),
             existing_remove: Arc::from([] as [String; 0]),
             existing_hide: Arc::from([] as [String; 0]),
+            existing_neuter: Arc::from([] as [String; 0]),
+            existing_silence: Arc::from([] as [String; 0]),
             existing_spoof: Arc::from([] as [String; 0]),
         }
     }
@@ -1289,6 +1315,48 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].confidence, 95);
         assert!(out[0].key.ends_with("::webgl-fp-hot"));
+    }
+
+    #[test]
+    fn replay_listener_suppressed_when_neuter_or_block_rule_exists() {
+        // Regression: after accepting the replay-listener
+        // suggestion (which now lands a neuter rule for the
+        // origin), the detector must not keep re-surfacing the
+        // same suggestion. Also covers the block-rule case — if
+        // the user blocked the script URL entirely, the listeners
+        // can't exist anyway.
+        // Detector requires count >= 12 AND 3+ distinct types.
+        let types = ["click", "keydown", "mousemove", "scroll"];
+        let calls: Vec<JsCall> = (0..16)
+            .map(|i| JsCall {
+                kind: "listener-added".into(),
+                t: "2026-04-19T12:00:00.000Z".into(),
+                stack: vec!["at emit (https://replay.test/r.js:1:1)".into()],
+                event_type: Some(types[i % types.len()].into()),
+                ..Default::default()
+            })
+            .collect();
+
+        // Baseline: no rules → suggestion fires.
+        let baseline = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert_eq!(baseline.len(), 1, "baseline must emit the suggestion");
+        assert_eq!(baseline[0].value, "||replay.test");
+
+        // With neuter rule for the origin → dedup.
+        let mut neutered = ctx("site.test");
+        neutered.existing_neuter = Arc::from(["||replay.test".to_string()]);
+        assert!(
+            detect_from_js_calls(&neutered, &calls).is_empty(),
+            "neuter rule must dedup replay-listener suggestion"
+        );
+
+        // With block rule for the origin → dedup.
+        let mut blocked = ctx("site.test");
+        blocked.existing_block = Arc::from(["||replay.test".to_string()]);
+        assert!(
+            detect_from_js_calls(&blocked, &calls).is_empty(),
+            "block rule must dedup replay-listener suggestion (no script, no listeners)"
+        );
     }
 
     #[test]
