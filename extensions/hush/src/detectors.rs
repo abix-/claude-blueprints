@@ -156,6 +156,12 @@ pub(crate) struct DetectCtx<'a> {
     pub existing_block: Arc<[String]>,
     pub existing_remove: Arc<[String]>,
     pub existing_hide: Arc<[String]>,
+    /// Enabled spoof kind tags from the merged config. Lets
+    /// fingerprint detectors skip their block suggestions when the
+    /// equivalent spoof already neutralizes the signal — e.g. a
+    /// user with `spoof: ["webgl-unmasked"]` doesn't need another
+    /// "block this origin" nag for every WebGL-hot read.
+    pub existing_spoof: Arc<[String]>,
 }
 
 impl<'a> DetectCtx<'a> {
@@ -167,6 +173,9 @@ impl<'a> DetectCtx<'a> {
     }
     fn has_hide(&self, v: &str) -> bool {
         self.existing_hide.iter().any(|e| e == v)
+    }
+    fn has_spoof(&self, kind: &str) -> bool {
+        self.existing_spoof.iter().any(|e| e == kind)
     }
     fn finish(&self, input: BuildSuggestionInput) -> Suggestion {
         build_suggestion(&input)
@@ -855,17 +864,28 @@ pub(crate) fn detect_from_js_calls(
     }
 
     // WebGL UNMASKED reads: the hot 95-confidence case.
-    for (origin, &hot_count) in &s.hot_params_by_origin {
-        if hot_count >= 1 {
-            emit_origin_block(
-                ctx,
-                &mut out,
-                origin,
-                "WebGL fingerprinting (read UNMASKED_RENDERER_WEBGL or _VENDOR_WEBGL)".to_string(),
-                95,
-                "webgl-fp-hot",
-                LearnKind::WebglFpHot,
-            );
+    // Suppress when the user already has `webgl-unmasked` spoof
+    // active — the spoof neutralizes the exact signal (UNMASKED_
+    // VENDOR/RENDERER return bland strings). The detector is
+    // still OBSERVING the reads (that's what generates the signal
+    // in the first place), but surfacing a new block-the-origin
+    // suggestion for a user who already picked the spoof lane is
+    // just nagging. If the user ever removes the spoof rule, the
+    // suggestion will resurface on the next tab.
+    if !ctx.has_spoof("webgl-unmasked") {
+        for (origin, &hot_count) in &s.hot_params_by_origin {
+            if hot_count >= 1 {
+                emit_origin_block(
+                    ctx,
+                    &mut out,
+                    origin,
+                    "WebGL fingerprinting (read UNMASKED_RENDERER_WEBGL or _VENDOR_WEBGL)"
+                        .to_string(),
+                    95,
+                    "webgl-fp-hot",
+                    LearnKind::WebglFpHot,
+                );
+            }
         }
     }
     // WebGL general getParameter flurry (excluded from origins already flagged for UNMASKED).
@@ -1063,6 +1083,7 @@ mod tests {
             existing_block: Arc::from([] as [String; 0]),
             existing_remove: Arc::from([] as [String; 0]),
             existing_hide: Arc::from([] as [String; 0]),
+            existing_spoof: Arc::from([] as [String; 0]),
         }
     }
 
@@ -1268,6 +1289,28 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].confidence, 95);
         assert!(out[0].key.ends_with("::webgl-fp-hot"));
+    }
+
+    #[test]
+    fn webgl_fp_hot_suppressed_when_webgl_unmasked_spoof_active() {
+        // When the user has `spoof: ["webgl-unmasked"]` enabled,
+        // the equivalent block suggestion should not surface —
+        // the spoof already neutralizes the exact signal.
+        // Regression lock for the "spoof already active" nag case.
+        let mut ctx = ctx("site.test");
+        ctx.existing_spoof = Arc::from(["webgl-unmasked".to_string()]);
+        let call = JsCall {
+            kind: "webgl-fp".into(),
+            t: "2026-04-19T12:00:00.000Z".into(),
+            stack: vec!["at fp (https://fp.test/a.js:1:1)".into()],
+            hot_param: true,
+            ..Default::default()
+        };
+        let out = detect_from_js_calls(&ctx, &[call]);
+        assert!(
+            out.is_empty(),
+            "webgl-unmasked spoof must suppress the webgl-fp-hot block suggestion"
+        );
     }
 
     #[test]

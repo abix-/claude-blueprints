@@ -64,6 +64,14 @@ pub fn compute_suggestions(
             .map(|e| e.value.clone())
             .collect::<Vec<_>>(),
     );
+    let existing_spoof: Arc<[String]> = Arc::from(
+        merged
+            .spoof
+            .iter()
+            .filter(|e| !e.disabled)
+            .map(|e| e.value.clone())
+            .collect::<Vec<_>>(),
+    );
 
     let ctx = DetectCtx {
         hostname,
@@ -72,6 +80,7 @@ pub fn compute_suggestions(
         existing_block,
         existing_remove,
         existing_hide,
+        existing_spoof,
     };
 
     // Heavy tabs typically emit 20-40 suggestions; pre-sizing avoids
