@@ -212,6 +212,24 @@
     }
   });
 
+  // Spoof-hit relay: main-world dispatches __hush_spoof_hit__ when a
+  // fingerprint read is neutralized. Forward to background as a
+  // firewall event so the log shows spoof rules firing uniformly
+  // with block/remove. Mainworld already dedups per (kind, page) so
+  // this arrives at most once per spoof kind per page.
+  document.addEventListener("__hush_spoof_hit__", (ev) => {
+    const d = ev && ev.detail;
+    if (!d || typeof d !== "object") return;
+    try {
+      const p = chrome.runtime.sendMessage({
+        type: "hush:spoof-hit",
+        t: String(d.t || new Date().toISOString()),
+        kind: String(d.kind || "")
+      });
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } catch (e) { /* extension context gone */ }
+  });
+
   // --------------------------------------------------------------
   // Main-world hook bridge.
   //
@@ -413,6 +431,13 @@
   for (const s of hideSelectors)   stats.hide[s]   = 0;
 
   const pendingRemovedEvents = [];
+  // First-fire tracking for hide selectors. CSS hides don't produce
+  // per-element mutations we can observe, but we can detect "did this
+  // selector ever match?" via the recountHide pass. Emit one hide
+  // event per selector the first time its count goes > 0 so the
+  // firewall log shows hide rules firing at all (just once per page;
+  // the hide section already surfaces the ongoing match count).
+  const hideFiredSelectors = new Set();
 
   function describeElement(el) {
     const tag = el.tagName ? el.tagName.toLowerCase() : "?";
@@ -560,13 +585,25 @@
 
   function sendStats() {
     const toSend = pendingRemovedEvents.splice(0, pendingRemovedEvents.length);
+    const newHideEvents = [];
+    for (const sel of hideSelectors) {
+      if (!(stats.hide[sel] > 0)) continue;
+      if (hideFiredSelectors.has(sel)) continue;
+      hideFiredSelectors.add(sel);
+      newHideEvents.push({
+        t: new Date().toISOString(),
+        selector: sel,
+        scope: scopeForSelector("hide", sel)
+      });
+    }
     try {
       const p = chrome.runtime.sendMessage({
         type: "hush:stats",
         matchedDomain: stats.matchedDomain,
         hide: stats.hide,
         remove: stats.remove,
-        newRemovedElements: toSend
+        newRemovedElements: toSend,
+        newHideEvents
       });
       if (p && typeof p.catch === "function") p.catch(() => {});
     } catch (e) {

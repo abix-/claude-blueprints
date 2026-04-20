@@ -42,12 +42,28 @@ pub fn compute_suggestions(
     // refcount bump (2 instructions) rather than a Vec data copy.
     // Across a heavy_tab run with ~30 suggestions that's ~90 heap
     // allocations avoided.
+    // Dedup only against ENABLED rules. A disabled rule is parked —
+    // the user wants the detector to keep surfacing suggestions for
+    // that match so the "what gets caught if I turn this back on?"
+    // workflow stays live.
     let existing_block: Arc<[String]> =
         Arc::from(normalize_block_patterns(&merged.block));
-    let existing_remove: Arc<[String]> =
-        Arc::from(merged.remove.iter().map(|e| e.value.clone()).collect::<Vec<_>>());
-    let existing_hide: Arc<[String]> =
-        Arc::from(merged.hide.iter().map(|e| e.value.clone()).collect::<Vec<_>>());
+    let existing_remove: Arc<[String]> = Arc::from(
+        merged
+            .remove
+            .iter()
+            .filter(|e| !e.disabled)
+            .map(|e| e.value.clone())
+            .collect::<Vec<_>>(),
+    );
+    let existing_hide: Arc<[String]> = Arc::from(
+        merged
+            .hide
+            .iter()
+            .filter(|e| !e.disabled)
+            .map(|e| e.value.clone())
+            .collect::<Vec<_>>(),
+    );
 
     let ctx = DetectCtx {
         hostname,
@@ -118,6 +134,7 @@ fn find_config_entry<'a>(config: &'a Config, host: &str) -> Option<(&'a String, 
 /// the JS `existingBlock` Set construction in the old computeSuggestions.
 fn normalize_block_patterns(raw: &[crate::types::RuleEntry]) -> Vec<String> {
     raw.iter()
+        .filter(|e| !e.disabled)
         .map(|e| {
             if let Some(stripped) = e.value.strip_suffix('^') {
                 stripped.to_string()
@@ -304,6 +321,43 @@ mod tests {
         assert!(
             out.is_empty(),
             "caret-suffixed and unsuffixed forms dedup against each other"
+        );
+    }
+
+    #[test]
+    fn disabled_block_rule_does_not_suppress_suggestion() {
+        // A disabled rule is parked — the detector should keep
+        // surfacing the suggestion so the user can see what it
+        // would catch if flipped back on. Regression lock for
+        // Stage 9 phase 4 per-rule disable.
+        use crate::types::RuleEntry;
+        let mut s = state("site.test");
+        s.seen_resources = vec![Resource {
+            url: "https://t.test/p".into(),
+            host: "t.test".into(),
+            initiator_type: "beacon".into(),
+            transfer_size: 0,
+            duration: 0,
+            start_time: 0,
+            reporter_frame: None,
+        }];
+        let mut config = Config::new();
+        config.insert(
+            "site.test".into(),
+            SiteConfig {
+                block: vec![RuleEntry {
+                    value: "||t.test".into(),
+                    disabled: true,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        );
+        let out = compute_suggestions(&s, &config, &Allowlist::default());
+        assert_eq!(
+            out.len(),
+            1,
+            "disabled block rule must NOT dedup the suggestion"
         );
     }
 

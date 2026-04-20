@@ -146,8 +146,8 @@ list.
 | Block | `FirewallEvent` | `{url, resourceType}` | shipped |
 | Allow | `FirewallEvent` | `{url, resourceType}` (action=allow) | shipped |
 | Remove | `FirewallEvent` | `{el}` (element description) | shipped |
-| Hide | `FirewallEvent` | `None` (count-only, no per-element events) | next |
-| Spoof | `FirewallEvent` | `None` / kind-specific | next |
+| Hide | `FirewallEvent` | `None` (one event per selector first match on the page) | shipped |
+| Spoof | `FirewallEvent` | `None` (one event per kind per page) | shipped |
 
 `rule_id` is derived as `"{action}::{scope}::{match}"` (see
 `src/types.rs::rule_id`) — the same format as suggestion keys, so

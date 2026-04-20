@@ -198,20 +198,21 @@ for the background and rationale.*
       Aggregates events by `rule_id`; one row per rule with
       action badge, scope tag, match, hit count, last-hit time;
       click-to-expand recent evidence (last 20 events per rule).
-- [ ] **Next:** spoof/hide event emission. Today hide produces
-      no events (count-based, not event-based) and spoof is
-      silent in the log. Wire a main-world → content → bg
-      event path so both actions appear in the firewall log
-      alongside block/remove. Start with spoof (already has a
-      `__hush_call__` path we can piggyback on).
-- [ ] **Then:** per-rule disable toggle in the options editor.
-      Implementation: a boolean field on every rule row; rules
-      whose `disabled = true` are skipped at evaluation time
-      (DNR sync excludes them, content-script applier skips
-      them, compute_suggestions ignores them for dedup). The
-      schema for this lands as part of Stage 9's `RuleEntry`
-      migration, so the UI work can either piggyback on Stage 9
-      or land as a parallel-array shim first.
+- [x] Spoof/hide event emission. Hide: content.js emits one
+      event per selector the first time its match count goes
+      >0 on a page (piggybacks on `hush:stats`). Spoof:
+      mainworld dispatches `__hush_spoof_hit__` on the first
+      bland-value return per kind per page; content.js relays
+      as `hush:spoof-hit`; background emits a FirewallEvent
+      with action="spoof". Every action now flows through the
+      unified log.
+- [x] Per-rule disable toggle in the options editor. Enable
+      checkbox on every rule row; disabled rows render
+      strikethrough. Evaluator skip: DNR sync excludes them,
+      `toValueList` in content.js skips them, compute_suggestions
+      ignores them for dedup (so detector keeps surfacing
+      matches while a rule is parked). Regression test locks
+      the dedup behaviour.
 
 ### Stage 8: More spoof kinds
 

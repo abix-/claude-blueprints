@@ -83,6 +83,31 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
     Leptos signals. `Arc`-shared event + config inputs so the
     closures don't deep-copy on every keystroke.
 
+### Stage 9 phase 4: hide/spoof events + per-rule disable toggle
+- Hide events: `content.js` tracks which hide selectors have
+  matched at least once on the current page; one
+  `FirewallEvent { action: "hide" }` fires per selector per
+  navigation. Piggybacks on the existing `hush:stats` message via
+  a new `newHideEvents` field — no extra round-trips.
+- Spoof events: `mainworld.js` dispatches a
+  `__hush_spoof_hit__` CustomEvent on the first
+  getParameter-returns-bland hit per (kind, page). `content.js`
+  relays that to background as `hush:spoof-hit`. Background maps
+  the kind back to its authoring scope (site if matched, global
+  otherwise) and emits a `FirewallEvent { action: "spoof" }`.
+- Every action now flows through the unified firewall log. The
+  Hide/Spoof evidence variants stay `None {}` (CSS hides don't
+  have per-element events worth logging; fingerprint reads are
+  recorded by rule fire, not by value).
+- Per-rule disable toggle in the options editor: every rule row
+  gets an enable checkbox. Disabled rows render greyed-out
+  (strikethrough + muted colour) but stay in the config so the
+  user can flip them back. Evaluator skips `disabled` entries:
+  DNR sync excludes them, content-script applier (`toValueList`)
+  skips them, `compute_suggestions` ignores them for dedup so
+  the detector keeps surfacing matches while a rule is parked.
+  Regression test locks the dedup behaviour.
+
 ### Stage 4 progress: popup UI porting to Leptos
 - Iter 1 scaffold: Leptos 0.8 + `src/ui_popup.rs` + `mountPopup`
   wasm-bindgen export + `popup.js` bootstrap + `<div

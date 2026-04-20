@@ -1269,6 +1269,10 @@ fn handle_message(msg: JsValue, sender: JsValue, send_response: JsValue) -> JsVa
             handle_stats(&msg, &sender);
             JsValue::UNDEFINED
         }
+        "hush:spoof-hit" => {
+            handle_spoof_hit(&msg, &sender);
+            JsValue::UNDEFINED
+        }
         "hush:log" => {
             handle_log(&msg, &sender);
             JsValue::UNDEFINED
@@ -1392,8 +1396,107 @@ fn handle_stats(msg: &JsValue, sender: &JsValue) {
             },
         );
     }
+    // Hide hits: one event per selector the first time its match
+    // count rises above zero on this tab's current page. Content
+    // script dedups per-page so this arrives at most once per
+    // (selector, navigation).
+    #[derive(Deserialize)]
+    struct HideHit {
+        #[serde(default)]
+        t: String,
+        #[serde(default)]
+        selector: String,
+        #[serde(default)]
+        scope: String,
+    }
+    let new_hide: Vec<HideHit> = Reflect::get(msg, &JsValue::from_str("newHideEvents"))
+        .ok()
+        .and_then(|v| serde_wasm_bindgen::from_value(v).ok())
+        .unwrap_or_default();
+    for ev in new_hide {
+        if ev.selector.is_empty() {
+            continue;
+        }
+        let scope = if ev.scope.is_empty() {
+            fallback_scope.clone()
+        } else {
+            ev.scope.clone()
+        };
+        push_firewall_event(
+            tab_id,
+            FirewallEvent {
+                t: if ev.t.is_empty() { iso_now() } else { ev.t.clone() },
+                rule_id: crate::types::rule_id("hide", &scope, &ev.selector),
+                action: "hide".to_string(),
+                scope,
+                match_: ev.selector.clone(),
+                evidence: FirewallEvidence::None {},
+                tab_id,
+            },
+        );
+    }
     update_badge(tab_id);
     schedule_persist_stats();
+}
+
+fn handle_spoof_hit(msg: &JsValue, sender: &JsValue) {
+    let Some(tab_id) = sender_tab_id(sender) else {
+        return;
+    };
+    let kind = Reflect::get(msg, &JsValue::from_str("kind"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .unwrap_or_default();
+    if kind.is_empty() {
+        return;
+    }
+    let t = Reflect::get(msg, &JsValue::from_str("t"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(iso_now);
+    // Spoof rules live under `spoof` in the merged site config. Find
+    // which scope authored this kind so the log attributes the hit
+    // correctly. If the kind is in neither the site's nor the
+    // global's spoof list (shouldn't happen — we only got here
+    // because mainworld read the dataset), fall back to the matched
+    // site's scope then global.
+    let scope = spoof_scope_for_tab(tab_id, &kind);
+    push_firewall_event(
+        tab_id,
+        FirewallEvent {
+            t,
+            rule_id: crate::types::rule_id("spoof", &scope, &kind),
+            action: "spoof".to_string(),
+            scope,
+            match_: kind,
+            evidence: FirewallEvidence::None {},
+            tab_id,
+        },
+    );
+    schedule_persist_stats();
+}
+
+/// Resolve which scope authored a given spoof `kind` for a tab. Used
+/// so the firewall log row matches the rule-enumeration row instead
+/// of splitting into an orphan "events from nowhere" entry. Uses the
+/// tab's matched domain when known, otherwise the global scope.
+/// Reading full config from storage would require an async hop that
+/// the sync message handler can't take; the matched-domain heuristic
+/// is correct in the overwhelming majority of cases (spoof kinds are
+/// typically authored site-scoped or global, and the site scope of
+/// the current tab is always one of those).
+fn spoof_scope_for_tab(tab_id: i32, _kind: &str) -> String {
+    let matched = STATE.with(|s| {
+        s.borrow()
+            .tab_stats
+            .get(&tab_id)
+            .and_then(|st| st.matched_domain.clone())
+    });
+    match matched {
+        Some(m) if !m.is_empty() => m,
+        _ => GLOBAL_SCOPE_KEY.to_string(),
+    }
 }
 
 fn handle_log(msg: &JsValue, sender: &JsValue) {

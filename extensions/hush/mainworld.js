@@ -28,6 +28,21 @@
   let wasmMod = null;
   let wasmReady = false;
 
+  // Emitted-spoof-kinds dedup. Per-page: mainworld.js runs fresh on
+  // every navigation, so the set resets naturally. One FirewallEvent
+  // per (kind, page) keeps a busy fingerprinter from flooding the log
+  // — the popup cares that spoof FIRED, not that it fired 40x/second.
+  const hushSpoofEmitted = new Set();
+  function emitSpoofHit(kind) {
+    if (hushSpoofEmitted.has(kind)) return;
+    hushSpoofEmitted.add(kind);
+    try {
+      document.dispatchEvent(new CustomEvent("__hush_spoof_hit__", {
+        detail: { kind: String(kind), t: new Date().toISOString() }
+      }));
+    } catch (e) { /* ignore — detached document */ }
+  }
+
   function cap() {
     try {
       const s = new Error().stack || "";
@@ -247,6 +262,7 @@
           const el = document.documentElement;
           const spoof = el && el.dataset && el.dataset.hushSpoof;
           if (spoof && spoof.indexOf("webgl-unmasked") >= 0) {
+            emitSpoofHit("webgl-unmasked");
             return param === 37445 ? "Google Inc." : "ANGLE (Generic)";
           }
         } catch (e) { /* fall through to real value */ }

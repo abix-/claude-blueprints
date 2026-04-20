@@ -866,12 +866,21 @@ fn LayerSection(
     let draft = RwSignal::new(String::new());
 
     // Entry rows are derived reactively from the config signal.
+    // Each row shows value + enable checkbox + delete. A disabled
+    // entry renders greyed-out and is skipped by the evaluator
+    // (DNR sync + content-script applier + suggestion dedup).
     let rows = {
         let domain = domain.clone();
         move || {
-            let entries: Vec<String> = config.with(|c| {
+            let entries: Vec<(String, bool)> = config.with(|c| {
                 c.get(&domain)
-                    .map(|cfg| layer.read(cfg).iter().map(|e| e.value.clone()).collect())
+                    .map(|cfg| {
+                        layer
+                            .read(cfg)
+                            .iter()
+                            .map(|e| (e.value.clone(), e.disabled))
+                            .collect()
+                    })
                     .unwrap_or_default()
             });
             if entries.is_empty() {
@@ -883,25 +892,54 @@ fn LayerSection(
                 entries
                     .into_iter()
                     .enumerate()
-                    .map(|(idx, text)| {
+                    .map(|(idx, (text, disabled))| {
                         let d = domain.clone();
                         let title = text.clone();
                         let body = text.clone();
-                        let on_del = move |_| {
+                        let on_del = {
                             let d = d.clone();
-                            config.update(|c| {
-                                if let Some(entry) = c.get_mut(&d) {
-                                    let arr = layer.modify(entry);
-                                    if idx < arr.len() {
-                                        arr.remove(idx);
+                            move |_| {
+                                let d = d.clone();
+                                config.update(|c| {
+                                    if let Some(entry) = c.get_mut(&d) {
+                                        let arr = layer.modify(entry);
+                                        if idx < arr.len() {
+                                            arr.remove(idx);
+                                        }
                                     }
-                                }
-                            });
-                            persist_config(config);
+                                });
+                                persist_config(config);
+                            }
+                        };
+                        let on_toggle = {
+                            let d = d.clone();
+                            move |_| {
+                                let d = d.clone();
+                                config.update(|c| {
+                                    if let Some(entry) = c.get_mut(&d) {
+                                        let arr = layer.modify(entry);
+                                        if let Some(row) = arr.get_mut(idx) {
+                                            row.disabled = !row.disabled;
+                                        }
+                                    }
+                                });
+                                persist_config(config);
+                            }
+                        };
+                        let text_style = if disabled {
+                            "text-decoration: line-through; color: #999;"
+                        } else {
+                            ""
                         };
                         view! {
                             <li>
-                                <span class="text" title=title>{body}</span>
+                                <input type="checkbox"
+                                       class="rule-enable"
+                                       title=if disabled { "Enable" } else { "Disable" }
+                                       prop:checked=!disabled
+                                       on:change=on_toggle
+                                       style="margin-right: 6px;" />
+                                <span class="text" title=title style=text_style>{body}</span>
                                 <button class="del"
                                         title="Delete"
                                         on:click=on_del>
