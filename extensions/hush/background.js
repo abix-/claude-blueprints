@@ -1,3 +1,20 @@
+// Load the Rust engine. background.js is a type:module service worker so
+// top-level imports are allowed. `initEngine` wires the panic hook; the
+// actual async WASM initialization happens via the wasm-pack-generated
+// default export (init()). Top-level await works in a module SW; every
+// event handler that uses the engine awaits `wasmReady` defensively,
+// because chrome dispatches some events before the module's top-level
+// await completes on cold SW start.
+import init, {
+  initEngine,
+  computeSuggestions as wasmComputeSuggestions,
+} from "./pkg/hush_engine.js";
+
+const wasmReady = (async () => {
+  await init();
+  initEngine();
+})();
+
 const STORAGE_KEY = "config";
 const OPTIONS_KEY = "options";
 const ALLOWLIST_KEY = "allowlist";
@@ -22,96 +39,8 @@ async function loadDefaultAllowlist() {
 let debugLogging = false;
 const logBuffer = [];
 
-// Per-signal teaching text surfaced in the popup below each suggestion's
-// reason. Keep each string terse and technical: explain what the signal is
-// and why it's worth blocking. Not marketing copy. If a user doesn't know
-// what "sendBeacon" is, one short paragraph should get them oriented.
-const LEARN_TEXT = {
-  beacon:
-    "navigator.sendBeacon() is a fire-and-forget browser API built for " +
-    "telemetry. Requests are guaranteed to go out even on page unload, " +
-    "and the caller can't abort them. Almost no legitimate non-tracking " +
-    "use exists at scale - it was standardized specifically to deliver " +
-    "analytics during page teardown.",
-  pixel:
-    "A 1-pixel transparent image exists only to tell a third-party server " +
-    "that you loaded the current page. It carries no content. Responses " +
-    "under 200 bytes from a third-party img tag are the classic tracking " +
-    "pixel pattern - the image itself is irrelevant, the request is the " +
-    "signal.",
-  firstPartyTelemetry:
-    "A subdomain of the site you're on whose responses are all tiny (< 1KB " +
-    "median). Almost always an internal analytics, logging, or session- " +
-    "replay endpoint. First-party-owned subdomains like this don't show " +
-    "up on curated filter lists (EasyPrivacy, Disconnect) because those " +
-    "lists target cross-site trackers, not site-operated telemetry.",
-  polling:
-    "The same canonical URL fetched 4+ times over several seconds with tiny " +
-    "responses. Real-time chat and presence features use WebSockets for this " +
-    "shape; HTTP polling to a small-response endpoint is overwhelmingly " +
-    "analytics heartbeats or A/B-flag refreshers.",
-  hiddenIframe:
-    "An iframe from a different origin that is hidden (display:none, " +
-    "visibility:hidden, opacity 0, 1x1, or offscreen). Invisible cross-origin " +
-    "iframes are used to run third-party scripts in a partitioned JS " +
-    "context (for cross-site tracking, CSP evasion, or silent third-party " +
-    "cookie storage). Legitimate hidden iframes - captcha challenges, " +
-    "OAuth popups, payment widgets - are already allowlisted.",
-  stickyOverlay:
-    "A fixed- or sticky-position element with z-index >= 100 covering at " +
-    "least 25% of the viewport. Typically a newsletter popup, cookie banner, " +
-    "paywall nag, or app-store upsell. The visual presence and z-index " +
-    "floor distinguish these from legitimate sticky headers.",
-  canvasFp:
-    "A script drew to an HTML canvas and read the pixel bytes back (via " +
-    "toDataURL / toBlob / getImageData). GPU drivers, installed fonts, " +
-    "and OS text-rendering stacks each produce subtly different pixels " +
-    "for the same draw commands; those pixels hash to a stable per-device " +
-    "fingerprint that persists across cookie clears and incognito mode. " +
-    "3+ reads from one origin is the canonical fingerprinting pattern.",
-  webglFpHot:
-    "The script read UNMASKED_VENDOR_WEBGL or UNMASKED_RENDERER_WEBGL - " +
-    "the two WebGL parameters that directly expose your GPU's vendor and " +
-    "model as a string. Combined with 2-3 other signals, this uniquely " +
-    "identifies 90%+ of browser sessions. No legitimate rendering code " +
-    "needs to know which GPU you have.",
-  webglFp:
-    "Many WebGL getParameter() reads from one origin without the UNMASKED_* " +
-    "reads above. Pulls per-hardware capability limits (max texture size, " +
-    "uniform vector count, extension list, etc.) that vary by GPU. Hashed " +
-    "together they form a fingerprint even without explicit model strings.",
-  audioFp:
-    "The script constructed an OfflineAudioContext - an API that renders " +
-    "audio deterministically without playing it. The rendered buffer " +
-    "differs microscopically per CPU and audio stack, producing a per- " +
-    "device fingerprint when hashed. Practically the only use of this API " +
-    "in the wild is fingerprinting; legitimate audio code uses a plain " +
-    "AudioContext.",
-  fontFp:
-    "measureText() called 20+ times with different font-family assignments. " +
-    "The script measures a control string under each candidate font; if " +
-    "the rendered width differs from the browser's fallback, that font is " +
-    "installed on your machine. Each installed font is an additional bit " +
-    "of entropy in a cross-signal fingerprint.",
-  replayVendor:
-    "A known session-replay SaaS (Hotjar, FullStory, Microsoft Clarity, " +
-    "LogRocket, Smartlook, Mouseflow, PostHog) is loaded in the page. These " +
-    "tools record every mouse movement, keystroke, form input, scroll, and " +
-    "click, then replay your session as video for the site owner. You are " +
-    "an unpaid test subject whose interactions are visible to anyone with " +
-    "dashboard access.",
-  replayListener:
-    "12+ interaction event listeners (mousemove, mousedown, keydown, click, " +
-    "scroll, touch*) attached to document/window/body from one script " +
-    "origin. This density is characteristic of session-replay capture " +
-    "even when the vendor's global name is unknown or custom-built.",
-  rafWaste:
-    "A script is continuously painting to a canvas that is hidden " +
-    "(display:none, offscreen, sub-2px, or opacity 0). Burns CPU and " +
-    "drains battery for no visible output. Typical cause: a Lottie or " +
-    "canvas-based animation left running inside a collapsed panel or " +
-    "off-screen widget."
-};
+// LEARN_TEXT moved to the Rust engine (crates/engine/src/learn.rs).
+// Each suggestion carries its own `learn` string populated by the engine.
 
 function safeStringify(v) {
   if (v == null) return String(v);
@@ -588,483 +517,23 @@ function canonicalizeUrl(url) {
   }
 }
 
-function computeSuggestions(state, config) {
-  const hostname = state.pageHost || "";
-  if (!hostname) return [];
-  const match = findConfigEntry(config, hostname);
-  const cfg = match ? match.cfg : {};
-  // Normalize existing block patterns by stripping the optional trailing ^.
-  // Suggestions are always generated without trailing ^ (the ^ is functionally
-  // redundant after a ||domain anchor and can cause match failures on
-  // hyphenated subdomains in Chrome's DNR), so dedup needs to compare
-  // normalized forms to recognize existing rules written either way.
-  const existingBlock = new Set(
-    (Array.isArray(cfg.block) ? cfg.block : []).map(p =>
-      typeof p === "string" && p.endsWith("^") ? p.slice(0, -1) : p
-    )
-  );
-  const existingRemove = new Set(Array.isArray(cfg.remove) ? cfg.remove : []);
-  const existingHide = new Set(Array.isArray(cfg.hide) ? cfg.hide : []);
-  const dismissed = new Set(state.dismissed);
-  log("computeSuggestions:", hostname, "matchedKey", match && match.key, "existingBlock", Array.from(existingBlock), "existingRemove.size", existingRemove.size);
-
-  const resources = state.seenResources;
-  const out = [];
-
-  // 1. sendBeacon targets -> block (very high confidence)
-  const beaconByHost = new Map();
-  for (const r of resources) {
-    if (r.initiatorType !== "beacon") continue;
-    if (!r.host || r.host === hostname) continue;
-    const arr = beaconByHost.get(r.host) || [];
-    arr.push(r);
-    beaconByHost.set(r.host, arr);
+// Bridge from JS service-worker state to the Rust engine.
+// `allowlistCache` is ONE allowlist object with three sections inside
+// (iframes, overlays, suggestions) - passed through as-is. Awaits WASM
+// init so early-fire chrome events don't hit an uninitialized engine.
+async function computeSuggestions(state, config) {
+  try {
+    await wasmReady;
+  } catch (e) {
+    logError("wasm init failed", e);
+    return [];
   }
-  // Pull the unique set of frames that contributed observations to each
-  // host-grouped category so suggestions can be tagged with the frame
-  // that originated them (iframe vs top-frame).
-  const firstNonTopFrame = (records) => {
-    for (const r of records) {
-      if (r && r.reporterFrame && r.reporterFrame !== hostname) return r.reporterFrame;
-    }
-    return null;
-  };
-
-  // Shared diagnostic attached to every suggestion so the popup can answer
-  // "why is this suggestion here even though I have a rule for it?" without
-  // requiring the user to open the service worker console.
-  const makeDiag = (value, layer, frameHostname) => ({
-    value,
-    layer,
-    tabHostname: hostname,
-    frameHostname: frameHostname || hostname,
-    isFromIframe: !!(frameHostname && frameHostname !== hostname),
-    matchedKey: match && match.key,
-    configHasSite: !!match,
-    existingBlockCount: existingBlock.size,
-    existingBlockSample: Array.from(existingBlock).slice(0, 10),
-    dedupResult: layer === "block"
-      ? (existingBlock.has(value) ? "MATCH (should have been filtered)" : "no match")
-      : layer === "remove"
-      ? (existingRemove.has(value) ? "MATCH (should have been filtered)" : "no match")
-      : layer === "hide"
-      ? (existingHide.has(value) ? "MATCH (should have been filtered)" : "no match")
-      : "unknown layer"
-  });
-
-  // Shared suggestion-object builder. Centralizes the shape so fields like
-  // `diag`, `fromIframe`, `frameHostname`, and `learn` are computed once.
-  // Every call site that pushes into `out` should go through this so the
-  // schema can't drift between detectors.
-  const buildSuggestion = ({ key, layer, value, reason, confidence, count, evidence, fromFrame, learn }) => ({
-    key,
-    layer,
-    value,
-    reason,
-    confidence,
-    count,
-    evidence: evidence || [],
-    fromIframe: !!fromFrame,
-    frameHostname: fromFrame || null,
-    diag: makeDiag(value, layer, fromFrame || null),
-    learn: learn || ""
-  });
-
-  for (const [host, hits] of beaconByHost) {
-    const value = "||" + host;
-    const hasMatch = existingBlock.has(value);
-    log("beacon suggestion candidate:", value, "hits", hits.length, "existingBlock.has", hasMatch);
-    if (hasMatch) continue;
-    const fromFrame = firstNonTopFrame(hits);
-    out.push(buildSuggestion({
-      key: "block::" + value,
-      layer: "block",
-      value,
-      reason: "sendBeacon target (" + hits.length + " beacon" + (hits.length > 1 ? "s" : "") + " sent)",
-      confidence: 95,
-      count: hits.length,
-      evidence: hits.slice(0, 5).map(h => h.url),
-      fromFrame,
-      learn: LEARN_TEXT.beacon
-    }));
+  try {
+    return wasmComputeSuggestions(state, config, allowlistCache);
+  } catch (e) {
+    logError("wasmComputeSuggestions threw", e);
+    return [];
   }
-
-  // 2. Tracking pixels -> block (high)
-  const pixelByHost = new Map();
-  for (const r of resources) {
-    if (r.initiatorType !== "img") continue;
-    if (!r.host || r.host === hostname) continue;
-    if (r.transferSize <= 0 || r.transferSize >= 200) continue;
-    const arr = pixelByHost.get(r.host) || [];
-    arr.push(r);
-    pixelByHost.set(r.host, arr);
-  }
-  for (const [host, hits] of pixelByHost) {
-    const value = "||" + host;
-    if (existingBlock.has(value)) continue;
-    const med = median(hits.map(h => h.transferSize));
-    const fromFrame = firstNonTopFrame(hits);
-    out.push(buildSuggestion({
-      key: "block::" + value,
-      layer: "block",
-      value,
-      reason: "tracking pixels: " + hits.length + " tiny image" + (hits.length > 1 ? "s" : "") + " (median " + med + "b)",
-      confidence: 85,
-      count: hits.length,
-      evidence: hits.slice(0, 5).map(h => h.url + " (" + h.transferSize + "b)"),
-      fromFrame,
-      learn: LEARN_TEXT.pixel
-    }));
-  }
-
-  // 3. First-party telemetry subdomains -> block (medium)
-  const subByHost = new Map();
-  for (const r of resources) {
-    if (!r.host || r.host === hostname) continue;
-    if (!isSubdomainOf(r.host, hostname)) continue;
-    const arr = subByHost.get(r.host) || [];
-    arr.push(r);
-    subByHost.set(r.host, arr);
-  }
-  for (const [host, requests] of subByHost) {
-    const sizes = requests.filter(r => r.transferSize > 0).map(r => r.transferSize);
-    if (!sizes.length) continue;
-    const med = median(sizes);
-    const max = Math.max(...sizes);
-    if (med >= 1024 || max >= 5120) continue;
-    const value = "||" + host;
-    if (existingBlock.has(value)) continue;
-    const fromFrame = firstNonTopFrame(requests);
-    out.push(buildSuggestion({
-      key: "block::" + value,
-      layer: "block",
-      value,
-      reason: "first-party subdomain with " + requests.length + " tiny response" + (requests.length > 1 ? "s" : "") + " (median " + med + "b)",
-      confidence: 70,
-      count: requests.length,
-      evidence: requests.slice(0, 5).map(r => r.url + " (" + r.transferSize + "b, " + r.initiatorType + ")"),
-      fromFrame,
-      learn: LEARN_TEXT.firstPartyTelemetry
-    }));
-  }
-
-  // 4. Polling -> block (medium-high)
-  const byCanon = new Map();
-  for (const r of resources) {
-    if (!r.host || r.host === hostname) continue;
-    const canon = canonicalizeUrl(r.url);
-    const entry = byCanon.get(canon) || { count: 0, sizes: [], firstSeen: r.startTime, lastSeen: r.startTime, host: r.host, sample: r.url };
-    entry.count++;
-    entry.sizes.push(r.transferSize);
-    if (r.startTime < entry.firstSeen) entry.firstSeen = r.startTime;
-    if (r.startTime > entry.lastSeen) entry.lastSeen = r.startTime;
-    byCanon.set(canon, entry);
-  }
-  for (const [canon, info] of byCanon) {
-    if (info.count < 4) continue;
-    const span = info.lastSeen - info.firstSeen;
-    if (span < 5000 || span > 600000) continue;
-    const med = median(info.sizes);
-    if (med >= 2048) continue;
-    const value = "||" + info.host + "^";
-    const key = "block::" + value;
-    if (existingBlock.has(value)) continue;
-    if (out.find(s => s.key === key)) continue; // already added via another signal
-    out.push(buildSuggestion({
-      key,
-      layer: "block",
-      value,
-      reason: "polled " + info.count + "x over " + Math.round(span / 1000) + "s (median " + med + "b)",
-      confidence: 75,
-      count: info.count,
-      evidence: [info.sample],
-      fromFrame: null,
-      learn: LEARN_TEXT.polling
-    }));
-  }
-
-  // 5. Hidden iframes -> remove (high), excluding known-legit sources
-  const iframeByHost = new Map();
-  for (const f of state.latestIframes) {
-    if (!f.src || !f.host) continue;
-    if (isLegitHiddenIframe(f.src)) continue; // captcha / oauth / payment / etc.
-    const entry = iframeByHost.get(f.host) || { host: f.host, reasons: new Set(), samples: [] };
-    for (const r of f.reasons || []) entry.reasons.add(r);
-    entry.samples.push(f);
-    iframeByHost.set(f.host, entry);
-  }
-  for (const [host, info] of iframeByHost) {
-    const selector = 'iframe[src*="' + host + '"]';
-    if (existingRemove.has(selector)) continue;
-    const fromFrame = firstNonTopFrame(info.samples);
-    out.push(buildSuggestion({
-      key: "remove::" + selector,
-      layer: "remove",
-      value: selector,
-      reason: "hidden iframe: " + Array.from(info.reasons).join(", "),
-      confidence: 80,
-      count: info.samples.length,
-      evidence: info.samples.slice(0, 3).map(s => s.outerHTMLPreview),
-      fromFrame,
-      learn: LEARN_TEXT.hiddenIframe
-    }));
-  }
-
-  // =====================================================================
-  // Fingerprinting detection (Tier 1 from docs/heuristic-roadmap.md)
-  // =====================================================================
-  const jsCalls = Array.isArray(state.jsCalls) ? state.jsCalls : [];
-  const nowTs = Date.now();
-  const firstTs = jsCalls.length ? Date.parse(jsCalls[0].t) || nowTs : nowTs;
-  const secondsSinceFirst = Math.max(1, Math.round((nowTs - firstTs) / 1000));
-
-  // Aggregate calls by kind and by stack origin for each kind.
-  const kindCounts = {};
-  const originsByKind = {};
-  const hotParamsByOrigin = {};
-  const distinctFontsByOrigin = {};
-  const listenerTypesByOrigin = {};
-  const replayVendors = new Map();
-  // Tier 5: canvas-draw samples grouped by origin+canvas-selector, so we can
-  // flag the specific invisible target per script instead of just "this
-  // origin paints a lot somewhere."
-  const rafWasteByKey = new Map();
-  for (const c of jsCalls) {
-    const k = c.kind || "?";
-    kindCounts[k] = (kindCounts[k] || 0) + 1;
-    const origin = scriptOriginFromStack(c.stack) || "(unknown script)";
-    if (!originsByKind[k]) originsByKind[k] = new Map();
-    originsByKind[k].set(origin, (originsByKind[k].get(origin) || 0) + 1);
-
-    if (k === "webgl-fp" && c.hotParam) {
-      if (!hotParamsByOrigin[origin]) hotParamsByOrigin[origin] = 0;
-      hotParamsByOrigin[origin] += 1;
-    }
-    if (k === "font-fp" && c.font) {
-      if (!distinctFontsByOrigin[origin]) distinctFontsByOrigin[origin] = new Set();
-      distinctFontsByOrigin[origin].add(c.font);
-    }
-    if (k === "listener-added" && c.eventType) {
-      if (!listenerTypesByOrigin[origin]) listenerTypesByOrigin[origin] = { count: 0, types: new Set() };
-      listenerTypesByOrigin[origin].count += 1;
-      listenerTypesByOrigin[origin].types.add(c.eventType);
-    }
-    if (k === "replay-global" && Array.isArray(c.vendors)) {
-      for (const v of c.vendors) {
-        if (v && v.vendor) replayVendors.set(v.vendor, (replayVendors.get(v.vendor) || 0) + 1);
-      }
-    }
-    if (k === "canvas-draw") {
-      const sel = c.canvasSel || "canvas";
-      const key = origin + "|" + sel;
-      let entry = rafWasteByKey.get(key);
-      if (!entry) {
-        entry = { origin, canvasSel: sel, total: 0, invisible: 0, firstT: c.t, lastT: c.t };
-        rafWasteByKey.set(key, entry);
-      }
-      entry.total += 1;
-      if (c.visible === false) entry.invisible += 1;
-      entry.lastT = c.t;
-    }
-  }
-
-  // Map the `kind` tag (used both in the dedup suffix and to route teaching
-  // text) to the matching LEARN_TEXT entry. Any origin-block suggestion
-  // without a matching entry still works; it just has no teaching text.
-  const ORIGIN_BLOCK_LEARN = {
-    "canvas-fp": LEARN_TEXT.canvasFp,
-    "webgl-fp-hot": LEARN_TEXT.webglFpHot,
-    "webgl-fp": LEARN_TEXT.webglFp,
-    "audio-fp": LEARN_TEXT.audioFp,
-    "font-fp": LEARN_TEXT.fontFp,
-    "listener-density": LEARN_TEXT.replayListener
-  };
-
-  // Emit a block suggestion targeting a script origin with a given reason.
-  // Shared helper for fingerprinting/replay suggestions since they all result
-  // in "block this script's origin" recommendations with varying confidence.
-  const emitOriginBlock = (origin, reason, confidence, kind) => {
-    if (!origin || origin === "(unknown script)") return;
-    const value = "||" + origin;
-    if (existingBlock.has(value)) return;
-    out.push(buildSuggestion({
-      key: "block::" + value + "::" + kind,
-      layer: "block",
-      value,
-      reason,
-      confidence,
-      count: 1,
-      evidence: [],
-      fromFrame: null,
-      learn: ORIGIN_BLOCK_LEARN[kind] || ""
-    }));
-  };
-
-  // Canvas fingerprinting: 3+ toDataURL/toBlob/getImageData calls is the
-  // classic signature. measureText hits don't count here (they're handled by
-  // the font-enum detector below).
-  if (originsByKind["canvas-fp"]) {
-    for (const [origin, cnt] of originsByKind["canvas-fp"]) {
-      if (cnt >= 3) {
-        emitOriginBlock(origin, "canvas fingerprinting (" + cnt + " toDataURL/getImageData reads)", 90, "canvas-fp");
-      }
-    }
-  }
-
-  // WebGL fingerprinting: reading UNMASKED_RENDERER_WEBGL / UNMASKED_VENDOR_WEBGL
-  // is nearly definitional; any hit is very high confidence. General
-  // getParameter flurry (5+) also flagged at lower confidence.
-  for (const [origin, hotCount] of Object.entries(hotParamsByOrigin)) {
-    if (hotCount >= 1) {
-      emitOriginBlock(origin, "WebGL fingerprinting (read UNMASKED_RENDERER_WEBGL or _VENDOR_WEBGL)", 95, "webgl-fp-hot");
-    }
-  }
-  if (originsByKind["webgl-fp"]) {
-    for (const [origin, cnt] of originsByKind["webgl-fp"]) {
-      if (cnt >= 8 && !(hotParamsByOrigin[origin] >= 1)) {
-        emitOriginBlock(origin, "WebGL fingerprinting (" + cnt + " getParameter reads)", 75, "webgl-fp");
-      }
-    }
-  }
-
-  // Audio fingerprinting: constructing OfflineAudioContext has effectively
-  // zero legit non-fingerprinting use. Any hit warrants flagging.
-  if (originsByKind["audio-fp"]) {
-    for (const [origin, cnt] of originsByKind["audio-fp"]) {
-      emitOriginBlock(origin, "audio fingerprinting (OfflineAudioContext constructed " + cnt + "x)", 90, "audio-fp");
-    }
-  }
-
-  // Font enumeration: many measureText calls with many distinct font-family
-  // values. Threshold chosen so it won't fire for a chart library that uses
-  // one font across many measurements.
-  for (const [origin, fontSet] of Object.entries(distinctFontsByOrigin)) {
-    if (fontSet.size >= 20) {
-      emitOriginBlock(origin, "font enumeration fingerprinting (" + fontSet.size + " distinct fonts probed)", 85, "font-fp");
-    }
-  }
-
-  // =====================================================================
-  // Session replay detection (Tier 2 from docs/heuristic-roadmap.md)
-  // =====================================================================
-
-  // Vendor-global detection: presence of Hotjar/FullStory/Clarity/etc globals.
-  // Near-definitional, very high confidence. We can't attribute to a script
-  // origin from this signal alone, so we use the vendor name in the reason
-  // but leave the block target to the user's discretion via evidence.
-  for (const [vendor, cnt] of replayVendors) {
-    // Map vendor to a canonical domain for the block suggestion
-    const vendorHost = {
-      "Hotjar": "hotjar.com",
-      "FullStory": "fullstory.com",
-      "Microsoft Clarity": "clarity.ms",
-      "LogRocket": "logrocket.com",
-      "Smartlook": "smartlook.com",
-      "Mouseflow": "mouseflow.com",
-      "PostHog": "posthog.com"
-    }[vendor];
-    if (!vendorHost) continue;
-    const value = "||" + vendorHost;
-    if (existingBlock.has(value)) continue;
-    out.push(buildSuggestion({
-      key: "block::" + value + "::replay-" + vendor,
-      layer: "block",
-      value,
-      reason: vendor + " session replay detected (captures clicks, keystrokes, scrolls)",
-      confidence: 95,
-      count: cnt,
-      evidence: ["Global sentinel found in page: window." +
-                 (vendor === "Hotjar" ? "_hjSettings" :
-                  vendor === "FullStory" ? "FS" :
-                  vendor === "Microsoft Clarity" ? "clarity" :
-                  vendor === "LogRocket" ? "LogRocket" :
-                  vendor === "Smartlook" ? "smartlook" :
-                  vendor === "Mouseflow" ? "mouseflow" :
-                  vendor === "PostHog" ? "__posthog" : "?")],
-      fromFrame: null,
-      learn: LEARN_TEXT.replayVendor
-    }));
-  }
-
-  // Listener density: heavy attachment of mousemove/keydown/click/etc
-  // listeners on document/window/body from a single origin, in a short
-  // time window after load. Classic session-replay startup pattern.
-  for (const [origin, info] of Object.entries(listenerTypesByOrigin)) {
-    if (info.count >= 12 && info.types.size >= 3 && secondsSinceFirst < 60) {
-      emitOriginBlock(origin,
-        "session replay pattern (" + info.count + " interaction listeners attached: " + Array.from(info.types).join(", ") + ")",
-        80, "listener-density");
-    }
-  }
-
-  // =====================================================================
-  // Tier 5: Invisible animation-loop detection
-  //
-  // If an origin sustains draws to a canvas that is consistently invisible,
-  // the loop is burning CPU for nothing (the original Lottie-in-hidden-panel
-  // user story). Thresholds: at least 20 sampled draws over a window >= 3s,
-  // with >= 80% of samples hitting an invisible canvas. Since main-world
-  // throttles sampling to ~10/sec per canvas, 20 samples means the loop has
-  // been running continuously for at least 2 seconds.
-  // =====================================================================
-  for (const [, info] of rafWasteByKey) {
-    if (info.total < 20) continue;
-    const span = (Date.parse(info.lastT) || 0) - (Date.parse(info.firstT) || 0);
-    if (span < 3000) continue;
-    const invisibleRatio = info.invisible / info.total;
-    if (invisibleRatio < 0.8) continue;
-    if (!info.origin) continue;
-    const value = "||" + info.origin;
-    if (existingBlock.has(value)) continue;
-    const seconds = Math.max(1, Math.round(span / 1000));
-    const ratePerSec = Math.round((info.invisible / seconds) * 10) / 10;
-    out.push(buildSuggestion({
-      key: "block::" + value + "::raf-waste::" + info.canvasSel,
-      layer: "block",
-      value,
-      reason: "invisible animation loop (" + info.invisible + " draws to " + info.canvasSel + " in " + seconds + "s, ~" + ratePerSec + "/s)",
-      confidence: 70,
-      count: info.invisible,
-      evidence: [
-        info.canvasSel + ": " + info.invisible + "/" + info.total + " samples invisible",
-        "origin: " + info.origin,
-        "window: " + seconds + "s"
-      ],
-      fromFrame: null,
-      learn: LEARN_TEXT.rafWaste
-    }));
-  }
-
-  // 6. Sticky overlays -> hide (medium)
-  const stickySeen = new Set();
-  for (const s of state.latestStickies) {
-    if (!s.selector || stickySeen.has(s.selector)) continue;
-    stickySeen.add(s.selector);
-    if (existingHide.has(s.selector)) continue;
-    const stickyFrame = s.reporterFrame && s.reporterFrame !== hostname ? s.reporterFrame : null;
-    out.push(buildSuggestion({
-      key: "hide::" + s.selector,
-      layer: "hide",
-      value: s.selector,
-      reason: "fixed overlay covering " + s.coverage + "% of viewport (z-index " + s.zIndex + ")",
-      confidence: 55,
-      count: 1,
-      evidence: [s.rect.w + "x" + s.rect.h + " at z-index " + s.zIndex],
-      fromFrame: stickyFrame,
-      learn: LEARN_TEXT.stickyOverlay
-    }));
-  }
-
-  // Apply tab-session dismissals and the cross-session suggestion allowlist.
-  const allowlistedKeys = new Set(
-    (allowlistCache && Array.isArray(allowlistCache.suggestions))
-      ? allowlistCache.suggestions
-      : []
-  );
-  return out
-    .filter(s => !dismissed.has(s.key))
-    .filter(s => !allowlistedKeys.has(s.key))
-    .sort((a, b) => (b.confidence - a.confidence) || (b.count - a.count));
 }
 
 // ================= Setup listeners =================
@@ -1285,7 +754,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       const config = await loadConfig();
-      state.suggestions = computeSuggestions(state, config);
+      state.suggestions = await computeSuggestions(state, config);
       schedulePersistBehavior();
       updateBadge(tabId);
       log("scan merged for tab", tabId, "from frame", reporterFrame, "- suggestions:", state.suggestions.length);
@@ -1320,7 +789,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const state = getBehavior(tabId);
       const config = await loadConfig();
       // Recompute on read in case config changed since last scan.
-      const suggestions = computeSuggestions(state, config);
+      const suggestions = await computeSuggestions(state, config);
       state.suggestions = suggestions;
       updateBadge(tabId);
       sendResponse({ suggestions, pageHost: state.pageHost });

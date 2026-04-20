@@ -1,12 +1,13 @@
 {
   "name": "hush",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Per-site element hiding, DOM removal, and network blocking for Chrome (MV3)",
   "private": true,
+  "type": "module",
   "scripts": {
-    "test": "node --test test/"
-  },
-  "devDependencies": {
-    "jsdom": "^25.0.1"
+    "build": "wasm-pack build crates/engine --target web --out-dir ../../pkg --no-typescript",
+    "build:dev": "wasm-pack build crates/engine --target web --out-dir ../../pkg --no-typescript --dev",
+    "test": "npm run build && node --test test/",
+    "test:rust": "cargo test --workspace"
   }
 }
