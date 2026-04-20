@@ -40,10 +40,10 @@ feature snapshot.
 
 Stage 8: More spoof kinds (`canvas`, `audio`, `font-enum`).
 Stage 10: Rule import/export profiles.
-Stage 11: **Auto-tags** — accepted suggestions inherit the
-originating detector's signal kind as an `auto:<kind>` tag on
-the resulting rule. Unlocks tag-based filtering in the firewall
-log without the user manually curating tags.
+Stage 11: **Auto-tags shipped** — accepted suggestions inherit
+the originating detector's signal kind as an `auto:<kind>` tag
+on the resulting rule. Popup firewall log gains a tag-chip
+filter row built from the distinct tags across every rule.
 Stage 12: **Rule lint** — dead-rule detection (configured rules
 that have never matched), allow-shadow detection (block rules
 unreachable because an earlier allow covers them), selector
@@ -56,18 +56,15 @@ DOM snippet, show which rule would fire (block / allow / remove
 
 ## Next up (priority order)
 
-1. **Stage 11** — auto-tags. Cheap, unlocks tag filter chips in
-   the firewall log, makes "show me everything killing
-   session-replay" a one-click view.
-2. **Stage 12** — rule lint. Dead + shadowed + never-matched
+1. **Stage 12** — rule lint. Dead + shadowed + never-matched
    rule detection. Classic firewall-audit surface, extends
    Stage 7's existing block-diagnostics shape.
-3. **Stage 13** — rule simulate / test-match UI. Useful once
+2. **Stage 13** — rule simulate / test-match UI. Useful once
    rule sets grow past a dozen entries across global + per-site
    scopes.
-4. **Stage 8** — canvas / audio / font-enum spoofs. Fingerprint
+3. **Stage 8** — canvas / audio / font-enum spoofs. Fingerprint
    coverage expansion, orthogonal to the audit stages.
-5. **Stage 10** — rule import/export profiles. UX polish on top
+4. **Stage 10** — rule import/export profiles. UX polish on top
    of everything above.
 
 ### Stage 3: Main-world hooks in Rust [x] Complete
@@ -323,25 +320,30 @@ ship in the repo: "news-site baseline", "developer baseline",
 ### Stage 11: Auto-tags
 
 *Done when: every rule created by accepting a suggestion carries
-an `auto:<signal-kind>` tag (e.g. `auto:session-replay`,
+an `auto:<signal-kind>` tag (e.g. `auto:replay-vendor`,
 `auto:canvas-fp`, `auto:pixel`). The popup's firewall log gains
 tag filter chips populated from the distinct tags across the
-current event set, so "show me all session-replay blocks" is a
+current rule set, so "show me all session-replay blocks" is a
 click. Manually-typed tags coexist without the prefix.*
 
-- [ ] `handle_accept_suggestion` stamps the originating
+- [x] `handle_accept_suggestion` stamps the originating
       suggestion's signal kind into `RuleEntry.tags` as
-      `auto:<kind>` before writing. Kind comes from the
-      detector that emitted the suggestion.
-- [ ] `FirewallEvent` carries the matching rule's tags so the
-      log view doesn't need a config lookup to filter by tag.
-      Update `push_firewall_event` call sites to copy tags at
-      emit time.
-- [ ] Popup firewall-log: tag filter chips rendered from the
-      distinct tag set in the current filtered event list. Click
-      a chip to AND it into the filter; click again to remove.
-- [ ] Regression test: accepting a session-replay suggestion
-      produces a rule with `tags: ["auto:session-replay"]`.
+      `auto:<kind>` before writing, via a new
+      `RuleEntry::from_accepted_suggestion` helper. Kind comes
+      from `Suggestion.kind`, populated by every detector via
+      `LearnKind::tag()`.
+- [x] ~~`FirewallEvent` carries the matching rule's tags so the
+      log view doesn't need a config lookup to filter by tag.~~
+      Resolved differently: popup pre-builds a
+      `rule_id -> tags` HashMap at mount from the active
+      `SiteConfig`, so the filter is a map lookup without
+      bloating every event on the wire.
+- [x] Popup firewall-log: tag filter chips rendered from the
+      distinct tag set across every authored rule. Click a
+      chip to AND it into the filter; click again to remove.
+- [x] Regression test:
+      `from_accepted_suggestion_stamps_auto_tag` locks the
+      tag-stamping behaviour.
 
 ### Stage 12: Rule lint
 

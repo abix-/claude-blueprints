@@ -61,6 +61,7 @@ pub fn build_suggestion(input: &BuildSuggestionInput) -> Suggestion {
         frame_hostname,
         diag,
         learn: input.learn.clone(),
+        kind: input.kind.clone(),
     }
 }
 
@@ -85,6 +86,7 @@ mod tests {
             existing_block: Arc::from([] as [String; 0]),
             existing_remove: Arc::from([] as [String; 0]),
             existing_hide: Arc::from([] as [String; 0]),
+            kind: String::new(),
         }
     }
 

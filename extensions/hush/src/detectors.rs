@@ -212,6 +212,7 @@ impl<'a> DetectCtx<'a> {
             evidence: Vec::new(),
             from_frame: None,
             learn: String::new(),
+            kind: String::new(),
         }
     }
 }
@@ -336,6 +337,7 @@ pub(crate) fn detect_beacon(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
             evidence: hits.iter().take(5).map(|h| h.url.clone()).collect(),
             from_frame,
             learn: LearnKind::Beacon.text().to_string(),
+            kind: LearnKind::Beacon.tag().to_string(),
             ..ctx.ctx_fields()
         }));
     }
@@ -385,6 +387,7 @@ pub(crate) fn detect_pixels(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
                 .collect(),
             from_frame,
             learn: LearnKind::Pixel.text().to_string(),
+            kind: LearnKind::Pixel.tag().to_string(),
             ..ctx.ctx_fields()
         }));
     }
@@ -452,6 +455,7 @@ pub(crate) fn detect_first_party_telemetry(
                 .collect(),
             from_frame,
             learn: LearnKind::FirstPartyTelemetry.text().to_string(),
+            kind: LearnKind::FirstPartyTelemetry.tag().to_string(),
             ..ctx.ctx_fields()
         }));
     }
@@ -530,6 +534,7 @@ pub(crate) fn detect_polling(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sug
             evidence: vec![info.sample.to_string()],
             from_frame: None,
             learn: LearnKind::Polling.text().to_string(),
+            kind: LearnKind::Polling.tag().to_string(),
             ..ctx.ctx_fields()
         }));
     }
@@ -592,6 +597,7 @@ pub(crate) fn detect_hidden_iframes(
                 .collect(),
             from_frame,
             learn: LearnKind::HiddenIframe.text().to_string(),
+            kind: LearnKind::HiddenIframe.tag().to_string(),
             ..ctx.ctx_fields()
         }));
     }
@@ -637,6 +643,7 @@ pub(crate) fn detect_sticky_overlays(
             )],
             from_frame,
             learn: LearnKind::StickyOverlay.text().to_string(),
+            kind: LearnKind::StickyOverlay.tag().to_string(),
             ..ctx.ctx_fields()
         }));
     }
@@ -675,6 +682,7 @@ fn emit_origin_block(
         evidence: vec![],
         from_frame: None,
         learn: learn.text().to_string(),
+        kind: learn.tag().to_string(),
         ..ctx.ctx_fields()
     }));
 }
@@ -952,6 +960,7 @@ pub(crate) fn detect_from_js_calls(
             evidence: vec![format!("Global sentinel found in page: window.{sentinel_name}")],
             from_frame: None,
             learn: LearnKind::ReplayVendor.text().to_string(),
+            kind: LearnKind::ReplayVendor.tag().to_string(),
             ..ctx.ctx_fields()
         }));
     }
@@ -1020,6 +1029,7 @@ pub(crate) fn detect_from_js_calls(
             ],
             from_frame: None,
             learn: LearnKind::RafWaste.text().to_string(),
+            kind: LearnKind::RafWaste.tag().to_string(),
             ..ctx.ctx_fields()
         }));
     }

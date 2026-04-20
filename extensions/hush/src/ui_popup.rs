@@ -582,7 +582,7 @@ fn FirewallLog(
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    // Filter state — three independent signals so each control can
+    // Filter state — independent signals so each control can
     // re-render only its own part of the tree. Default to "This tab"
     // when there's a current tab to scope to; degrade to "All tabs"
     // when the popup is opened on a chrome:// page or similar where
@@ -590,6 +590,50 @@ fn FirewallLog(
     let show_all_tabs = RwSignal::new(current_tab_id < 0);
     let action_filter = RwSignal::new(String::new()); // "" = all
     let search = RwSignal::new(String::new());
+    let tag_filter: RwSignal<std::collections::HashSet<String>> =
+        RwSignal::new(std::collections::HashSet::new());
+
+    // Pre-build rule_id -> tags map so the event filter doesn't
+    // re-walk the config on every keystroke. Stable for the lifetime
+    // of the popup (config mutations trigger a re-mount upstream).
+    let rule_tags: HashMap<String, Vec<String>> = {
+        let mut m: HashMap<String, Vec<String>> = HashMap::new();
+        let mut ingest = |scope: &str, cfg: &SiteConfig| {
+            let iter = cfg
+                .block
+                .iter()
+                .map(|e| ("block", e))
+                .chain(cfg.allow.iter().map(|e| ("allow", e)))
+                .chain(cfg.remove.iter().map(|e| ("remove", e)))
+                .chain(cfg.hide.iter().map(|e| ("hide", e)))
+                .chain(cfg.spoof.iter().map(|e| ("spoof", e)));
+            for (action, entry) in iter {
+                let id = crate::types::rule_id(action, scope, &entry.value);
+                if !entry.tags.is_empty() {
+                    m.insert(id, entry.tags.clone());
+                }
+            }
+        };
+        ingest(GLOBAL_SCOPE_KEY, &global_rules);
+        if !site_scope.is_empty() {
+            ingest(&site_scope, &site_rules);
+        }
+        m
+    };
+    let rule_tags = Arc::new(rule_tags);
+
+    // Distinct tag set across every authored rule — drives the
+    // filter-chip row. Sorted so chips render deterministically.
+    let distinct_tags: Vec<String> = {
+        let mut set: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        for tags in rule_tags.values() {
+            for t in tags {
+                set.insert(t.clone());
+            }
+        }
+        set.into_iter().collect()
+    };
 
     // Shared input; the reactive closure below clones Rcs cheaply
     // rather than deep-copying the event list each time a filter
@@ -608,10 +652,12 @@ fn FirewallLog(
         let global_rules_rc = global_rules_rc.clone();
         let site_rules_rc = site_rules_rc.clone();
         let site_scope_rc = site_scope_rc.clone();
+        let rule_tags = rule_tags.clone();
         move || {
             let q = search.get().trim().to_lowercase();
             let action_f = action_filter.get();
             let all_tabs = show_all_tabs.get();
+            let tags_f = tag_filter.get();
 
             // Filter stage: narrow the event list before aggregation
             // so the row hit counts reflect only what matched the
@@ -624,6 +670,17 @@ fn FirewallLog(
                     }
                     if !action_f.is_empty() && e.action != action_f {
                         return false;
+                    }
+                    if !tags_f.is_empty() {
+                        // Event passes if the rule that produced it
+                        // carries at least one of the selected tags.
+                        let ev_tags = rule_tags.get(&e.rule_id);
+                        let matches = ev_tags
+                            .map(|ts| ts.iter().any(|t| tags_f.contains(t)))
+                            .unwrap_or(false);
+                        if !matches {
+                            return false;
+                        }
                     }
                     if !q.is_empty() {
                         let url = match &e.evidence {
@@ -794,6 +851,54 @@ fn FirewallLog(
                            search.set(val);
                        } />
             </div>
+            {
+                if distinct_tags.is_empty() {
+                    view! { <div style="display:none;" /> }.into_any()
+                } else {
+                    view! {
+                        <div style="display:flex; flex-wrap: wrap; gap: 4px;
+                                    margin-top: 4px; font-size: 11px;">
+                            <span style="color: #888;">"tags:"</span>
+                            {distinct_tags.into_iter().map(|tag| {
+                                let tag_for_closure = tag.clone();
+                                let tag_for_label = tag.clone();
+                                let active = Signal::derive(move || {
+                                    tag_filter.with(|s| s.contains(&tag_for_closure))
+                                });
+                                let tag_for_click = tag.clone();
+                                let on_click = move |_| {
+                                    let t = tag_for_click.clone();
+                                    tag_filter.update(|s| {
+                                        if !s.remove(&t) {
+                                            s.insert(t);
+                                        }
+                                    });
+                                };
+                                view! {
+                                    <button on:click=on_click
+                                            style=move || {
+                                                let on = active.get();
+                                                let (bg, fg, border) = if on {
+                                                    ("#2d4d8a", "#fff", "#2d4d8a")
+                                                } else {
+                                                    ("#f2f2f2", "#444", "#ccc")
+                                                };
+                                                format!(
+                                                    "padding: 1px 8px; font-size: 10px;
+                                                     border: 1px solid {}; background: {};
+                                                     color: {}; border-radius: 10px;
+                                                     cursor: pointer; font-family: ui-monospace, monospace;",
+                                                    border, bg, fg
+                                                )
+                                            }>
+                                        {tag_for_label}
+                                    </button>
+                                }
+                            }).collect::<Vec<_>>()}
+                        </div>
+                    }.into_any()
+                }
+            }
             {render_body}
         </details>
     }
@@ -1695,6 +1800,7 @@ where
         let hostname = hostname.clone();
         let layer = layer_str.to_string();
         let value = suggestion.value.clone();
+        let kind = suggestion.kind.clone();
         let on_mutated = on_mutated.clone();
         move |_| {
             if busy.get() {
@@ -1704,9 +1810,12 @@ where
             let hostname = hostname.clone();
             let layer = layer.clone();
             let value = value.clone();
+            let kind = kind.clone();
             let on_mutated = on_mutated.clone();
             spawn_local(async move {
-                if let Err(e) = chrome_bridge::accept_suggestion(&hostname, &layer, &value).await {
+                if let Err(e) =
+                    chrome_bridge::accept_suggestion(&hostname, &layer, &value, &kind).await
+                {
                     web_sys::console::error_1(&JsValue::from_str(&format!(
                         "[Hush popup] accept_suggestion: {:?}",
                         e

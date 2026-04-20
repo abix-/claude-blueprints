@@ -50,6 +50,30 @@ impl LearnKind {
         })
     }
 
+    /// Canonical string tag for this kind. Inverse of
+    /// [`Self::from_tag`] — returns the form used in suggestion
+    /// keys, main-world emit events, and `auto:<tag>` rule
+    /// stamps. Must stay in sync with `from_tag`'s primary
+    /// match arm for every variant.
+    pub const fn tag(self) -> &'static str {
+        match self {
+            Self::Beacon => "beacon",
+            Self::Pixel => "pixel",
+            Self::FirstPartyTelemetry => "first-party-telemetry",
+            Self::Polling => "polling",
+            Self::HiddenIframe => "hidden-iframe",
+            Self::StickyOverlay => "sticky-overlay",
+            Self::CanvasFp => "canvas-fp",
+            Self::WebglFpHot => "webgl-fp-hot",
+            Self::WebglFp => "webgl-fp",
+            Self::AudioFp => "audio-fp",
+            Self::FontFp => "font-fp",
+            Self::ReplayVendor => "replay-vendor",
+            Self::ReplayListener => "listener-density",
+            Self::RafWaste => "raf-waste",
+        }
+    }
+
     pub const fn text(self) -> &'static str {
         match self {
             Self::Beacon => TEXT_BEACON,

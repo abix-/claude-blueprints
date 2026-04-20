@@ -45,6 +45,12 @@ pub struct Suggestion {
     pub diag: SuggestionDiag,
     #[serde(default)]
     pub learn: String,
+    /// Canonical signal kind of the detector that emitted this
+    /// suggestion (e.g. `"beacon"`, `"canvas-fp"`, `"hotjar"`).
+    /// Propagates to the accepted rule as an `auto:<kind>` tag so
+    /// the firewall log can filter by detector origin.
+    #[serde(default)]
+    pub kind: String,
 }
 
 /// Dedup diagnostic attached to every suggestion so the popup's "Why?"
@@ -109,6 +115,12 @@ pub struct BuildSuggestionInput {
     pub existing_remove: Arc<[String]>,
     #[serde(rename = "existingHide", default)]
     pub existing_hide: Arc<[String]>,
+    /// Canonical signal kind for the suggestion — same tag the
+    /// `learn` text was keyed on. Carried through to the
+    /// resulting rule as an `auto:<kind>` tag when the user
+    /// accepts the suggestion.
+    #[serde(default)]
+    pub kind: String,
 }
 
 /// One blocked URL observation recorded by the service worker when a
@@ -287,6 +299,20 @@ impl RuleEntry {
             value: value.into(),
             ..Default::default()
         }
+    }
+
+    /// Build a rule from an accepted suggestion. Stamps the
+    /// originating detector's signal kind into `tags` as
+    /// `auto:<kind>` so the firewall log can filter by detector
+    /// origin. Empty `kind` produces a plain rule with no tag —
+    /// used when the rule wasn't sourced from a suggestion
+    /// (manual options-editor entry, JSON paste, etc).
+    pub fn from_accepted_suggestion(value: impl Into<String>, kind: &str) -> Self {
+        let mut rule = Self::new(value);
+        if !kind.is_empty() {
+            rule.tags.push(format!("auto:{kind}"));
+        }
+        rule
     }
 }
 
@@ -784,6 +810,19 @@ mod rule_entry_tests {
         assert!(back.block[0].disabled);
         assert!(!back.block[1].disabled);
         assert_eq!(back.block[0].value, "||a.test");
+    }
+
+    #[test]
+    fn from_accepted_suggestion_stamps_auto_tag() {
+        // Regression lock for Stage 11 auto-tags. Accepted
+        // suggestions with a kind must produce a rule carrying
+        // `auto:<kind>` in tags. Empty kind stays untagged.
+        let tagged = RuleEntry::from_accepted_suggestion("||t.test", "beacon");
+        assert_eq!(tagged.value, "||t.test");
+        assert_eq!(tagged.tags, vec!["auto:beacon".to_string()]);
+
+        let untagged = RuleEntry::from_accepted_suggestion("||t.test", "");
+        assert!(untagged.tags.is_empty(), "empty kind skips the stamp");
     }
 
     #[test]

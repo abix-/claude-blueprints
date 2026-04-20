@@ -72,6 +72,11 @@ struct AcceptSuggestionMsg<'a> {
     hostname: &'a str,
     layer: &'a str,
     value: &'a str,
+    /// Detector signal kind (e.g. `"beacon"`, `"canvas-fp"`).
+    /// Empty when the suggestion has no kind. Background stamps
+    /// `auto:<kind>` into the resulting `RuleEntry.tags` so the
+    /// firewall log can filter by detector origin.
+    kind: &'a str,
 }
 
 #[derive(Serialize)]
@@ -120,12 +125,14 @@ pub async fn accept_suggestion(
     hostname: &str,
     layer: &str,
     value: &str,
+    kind: &str,
 ) -> Result<(), JsValue> {
     let _: OkResp = send(&AcceptSuggestionMsg {
         type_: "hush:accept-suggestion",
         hostname,
         layer,
         value,
+        kind,
     })
     .await?;
     Ok(())

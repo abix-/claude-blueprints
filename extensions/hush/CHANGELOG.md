@@ -108,6 +108,27 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
   the detector keeps surfacing matches while a rule is parked.
   Regression test locks the dedup behaviour.
 
+### Stage 11: auto-tags
+- Every `Suggestion` now carries the originating detector's
+  canonical signal kind in a new `kind` field (`"beacon"`,
+  `"canvas-fp"`, etc.). Populated via a new `LearnKind::tag()`
+  method that mirrors `from_tag()`. Every detector's
+  `BuildSuggestionInput` sets `kind` alongside `learn`.
+- Accept-suggestion flow forwards the kind to background. New
+  `RuleEntry::from_accepted_suggestion(value, kind)` helper
+  stamps `auto:<kind>` into `tags` when the kind is non-empty.
+  Empty kind (manual entry, JSON paste) produces an untagged
+  rule. Regression test
+  `from_accepted_suggestion_stamps_auto_tag` locks both paths.
+- Popup firewall log gains a tag-chip filter row. Chips are
+  built from the distinct tag set across every authored rule,
+  sorted deterministically. Clicking a chip toggles it into the
+  active filter; events pass only if their rule carries at
+  least one selected tag. Empty tag set renders no chip row.
+- `rule_id` -> tags map is pre-built at component mount from
+  the config so the per-event filter is a HashMap lookup, not a
+  config rewalk on every keystroke.
+
 ### Stage 9 phase 5: rule reorder + tags + comments
 - Every rule row in the options editor now has up/down move
   buttons. `Vec::swap` in place, persisted immediately.

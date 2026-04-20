@@ -1749,6 +1749,10 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
         .ok()
         .and_then(|v| v.as_string())
         .unwrap_or_default();
+    let kind = Reflect::get(msg, &JsValue::from_str("kind"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .unwrap_or_default();
     if hostname.is_empty() || layer.is_empty() || value.is_empty() {
         let reply = Object::new();
         let _ = Reflect::set(&reply, &JsValue::from_str("ok"), &JsValue::FALSE);
@@ -1801,7 +1805,10 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
                 }
             };
             if !arr.iter().any(|e| e.value == value) {
-                arr.push(crate::types::RuleEntry::new(value.clone()));
+                arr.push(crate::types::RuleEntry::from_accepted_suggestion(
+                    value.clone(),
+                    &kind,
+                ));
             }
         }
         // Write back.
