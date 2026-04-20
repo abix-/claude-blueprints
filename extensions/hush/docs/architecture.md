@@ -2,13 +2,12 @@
 
 Hush is **modeled after a software firewall**. It isn't one at the OS
 level — it doesn't gate packets and it lives entirely inside the
-browser process. But the mental model it borrows from network
-firewalls like Palo Alto is the right one for what it does: every
-request, element, and fingerprint probe a page makes is checked
-against user-authored rules, matched rules fire an action, and each
-action emits an evidence-carrying log entry. This doc explains that
-model, and it's the model every future feature should be designed
-against.
+browser process. But the mental model it borrows from enterprise
+network firewalls is the right one for what it does: every request,
+element, and fingerprint probe a page makes is checked against
+user-authored rules, matched rules fire an action, and each action
+emits an evidence-carrying log entry. This doc explains that model,
+and it's the model every future feature should be designed against.
 
 ## Threat model
 
@@ -323,8 +322,8 @@ extensions/hush/
 Tracked in [roadmap.md](roadmap.md).
 
 **Shipped**: global scope (reserved `__global__` key), stable
-per-rule IDs, unified `FirewallEvent` ring buffer, Palo-Alto-style
-firewall-log popup section aggregating by `rule_id`.
+per-rule IDs, unified `FirewallEvent` ring buffer, firewall-style
+log popup section aggregating by `rule_id`.
 
 **Stage 7 closeout** (quick wins that finish the current surface):
 
@@ -346,8 +345,8 @@ firewall-log popup section aggregating by `rule_id`.
   from `measureText`). Each follows the same content-script →
   dataset → main-world-hook pattern the WebGL spoof uses.
 
-**Stage 9 — PA primitives** (the shape-change that makes Hush a
-real firewall, not a blocker list):
+**Stage 9 — firewall primitives** (the shape-change that makes Hush
+a real firewall, not a blocker list):
 
 - **Allow action** with DNR priority override + content-script
   selector exclusion. Enables write-through exceptions to broader

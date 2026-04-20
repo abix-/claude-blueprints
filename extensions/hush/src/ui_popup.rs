@@ -142,7 +142,7 @@ pub struct PopupSnapshot {
     pub tab_url: String,
     /// Unified firewall-log event buffer for the active tab. Fed to
     /// the `FirewallLog` component so it can aggregate by rule_id
-    /// and render Palo-Alto-style per-rule hit counts + recent
+    /// and render firewall-style per-rule hit counts + recent
     /// evidence.
     #[serde(default)]
     pub events: Vec<FirewallEvent>,
@@ -567,7 +567,7 @@ fn FooterButtons(
 /// Firewall log — unified per-rule view. Enumerates every rule in
 /// the tab's active policy (global + site-scoped), joins in any
 /// matching [`FirewallEvent`]s to show hit counts + most-recent
-/// evidence, and renders one row per rule. Palo-Alto-flavored:
+/// evidence, and renders one row per rule. Firewall-flavored:
 /// rules that have fired surface with a hit count; rules that
 /// haven't show `no traffic` / `no hits` so the user can spot a
 /// rule that's never catching.

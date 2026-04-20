@@ -1,8 +1,12 @@
 # Roadmap
 
-Target: single-crate Rust extension with the detection engine, main-world
-hooks, and popup/options UI all compiled to WASM. JS reduced to
-chrome-API glue and bootstrap shims.
+Target: a firewall-style rule engine for the browser. Rules are
+(scope, action, match) triples with five actions — block, allow,
+remove, hide, spoof — evaluated first-match-wins per action. Every
+rule hit emits into a persistent searchable log. A behavioral
+detector proposes new rules from observed page behavior so the
+user's rule set grows against the sites it's actually fighting.
+Engine in Rust/WASM; JS is chrome-API glue and bootstrap shims.
 
 ## How to maintain this roadmap
 
@@ -30,28 +34,41 @@ and [history.md](history.md) for retired rollout notes.
 
 ## Stages
 
-Stages 1-6: [x] Complete (see [history.md](history.md))
-Stage 7: **Closeout** — global scope, rule_id / unified event
-platform, and firewall-log popup shipped. Remaining: hide/spoof
-event emission + per-rule disable toggle.
+Stages 1-7, 9: [x] Complete. See [history.md](history.md) for
+rollout notes and [completed.md](completed.md) for the current
+feature snapshot.
+
 Stage 8: More spoof kinds (`canvas`, `audio`, `font-enum`).
-Stage 9: **PA primitives shipped** — allow action (DNR priority
-override + selector exclusion), rule ordering (up/down reorder in
-options), persistent searchable firewall log (global FIFO in
-chrome.storage.session, 10k cap, filter + search in popup), rule
-tags + comments + per-rule disable toggle. Hush now matches the
-Palo-Alto mental model the architecture doc promises.
-Stage 10: Rule import/export profiles (rides on Stage 9
-primitives).
+Stage 10: Rule import/export profiles.
+Stage 11: **Auto-tags** — accepted suggestions inherit the
+originating detector's signal kind as an `auto:<kind>` tag on
+the resulting rule. Unlocks tag-based filtering in the firewall
+log without the user manually curating tags.
+Stage 12: **Rule lint** — dead-rule detection (configured rules
+that have never matched), allow-shadow detection (block rules
+unreachable because an earlier allow covers them), selector
+validation (remove/hide rules whose selector is syntactically
+valid but matches zero elements on a typical page). Extends the
+Stage 7 block-rule diagnostics pattern to the other actions.
+Stage 13: **Rule simulate** — test-match UI. Given a URL or a
+DOM snippet, show which rule would fire (block / allow / remove
+/ hide / spoof) and why.
 
 ## Next up (priority order)
 
-1. **Stage 7 closeout** — hide/spoof event emission, then per-rule
-   disable toggle. Cheap; finishes the current surface.
-2. **Stage 9** — PA primitives (allow action, ordering, persistent
-   log, tags). The real architectural move.
-3. **Stage 8** — additional spoof kinds, orthogonal to Stage 9.
-4. **Stage 10** — rule import/export profiles.
+1. **Stage 11** — auto-tags. Cheap, unlocks tag filter chips in
+   the firewall log, makes "show me everything killing
+   session-replay" a one-click view.
+2. **Stage 12** — rule lint. Dead + shadowed + never-matched
+   rule detection. Classic firewall-audit surface, extends
+   Stage 7's existing block-diagnostics shape.
+3. **Stage 13** — rule simulate / test-match UI. Useful once
+   rule sets grow past a dozen entries across global + per-site
+   scopes.
+4. **Stage 8** — canvas / audio / font-enum spoofs. Fingerprint
+   coverage expansion, orthogonal to the audit stages.
+5. **Stage 10** — rule import/export profiles. UX polish on top
+   of everything above.
 
 ### Stage 3: Main-world hooks in Rust [x] Complete
 
@@ -143,7 +160,6 @@ totals under 100 lines across all bootstrap shims.*
           single `RwSignal<IndexMap<String, SiteConfig>>` that the
           editor mutates in place and persists via
           `chrome_bridge::set_config` on every change.
-    - [ ] Port site list + per-site editor (the large chunk)
 - [x] Port `content.js` DOM scans via `web_sys::Document` and
       `web_sys::Element` + `getComputedStyle` (`src/content.rs`
       `scan_hidden_iframes` + `scan_sticky_overlays` +
@@ -171,7 +187,7 @@ totals under 100 lines across all bootstrap shims.*
 every rule hit emits a uniform firewall-log event (`rule_id`,
 `action`, `scope`, `match`, `observed_at`, `evidence`), and the
 popup / options UI exposes per-rule hit counts and a sortable event
-history. The Palo-Alto-style "firewall log" mental model is the
+history. The firewall-log mental model is the
 user-visible interface shape; see [architecture.md](architecture.md)
 for the background and rationale.*
 
@@ -236,7 +252,7 @@ main-world-hook pattern the WebGL case established.*
       from a fixed allowlist (core system fonts only), neutralizing
       installed-font probing.
 
-### Stage 9: PA primitives
+### Stage 9: Firewall primitives
 
 *Done when: rules are stored as an ordered list of `RuleEntry`
 objects with `disabled` / `tags` / `comment` metadata; an `allow`
@@ -262,10 +278,15 @@ in the log referencing the overridden block rule's ID.*
       `applyRemove()`; hide CSS appends `:not(<allow>)` per hide
       rule so allowed nodes render. Options editor gains the
       Allow section; FirewallLog enumerates allow rules.
-- [ ] `merged_site_config` preserves order instead of deduping
-      by value. `compute_suggestions` dedup walks the ordered
-      list, consulting `disabled` + effective `allow`
-      overrides.
+- [x] ~~`merged_site_config` preserves order instead of deduping
+      by value.~~ Resolved differently: per-action dedup-by-value
+      kept because the five actions are orthogonal (block gates
+      network, remove/hide touch DOM, spoof touches fingerprint
+      APIs — none race). The one cross-action case (allow
+      overriding block) is handled by DNR priority, not by
+      ordered evaluation. Ordering in the options editor is
+      preserved for user readability and lines up with the
+      on-disk JSON.
 - [x] Persistent log: moved `tab_events` off the in-memory
       per-tab `HashMap` into `chrome.storage.session["firewallLog"]`.
       Single global FIFO (10k cap) tagged by `tab_id` on each
@@ -298,6 +319,80 @@ ship in the repo: "news-site baseline", "developer baseline",
       portable JSON including ordering, tags, allow rules.
 - [ ] Profile merge UI: import JSON; per-rule conflict dialog.
 - [ ] Seed profiles in the repo under `profiles/`.
+
+### Stage 11: Auto-tags
+
+*Done when: every rule created by accepting a suggestion carries
+an `auto:<signal-kind>` tag (e.g. `auto:session-replay`,
+`auto:canvas-fp`, `auto:pixel`). The popup's firewall log gains
+tag filter chips populated from the distinct tags across the
+current event set, so "show me all session-replay blocks" is a
+click. Manually-typed tags coexist without the prefix.*
+
+- [ ] `handle_accept_suggestion` stamps the originating
+      suggestion's signal kind into `RuleEntry.tags` as
+      `auto:<kind>` before writing. Kind comes from the
+      detector that emitted the suggestion.
+- [ ] `FirewallEvent` carries the matching rule's tags so the
+      log view doesn't need a config lookup to filter by tag.
+      Update `push_firewall_event` call sites to copy tags at
+      emit time.
+- [ ] Popup firewall-log: tag filter chips rendered from the
+      distinct tag set in the current filtered event list. Click
+      a chip to AND it into the filter; click again to remove.
+- [ ] Regression test: accepting a session-replay suggestion
+      produces a rule with `tags: ["auto:session-replay"]`.
+
+### Stage 12: Rule lint
+
+*Done when: the options UI surfaces three classes of rule health
+signal — **dead rules** (configured but never matched on any
+tab's current session), **shadowed rules** (a block rule that an
+earlier/global allow always overrides), and **zero-match
+selectors** (remove/hide rules whose selector is valid CSS but
+matches nothing on the tab's typical DOM). Each diagnostic is a
+per-rule badge in the options editor + a roll-up panel in the
+popup. Extends the Stage 7 `BlockDiagnostic` shape to the
+remaining actions.*
+
+- [ ] Extend per-rule diagnostics beyond block: `RemoveDiagnostic`,
+      `HideDiagnostic`, `SpoofDiagnostic`, `AllowDiagnostic` with
+      `status: "firing" | "no-hits" | "shadowed" | "broken"`.
+- [ ] Shadow-check: for each block rule, look for any earlier
+      allow rule (same scope or layered global) whose URL
+      pattern would match every URL the block pattern matches.
+      Initial heuristic: a shadowing allow exists when its
+      pattern is a prefix of or broader than the block pattern.
+- [ ] Zero-match selector check: the content script samples its
+      active rule set against the current DOM snapshot after
+      DOMContentLoaded; selectors matching zero elements get
+      reported back.
+- [ ] Options editor: per-row diagnostic badge (dot indicator +
+      tooltip) next to disabled/up/down.
+- [ ] Popup: new "Rule health" roll-up above the firewall log
+      showing dead / shadowed / broken counts.
+
+### Stage 13: Rule simulate
+
+*Done when: users can type a URL or paste a DOM snippet into a
+test-match form and see which rule would fire. Shows the full
+evaluation trace: which patterns matched, why priority/order
+picked the winner, which rules were close misses.*
+
+- [ ] Test-match input surface in the options page: URL field
+      for block/allow, CSS-selector field for remove/hide,
+      kind-tag field for spoof.
+- [ ] Evaluator exposed as a pure function
+      `simulate_match(url_or_selector, action, config) ->
+      Vec<RuleMatch>`. Returns every rule whose pattern matches
+      plus a "winner" tag (respecting allow-over-block for
+      URLs). Shares code with the real evaluator so simulation
+      can never diverge from enforcement.
+- [ ] Output UI: ordered list of matches with rule_id, scope,
+      action, priority, and a badge on the winning row. Close
+      misses (same URL host but different path, same selector
+      family but different specificity) shown in a secondary
+      list for debugging near-matches.
 
 ## Out of scope (for now)
 

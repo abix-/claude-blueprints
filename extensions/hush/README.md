@@ -8,7 +8,7 @@ cross-site cases, but site-specific anti-user behavior is a gap public
 lists can't fill. Hush is the tool for that gap: a per-site (and soon
 global) rule engine that decides what the page is allowed to do. The
 mental model — **rules, scopes, actions, hit logs** — is borrowed from
-network firewalls like Palo Alto, even though the enforcement points
+enterprise network firewalls, even though the enforcement points
 (DNR, DOM, CSS, prototype hooks) are all inside Chrome.
 
 Read [docs/architecture.md](docs/architecture.md) for the full mental
