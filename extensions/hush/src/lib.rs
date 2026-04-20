@@ -13,6 +13,7 @@ mod canon;
 mod compute;
 mod detectors;
 mod learn;
+mod main_world;
 mod stack;
 mod suggestion;
 pub mod types;

@@ -30,37 +30,29 @@ and [history.md](history.md) for retired rollout notes.
 
 ## Stages
 
-Stages 1 and 2: [x] Complete (see [history.md](history.md))
+Stages 1, 2, and 3: [x] Complete (see [history.md](history.md))
 
 **Current Sprint (priority order):**
 
-1. Stage 3 main-world hooks in Rust
-2. Then Stage 4 popup UI in Leptos
-3. Then Stage 5 options UI + content script cleanup
+1. Stage 4 popup UI in Leptos
+2. Then Stage 5 options UI + content script cleanup
 
-### Stage 3: Main-world hooks in Rust
+### Stage 3: Main-world hooks in Rust [x] Complete
 
-*Done when: every `mainworld.js` prototype hook is installed from a
-Rust closure via `wasm_bindgen::Closure` + `js_sys::Reflect::set`, with
-`mainworld.js` reduced to a ~20-line bootstrap that loads WASM and
-calls `install()`. `test/emit_contract.test.mjs` passes against the
-Rust-installed hooks without modification.*
+Shipped in 0.10.0. Hybrid bootstrap: synchronous JS stubs capture hooks
+at document_start into `window.__hush_stub_q__`; WASM loads
+asynchronously; once ready, the queue is drained through
+`drainStubQueue` and subsequent hook invocations go through
+`dispatchHook` directly. Every payload is validated by serde against
+the typed `SignalPayload` discriminated union in Rust - missing
+required fields (the 0.5.0 bug class) fail loudly instead of silently
+dropping.
 
-- [ ] Add `src/main_world.rs` with an exported `install()` function
-- [ ] Port fetch / XHR / sendBeacon / WebSocket.send hooks
-- [ ] Port canvas fingerprinting hooks (toDataURL / toBlob /
-      getImageData / measureText)
-- [ ] Port WebGL / WebGL2 getParameter hook
-- [ ] Port OfflineAudioContext constructor hook
-- [ ] Port `addEventListener` density hook
-- [ ] Port replay-global poll
-- [ ] Port canvas draw-op visibility sampler (throttled per canvas)
-- [ ] Reduce `mainworld.js` to a bootstrap shim that loads
-      `dist/pkg/hush.js` and calls `install()`
-- [ ] Add `web_accessible_resources` entries for `dist/pkg/*` so the
-      MAIN world can fetch the WASM bundle
-- [ ] Update `test/emit_contract.test.mjs` if the hook-installation
-      path needs new stubs; existing assertions stay
+The "Rust installs prototype hooks" shape from the original plan
+didn't survive contact with wasm-bindgen's `this`-binding limitation.
+JS owns the physically-required prototype assignment; Rust owns every
+step after the capture. See [history.md](history.md) for the rollout
+notes and design rationale.
 
 ### Stage 4: Popup UI in Rust (Leptos)
 

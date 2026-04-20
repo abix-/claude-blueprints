@@ -251,7 +251,7 @@ pub struct JsCall {
 
 /// Session-replay vendor hit reported from a periodic poll of known
 /// sentinel globals.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReplayVendor {
     #[serde(default)]
     pub key: String,
@@ -277,4 +277,212 @@ pub struct BehaviorState {
     pub dismissed: Vec<String>,
     #[serde(default)]
     pub suggestions: Vec<Suggestion>,
+}
+
+/// Typed payload for a single main-world hook observation.
+///
+/// Every hook that fires in `mainworld.js` produces one of these. The
+/// discriminant is the stringly-tagged `kind` field so JS emitters can
+/// construct `{kind: "canvas-fp", method: "toDataURL", stack: [...]}`
+/// and serde deserializes directly into the right variant.
+///
+/// This is the *validation* type at the main/isolated world boundary.
+/// If an emitter forgets a required field for its variant, serde fails
+/// loudly at the wasm-bindgen boundary - not silently like the 0.5.0
+/// cherry-picked-fields emit() bug.
+///
+/// The flat [`JsCall`] struct above stays for internal detector use
+/// (stored state tolerates missing fields for forward-compatibility).
+/// `SignalPayload` is the schema the IO boundary enforces; `JsCall` is
+/// the schema the detector math reads.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind")]
+pub enum SignalPayload {
+    #[serde(rename = "fetch")]
+    Fetch {
+        url: String,
+        method: String,
+        #[serde(rename = "bodyPreview", default)]
+        body_preview: Option<String>,
+        stack: Vec<String>,
+    },
+    #[serde(rename = "xhr")]
+    Xhr {
+        url: String,
+        method: String,
+        #[serde(rename = "bodyPreview", default)]
+        body_preview: Option<String>,
+        stack: Vec<String>,
+    },
+    #[serde(rename = "beacon")]
+    Beacon {
+        url: String,
+        #[serde(default = "default_beacon_method")]
+        method: String,
+        #[serde(rename = "bodyPreview", default)]
+        body_preview: Option<String>,
+        stack: Vec<String>,
+    },
+    #[serde(rename = "ws-send")]
+    WsSend {
+        url: String,
+        #[serde(default = "default_ws_method")]
+        method: String,
+        #[serde(rename = "bodyPreview", default)]
+        body_preview: Option<String>,
+        stack: Vec<String>,
+    },
+    #[serde(rename = "canvas-fp")]
+    CanvasFp {
+        method: String,
+        stack: Vec<String>,
+    },
+    #[serde(rename = "font-fp")]
+    FontFp {
+        font: String,
+        text: String,
+        stack: Vec<String>,
+    },
+    #[serde(rename = "webgl-fp")]
+    WebglFp {
+        param: String,
+        #[serde(rename = "hotParam")]
+        hot_param: bool,
+        stack: Vec<String>,
+    },
+    #[serde(rename = "audio-fp")]
+    AudioFp {
+        method: String,
+        stack: Vec<String>,
+    },
+    #[serde(rename = "listener-added")]
+    ListenerAdded {
+        #[serde(rename = "eventType")]
+        event_type: String,
+        stack: Vec<String>,
+    },
+    #[serde(rename = "replay-global")]
+    ReplayGlobal {
+        vendors: Vec<ReplayVendor>,
+    },
+    #[serde(rename = "canvas-draw")]
+    CanvasDraw {
+        op: String,
+        visible: bool,
+        #[serde(rename = "canvasSel")]
+        canvas_sel: String,
+        stack: Vec<String>,
+    },
+}
+
+fn default_beacon_method() -> String {
+    "POST".to_string()
+}
+fn default_ws_method() -> String {
+    "WS".to_string()
+}
+
+#[cfg(test)]
+mod signal_payload_tests {
+    use super::*;
+
+    // Each variant's JSON shape must survive a serde round-trip so the
+    // emit() boundary can't silently drop fields. This is the 0.5.0
+    // regression caught at compile time + test time.
+
+    fn roundtrip(input: &str) -> SignalPayload {
+        let parsed: SignalPayload = serde_json::from_str(input).expect("valid SignalPayload");
+        let rendered = serde_json::to_string(&parsed).expect("serializable");
+        let reparsed: SignalPayload = serde_json::from_str(&rendered).expect("re-parseable");
+        assert_eq!(parsed, reparsed);
+        parsed
+    }
+
+    #[test]
+    fn fetch_variant() {
+        let s = r#"{"kind":"fetch","url":"https://x/","method":"GET","bodyPreview":null,"stack":[]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::Fetch { .. }));
+    }
+
+    #[test]
+    fn xhr_variant() {
+        let s = r#"{"kind":"xhr","url":"https://x/","method":"POST","bodyPreview":"body","stack":["a"]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::Xhr { .. }));
+    }
+
+    #[test]
+    fn beacon_variant_defaults_method_to_post() {
+        let s = r#"{"kind":"beacon","url":"https://x/","stack":[]}"#;
+        match roundtrip(s) {
+            SignalPayload::Beacon { method, .. } => assert_eq!(method, "POST"),
+            _ => panic!("expected Beacon"),
+        }
+    }
+
+    #[test]
+    fn ws_send_variant() {
+        let s = r#"{"kind":"ws-send","url":"wss://x/","stack":[]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::WsSend { .. }));
+    }
+
+    #[test]
+    fn canvas_fp_variant_requires_method_and_stack() {
+        let s = r#"{"kind":"canvas-fp","method":"toDataURL","stack":[]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::CanvasFp { .. }));
+        // Missing method must fail to parse. This locks the 0.5.0 bug class.
+        let missing = r#"{"kind":"canvas-fp","stack":[]}"#;
+        assert!(serde_json::from_str::<SignalPayload>(missing).is_err());
+    }
+
+    #[test]
+    fn font_fp_variant_requires_font_and_text() {
+        let s = r#"{"kind":"font-fp","font":"Arial","text":"probe","stack":[]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::FontFp { .. }));
+        let missing = r#"{"kind":"font-fp","font":"Arial","stack":[]}"#;
+        assert!(serde_json::from_str::<SignalPayload>(missing).is_err());
+    }
+
+    #[test]
+    fn webgl_fp_variant_requires_hot_param() {
+        let s = r#"{"kind":"webgl-fp","param":"37446","hotParam":true,"stack":[]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::WebglFp { hot_param: true, .. }));
+        let missing = r#"{"kind":"webgl-fp","param":"37446","stack":[]}"#;
+        assert!(serde_json::from_str::<SignalPayload>(missing).is_err(),
+            "hotParam is required; omission must fail");
+    }
+
+    #[test]
+    fn audio_fp_variant() {
+        let s = r#"{"kind":"audio-fp","method":"OfflineAudioContext","stack":[]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::AudioFp { .. }));
+    }
+
+    #[test]
+    fn listener_added_variant_requires_event_type() {
+        let s = r#"{"kind":"listener-added","eventType":"mousemove","stack":[]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::ListenerAdded { .. }));
+        let missing = r#"{"kind":"listener-added","stack":[]}"#;
+        assert!(serde_json::from_str::<SignalPayload>(missing).is_err());
+    }
+
+    #[test]
+    fn replay_global_variant_requires_vendors() {
+        let s = r#"{"kind":"replay-global","vendors":[{"key":"_hjSettings","vendor":"Hotjar"}]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::ReplayGlobal { .. }));
+    }
+
+    #[test]
+    fn canvas_draw_variant_requires_visible_flag() {
+        let s = r#"{"kind":"canvas-draw","op":"fillRect","visible":false,"canvasSel":"canvas#x","stack":[]}"#;
+        assert!(matches!(roundtrip(s), SignalPayload::CanvasDraw { visible: false, .. }));
+        let missing = r#"{"kind":"canvas-draw","op":"fillRect","canvasSel":"canvas#x","stack":[]}"#;
+        assert!(serde_json::from_str::<SignalPayload>(missing).is_err(),
+            "visible is required; omission must fail (0.5.0 bug class)");
+    }
+
+    #[test]
+    fn unknown_kind_is_rejected() {
+        let s = r#"{"kind":"definitely-not-a-real-kind","x":1}"#;
+        assert!(serde_json::from_str::<SignalPayload>(s).is_err());
+    }
 }

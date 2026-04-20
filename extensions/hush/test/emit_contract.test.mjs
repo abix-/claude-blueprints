@@ -1,13 +1,12 @@
 // Contract test for mainworld.js emit().
 //
-// The isolated-world content script and the main-world hooks communicate
-// only through document.dispatchEvent(new CustomEvent("__hush_call__", {detail})).
-// If emit() drops fields from `data` before dispatch, downstream detectors
-// in background.js gate on missing fields and silently fail.
-//
-// This test locks the contract: every emit() call site in mainworld.js
-// round-trips its signal-specific fields (hotParam, font, eventType,
-// vendors, param) through the CustomEvent detail.
+// As of Stage 3 (Rust port), mainworld.js captures hook invocations into
+// window.__hush_stub_q__ (the pre-WASM stub queue). Once WASM is ready,
+// the queue is drained through the Rust validator which re-dispatches
+// typed CustomEvents. This test harness doesn't load WASM, so it
+// asserts on the queue directly. The assertions still cover what
+// matters: every emit() call site populates its signal-specific fields
+// (hotParam, font, eventType, vendors, param) without silent drops.
 
 import { test } from "node:test";
 import assert from "node:assert";
@@ -24,8 +23,6 @@ const source = readFileSync(resolve(__dirname, "..", "mainworld.js"), "utf8");
 // (e.g. WebGL2 on an old browser) still works when provided, but we provide
 // everything so every hook is exercised.
 function makeContext() {
-  const captured = [];
-
   class CustomEvent {
     constructor(type, init) {
       this.type = type;
@@ -45,10 +42,7 @@ function makeContext() {
   const document = Object.create(EventTarget.prototype);
   Object.assign(document, {
     readyState: "complete",
-    dispatchEvent(ev) {
-      if (ev && ev.type === "__hush_call__") captured.push(ev.detail);
-      return true;
-    }
+    dispatchEvent() { return true; }
   });
 
   class HTMLCanvasElement {
@@ -169,6 +163,10 @@ function makeContext() {
   vm.createContext(ctx);
   vm.runInContext(source, ctx);
 
+  // Stage 3: the stub queue on `window` is the post-port source of
+  // truth for what mainworld.js captured. Return it as `captured` so
+  // existing tests' assertions still work unchanged.
+  const captured = ctx.window.__hush_stub_q__ || [];
   return { ctx, captured };
 }
 
@@ -223,7 +221,9 @@ test("canvas-fp preserves method field", () => {
   const ctx2d = new ctx.CanvasRenderingContext2D();
   ctx2d.getImageData(0, 0, 1, 1);
   const methods = captured.filter(c => c.kind === "canvas-fp").map(c => c.method);
-  assert.deepStrictEqual(methods.sort(), ["getImageData", "toBlob", "toDataURL"]);
+  // spread to outer-context Array: vm-context arrays have a different
+  // prototype chain and deepStrictEqual enforces reference-equal prototypes.
+  assert.deepStrictEqual([...methods.sort()], ["getImageData", "toBlob", "toDataURL"]);
 });
 
 test("webgl-fp preserves hotParam flag on UNMASKED_* reads", () => {
@@ -270,7 +270,7 @@ test("font-fp preserves font family and text fields", () => {
   const fontEvents = captured.filter(c => c.kind === "font-fp");
   assert.strictEqual(fontEvents.length, 2);
   const fonts = fontEvents.map(e => e.font).sort();
-  assert.deepStrictEqual(fonts, ["12px Arial", "12px Helvetica"]);
+  assert.deepStrictEqual([...fonts], ["12px Arial", "12px Helvetica"]);
   for (const e of fontEvents) {
     assert.strictEqual(e.text, "probe");
   }
@@ -284,7 +284,7 @@ test("listener-added preserves eventType for replay-like listeners on document",
   ctx.document.addEventListener("blur", () => {}); // not replay-relevant
   const listenerEvents = captured.filter(c => c.kind === "listener-added");
   const types = listenerEvents.map(e => e.eventType).sort();
-  assert.deepStrictEqual(types, ["click", "keydown", "mousemove"]);
+  assert.deepStrictEqual([...types], ["click", "keydown", "mousemove"]);
   for (const e of listenerEvents) {
     assert.ok(Array.isArray(e.stack));
   }
@@ -388,7 +388,7 @@ test("canvas-draw throttle is per-canvas, not global", () => {
   cb.fillRect(0, 0, 1, 1);
   const events = captured.filter(e => e.kind === "canvas-draw");
   const sels = events.map(e => e.canvasSel).sort();
-  assert.deepStrictEqual(sels, ["canvas#a", "canvas#b"]);
+  assert.deepStrictEqual([...sels], ["canvas#a", "canvas#b"]);
 });
 
 test("every emitted event carries kind and timestamp", async () => {

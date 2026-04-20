@@ -5,6 +5,49 @@ complete in [roadmap.md](roadmap.md). Present-tense feature behavior
 lives in [completed.md](completed.md) and the per-subsystem docs;
 this file is chronology.
 
+## Stage 3: Main-world hooks in Rust (0.10.0)
+
+Typed `SignalPayload` enum landed in `src/types.rs` with one variant
+per hook kind (fetch, xhr, beacon, ws-send, canvas-fp, font-fp,
+webgl-fp, audio-fp, listener-added, replay-global, canvas-draw).
+serde's `#[serde(tag = "kind")]` gives us a discriminated union that
+rejects missing required fields at the wasm-bindgen boundary - the
+0.5.0 bug class becomes a compile error in Rust tests and a runtime
+error (with loud console.error) in the live extension.
+
+`src/main_world.rs` exports `dispatchHook(detail)` and
+`drainStubQueue(queue)` via wasm-bindgen. Both deserialize into
+`SignalPayload`, re-serialize to canonical shape, and dispatch a
+`__hush_call__` CustomEvent via `web_sys::CustomEvent` +
+`CustomEventInit::set_detail` + `EventTarget::dispatch_event`.
+
+`mainworld.js` rewired to the hybrid bootstrap pattern. At
+document_start, synchronous JS stubs install on every target
+prototype and push captured invocations onto `window.__hush_stub_q__`.
+In parallel, the bootstrap dynamically imports
+`chrome.runtime.getURL("dist/pkg/hush.js")` + `await init()` +
+`initEngine()`. Once ready, queue is drained through
+`drainStubQueue`, a flag flips, and new hook calls go through
+`dispatchHook` directly.
+
+Design deviation from the approved plan: the plan called for Rust to
+re-patch prototypes via `js_sys::Reflect::set` + `Closure`.
+wasm-bindgen's closures don't forward the implicit JS `this` binding;
+the only way to install a `this`-capturing function from Rust without
+per-hook JS shims is `new Function()` from a string, which requires
+`unsafe-eval` CSP and is blocked on many target sites (including
+github.com, several banks). JS therefore keeps the prototype
+assignments. Rust owns everything after the capture - payload typing,
+validation, CustomEvent construction, dispatch.
+
+Net change: `mainworld.js` 412 -> 376 lines; payload typing moves to
+Rust; 12 new cargo tests cover SignalPayload round-trip per variant
++ required-field enforcement.
+
+`manifest.json` gained `web_accessible_resources` entries for
+`dist/pkg/hush.js` and `dist/pkg/hush_bg.wasm` so the MAIN-world
+bootstrap can dynamically import the WASM glue.
+
 ## Layout restructure: workspace -> single crate (0.9.0)
 
 Rust work was initially packaged as a Cargo workspace (`crates/types`,

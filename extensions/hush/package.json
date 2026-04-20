@@ -1,6 +1,6 @@
 {
   "name": "hush",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Per-site element hiding, DOM removal, and network blocking for Chrome (MV3)",
   "private": true,
   "type": "module",

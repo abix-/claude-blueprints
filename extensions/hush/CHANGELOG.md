@@ -7,6 +7,48 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-19
+
+### Added
+- **Stage 3 of the Rust port**: main-world hook payloads now round-trip
+  through a typed `SignalPayload` discriminated union in Rust. Every
+  `__hush_call__` event is validated by serde at the wasm-bindgen
+  boundary before it reaches the detector engine. Missing required
+  fields (the 0.5.0 bug class) fail loudly instead of silently
+  dropping.
+- `src/main_world.rs`: `dispatchHook(detail)` validates a single event
+  and dispatches the canonical CustomEvent; `drainStubQueue(queue)`
+  drains the pre-WASM in-page queue on WASM ready. Both reject
+  malformed payloads with console.error and continue.
+- `src/types.rs`: `SignalPayload` enum with 11 variants (fetch, xhr,
+  beacon, ws-send, canvas-fp, font-fp, webgl-fp, audio-fp,
+  listener-added, replay-global, canvas-draw). 12 new cargo tests
+  covering serde round-trip per variant + required-field enforcement.
+
+### Changed
+- `mainworld.js` rewired to the hybrid bootstrap: synchronous stubs at
+  document_start push to `window.__hush_stub_q__`; WASM loads via
+  dynamic `import(chrome.runtime.getURL("dist/pkg/hush.js"))`; once
+  ready, queue is drained through `drainStubQueue` and subsequent hook
+  calls go through `dispatchHook` directly. Pre-load coverage
+  preserved via the in-page queue; steady state is typed Rust.
+- `manifest.json` adds `dist/pkg/hush.js` + `dist/pkg/hush_bg.wasm`
+  to `web_accessible_resources` so the MAIN-world bootstrap can
+  dynamically import the WASM glue.
+- `test/emit_contract.test.mjs` updated: captured queue now read from
+  `window.__hush_stub_q__` instead of the old CustomEvent dispatch
+  capture. 18/18 still pass.
+
+### Design note
+The approved plan asked for Rust to re-patch prototypes via
+`js_sys::Reflect::set` + `Closure`. wasm-bindgen's Closure doesn't
+forward implicit JS `this`, and `new Function()` (the alternative
+that captures `this`) requires `unsafe-eval` CSP which many target
+sites block. JS therefore owns the physically-required prototype
+assignment; Rust owns every step after the capture. Mainworld.js
+shrunk modestly (412 -> 376 lines) but the content of those lines is
+now stubs + queue + WASM bootstrap, not typed-payload construction.
+
 ## [0.8.0] - 2026-04-19
 
 ### Added
