@@ -245,18 +245,19 @@ rule + a site-scoped `allow doubleclick.net/adx/` rule results in
 adx requests succeeding on that site only, with an allow event
 in the log referencing the overridden block rule's ID.*
 
-- [ ] Introduce `RuleEntry { value, disabled, tags, comment }`
-      with a backward-compatible `Deserialize` impl that accepts
-      legacy bare-string entries. Convert `SiteConfig.{block,
-      remove, hide, spoof}` to `Vec<RuleEntry>` and add
-      `allow: Vec<RuleEntry>`. Regression test: existing
-      string-only configs round-trip.
-- [ ] Evaluator: `background.rs` DNR sync emits `allow` rules at
+- [x] Introduce `RuleEntry { value, disabled, tags, comment }`.
+      Hard migration (no backward-compat shim in Rust): background.js
+      converts legacy bare-string entries at SW bootstrap. Converted
+      `SiteConfig.{block, remove, hide, spoof}` to `Vec<RuleEntry>`
+      and added `allow: Vec<RuleEntry>`. Regression tests lock the
+      on-disk JSON shape.
+- [x] Evaluator: `background.rs` DNR sync emits `allow` rules at
       `priority: 2` and `block` rules at `priority: 1` so DNR's
       own first-match resolution picks allow. Content-script
-      applier walks rules in order and excludes nodes matched
-      by an `allow` selector from subsequent Remove/Hide
-      passes.
+      applier skips nodes matched by an `allow` selector in
+      `applyRemove()`; hide CSS appends `:not(<allow>)` per hide
+      rule so allowed nodes render. Options editor gains the
+      Allow section; FirewallLog enumerates allow rules.
 - [ ] `merged_site_config` preserves order instead of deduping
       by value. `compute_suggestions` dedup walks the ordered
       list, consulting `disabled` + effective `allow`

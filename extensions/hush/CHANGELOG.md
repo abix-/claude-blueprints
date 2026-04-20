@@ -33,6 +33,26 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
   on-disk JSON shape, reject bare strings at the Rust boundary,
   and verify `merged_site_config` still dedupes by value.
 
+### Stage 9 phase 2: allow-action enforcement
+- DNR sync now emits Block rules at `priority: 1` and Allow rules
+  at `priority: 2`, so Chrome's own first-match-wins resolution
+  picks Allow over any overlapping Block. Two-pass loop in
+  `do_sync_dynamic_rules` guarantees the priority assignment
+  regardless of authoring order.
+- `RuleMeta.action` carries the rule's action through the DNR
+  hit handler so `onRuleMatchedDebug` emits a FirewallEvent with
+  `action: "allow"` when an allow rule fires, separate from the
+  blocked-URLs panel (allow hits don't bump the block counter).
+- `handle_accept_suggestion` accepts `layer: "allow"` so future
+  suggestions can promote to an allow rule just like block.
+- `content.js` allow-selector exclusion: `applyRemove()` skips
+  any node matching an allow selector; hide CSS appends
+  `:not(<allow-selector>)` (modern :not() selector-list syntax,
+  Chrome 88+) per hide rule so allowed nodes render.
+- Options editor gains an **Allow (exception)** section
+  alongside Block / Remove / Hide / Spoof.
+- Firewall log enumerates allow rules in the per-rule breakdown.
+
 ### Stage 4 progress: popup UI porting to Leptos
 - Iter 1 scaffold: Leptos 0.8 + `src/ui_popup.rs` + `mountPopup`
   wasm-bindgen export + `popup.js` bootstrap + `<div

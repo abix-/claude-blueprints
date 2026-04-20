@@ -92,6 +92,9 @@ struct LogEntry {
 struct RuleMeta {
     pattern: String,
     domain: String,
+    /// `"block"` or `"allow"`. Drives the FirewallEvent action
+    /// label on DNR hits and the `rule_id` derivation.
+    action: String,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -439,38 +442,59 @@ async fn do_sync_dynamic_rules() -> Result<(), JsValue> {
     let add_rules = Array::new();
     let mut patterns: HashMap<i32, RuleMeta> = HashMap::new();
     let mut next_id: i32 = 1;
-    for (domain, cfg) in config.iter() {
-        for entry in &cfg.block {
-            if entry.disabled {
-                continue;
+    // Two passes so we can emit allow rules at priority 2 regardless
+    // of authoring order, beating block rules (priority 1). Chrome
+    // DNR resolves higher-priority allows over blocks, so adx-style
+    // exceptions work even when a broader block exists in the same
+    // or a different scope.
+    for (action_kind, priority) in [("block", 1u32), ("allow", 2u32)] {
+        for (domain, cfg) in config.iter() {
+            let entries: &[crate::types::RuleEntry] = match action_kind {
+                "block" => &cfg.block,
+                "allow" => &cfg.allow,
+                _ => unreachable!(),
+            };
+            for entry in entries {
+                if entry.disabled {
+                    continue;
+                }
+                let pattern = entry.value.trim();
+                if pattern.is_empty() {
+                    continue;
+                }
+                let id = next_id;
+                next_id += 1;
+                patterns.insert(
+                    id,
+                    RuleMeta {
+                        pattern: pattern.to_string(),
+                        domain: domain.clone(),
+                        action: action_kind.to_string(),
+                    },
+                );
+                let rule = Object::new();
+                Reflect::set(&rule, &JsValue::from_str("id"), &JsValue::from_f64(id as f64))?;
+                Reflect::set(
+                    &rule,
+                    &JsValue::from_str("priority"),
+                    &JsValue::from_f64(priority as f64),
+                )?;
+                let action = Object::new();
+                Reflect::set(
+                    &action,
+                    &JsValue::from_str("type"),
+                    &JsValue::from_str(action_kind),
+                )?;
+                Reflect::set(&rule, &JsValue::from_str("action"), &action)?;
+                let condition = Object::new();
+                Reflect::set(
+                    &condition,
+                    &JsValue::from_str("urlFilter"),
+                    &JsValue::from_str(pattern),
+                )?;
+                Reflect::set(&rule, &JsValue::from_str("condition"), &condition)?;
+                add_rules.push(&rule);
             }
-            let pattern = entry.value.trim();
-            if pattern.is_empty() {
-                continue;
-            }
-            let id = next_id;
-            next_id += 1;
-            patterns.insert(
-                id,
-                RuleMeta {
-                    pattern: pattern.to_string(),
-                    domain: domain.clone(),
-                },
-            );
-            let rule = Object::new();
-            Reflect::set(&rule, &JsValue::from_str("id"), &JsValue::from_f64(id as f64))?;
-            Reflect::set(&rule, &JsValue::from_str("priority"), &JsValue::from_f64(1.0))?;
-            let action = Object::new();
-            Reflect::set(&action, &JsValue::from_str("type"), &JsValue::from_str("block"))?;
-            Reflect::set(&rule, &JsValue::from_str("action"), &action)?;
-            let condition = Object::new();
-            Reflect::set(
-                &condition,
-                &JsValue::from_str("urlFilter"),
-                &JsValue::from_str(pattern),
-            )?;
-            Reflect::set(&rule, &JsValue::from_str("condition"), &condition)?;
-            add_rules.push(&rule);
         }
     }
 
@@ -523,14 +547,19 @@ async fn rehydrate_rule_patterns() {
 
     let config = load_config().await.unwrap_or_default();
     // Build pattern -> source_domain reverse map, tolerating a trailing `^`.
-    let mut pattern_to_source: HashMap<String, String> = HashMap::new();
+    // Reverse-lookup map: (action, normalized_pattern) -> source domain.
+    // Allow and Block rules can share a urlFilter (that's the whole
+    // point of Allow) so the key includes the action.
+    let mut pattern_to_source: HashMap<(String, String), String> = HashMap::new();
     for (domain, cfg) in config.iter() {
-        for entry in &cfg.block {
-            let raw = entry.value.as_str();
-            let normalized = raw.strip_suffix('^').unwrap_or(raw).to_string();
-            pattern_to_source
-                .entry(normalized)
-                .or_insert_with(|| domain.clone());
+        for (action_kind, entries) in [("block", &cfg.block), ("allow", &cfg.allow)] {
+            for entry in entries {
+                let raw = entry.value.as_str();
+                let normalized = raw.strip_suffix('^').unwrap_or(raw).to_string();
+                pattern_to_source
+                    .entry((action_kind.to_string(), normalized))
+                    .or_insert_with(|| domain.clone());
+            }
         }
     }
     let mut patterns: HashMap<i32, RuleMeta> = HashMap::new();
@@ -548,8 +577,23 @@ async fn rehydrate_rule_patterns() {
             .and_then(|c| Reflect::get(&c, &JsValue::from_str("urlFilter")).ok())
             .and_then(|v| v.as_string())
             .unwrap_or_default();
-        let domain = pattern_to_source.get(&pattern).cloned().unwrap_or_default();
-        patterns.insert(id, RuleMeta { pattern, domain });
+        let action_kind = Reflect::get(&rule, &JsValue::from_str("action"))
+            .ok()
+            .and_then(|a| Reflect::get(&a, &JsValue::from_str("type")).ok())
+            .and_then(|v| v.as_string())
+            .unwrap_or_else(|| "block".to_string());
+        let domain = pattern_to_source
+            .get(&(action_kind.clone(), pattern.clone()))
+            .cloned()
+            .unwrap_or_default();
+        patterns.insert(
+            id,
+            RuleMeta {
+                pattern,
+                domain,
+                action: action_kind,
+            },
+        );
     }
     let n = patterns.len();
     STATE.with(|s| s.borrow_mut().rule_patterns = patterns);
@@ -1030,14 +1074,14 @@ fn install_dnr_on_rule_matched_debug() -> Result<(), JsValue> {
         let resource_type = Reflect::get(&request, &JsValue::from_str("type"))
             .ok()
             .and_then(|v| v.as_string());
-        let (pattern, domain) = STATE.with(|s| {
+        let (pattern, domain, action_kind) = STATE.with(|s| {
             if let Some(id) = rule_id {
                 let st = s.borrow();
                 if let Some(meta) = st.rule_patterns.get(&id) {
-                    return (meta.pattern.clone(), meta.domain.clone());
+                    return (meta.pattern.clone(), meta.domain.clone(), meta.action.clone());
                 }
             }
-            (String::new(), String::new())
+            (String::new(), String::new(), "block".to_string())
         });
         if let Some(id) = rule_id {
             STATE.with(|s| {
@@ -1046,7 +1090,7 @@ fn install_dnr_on_rule_matched_debug() -> Result<(), JsValue> {
             });
         }
         log(&format!(
-            "rule matched: {:?} pattern: {pattern} url: {url} tabId: {:?}",
+            "rule matched ({action_kind}): {:?} pattern: {pattern} url: {url} tabId: {:?}",
             rule_id, tab_id
         ));
         let Some(tid) = tab_id else { return };
@@ -1054,19 +1098,25 @@ fn install_dnr_on_rule_matched_debug() -> Result<(), JsValue> {
             return;
         }
         let now = iso_now();
-        get_stats_mut(tid, |stats| {
-            stats.block += 1;
-            stats.blocked_urls.push(BlockedUrl {
-                t: now.clone(),
-                url: url.clone(),
-                pattern: pattern.clone(),
-                resource_type: resource_type.clone(),
+        // Only block hits bump the blocked-urls panel and the
+        // block counter. Allow hits are the counterweight — they
+        // indicate a request passed through, not that anything
+        // was suppressed — so they flow only to the firewall log.
+        if action_kind == "block" {
+            get_stats_mut(tid, |stats| {
+                stats.block += 1;
+                stats.blocked_urls.push(BlockedUrl {
+                    t: now.clone(),
+                    url: url.clone(),
+                    pattern: pattern.clone(),
+                    resource_type: resource_type.clone(),
+                });
+                if stats.blocked_urls.len() > MAX_EVIDENCE {
+                    let drop = stats.blocked_urls.len() - MAX_EVIDENCE;
+                    stats.blocked_urls.drain(..drop);
+                }
             });
-            if stats.blocked_urls.len() > MAX_EVIDENCE {
-                let drop = stats.blocked_urls.len() - MAX_EVIDENCE;
-                stats.blocked_urls.drain(..drop);
-            }
-        });
+        }
         // Emit the unified firewall-log event. Scope comes from the
         // rule's `domain` (source site that authored the rule), which
         // is `__global__` when the rule lives under the reserved
@@ -1080,8 +1130,8 @@ fn install_dnr_on_rule_matched_debug() -> Result<(), JsValue> {
             tid,
             FirewallEvent {
                 t: now,
-                rule_id: crate::types::rule_id("block", &scope, &pattern),
-                action: "block".to_string(),
+                rule_id: crate::types::rule_id(&action_kind, &scope, &pattern),
+                action: action_kind.clone(),
                 scope,
                 match_: pattern.clone(),
                 evidence: FirewallEvidence::Block {
@@ -1566,6 +1616,7 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
                 "hide" => &mut entry.hide,
                 "remove" => &mut entry.remove,
                 "block" => &mut entry.block,
+                "allow" => &mut entry.allow,
                 "spoof" => &mut entry.spoof,
                 _ => {
                     let reply = Object::new();

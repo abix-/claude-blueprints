@@ -756,6 +756,11 @@ fn SiteDetailBody(
         <LayerSection
             config=config
             domain=domain.clone()
+            layer=LayerKind::Allow
+        />
+        <LayerSection
+            config=config
+            domain=domain.clone()
             layer=LayerKind::Remove
         />
         <LayerSection
@@ -775,6 +780,7 @@ fn SiteDetailBody(
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum LayerKind {
     Block,
+    Allow,
     Remove,
     Hide,
     Spoof,
@@ -784,6 +790,7 @@ impl LayerKind {
     fn title(&self) -> &'static str {
         match self {
             Self::Block => "Block (network)",
+            Self::Allow => "Allow (exception)",
             Self::Remove => "Remove (DOM)",
             Self::Hide => "Hide (CSS)",
             Self::Spoof => "Spoof (fingerprint)",
@@ -794,6 +801,12 @@ impl LayerKind {
             Self::Block => {
                 "URL patterns blocked at the network layer. Matching requests never \
                  leave the browser."
+            }
+            Self::Allow => {
+                "Exceptions to Block / Remove / Hide. URL patterns here override a \
+                 broader Block rule via DNR priority; CSS selectors here exclude \
+                 matching nodes from the Remove and Hide passes. Use this to carve \
+                 an allowance out of a global rule on a single site."
             }
             Self::Remove => {
                 "CSS selectors whose matching elements are physically removed from the \
@@ -814,6 +827,7 @@ impl LayerKind {
     fn placeholder(&self) -> &'static str {
         match self {
             Self::Block => "Add URL pattern like ||ads.example.com",
+            Self::Allow => "Add URL pattern or CSS selector to exempt",
             Self::Remove => "Add CSS selector like .modal-overlay",
             Self::Hide => "Add CSS selector like .popup",
             Self::Spoof => "Add kind tag like webgl-unmasked",
@@ -822,6 +836,7 @@ impl LayerKind {
     fn read<'a>(&self, cfg: &'a SiteConfig) -> &'a [RuleEntry] {
         match self {
             Self::Block => &cfg.block,
+            Self::Allow => &cfg.allow,
             Self::Remove => &cfg.remove,
             Self::Hide => &cfg.hide,
             Self::Spoof => &cfg.spoof,
@@ -830,6 +845,7 @@ impl LayerKind {
     fn modify<'a>(&self, cfg: &'a mut SiteConfig) -> &'a mut Vec<RuleEntry> {
         match self {
             Self::Block => &mut cfg.block,
+            Self::Allow => &mut cfg.allow,
             Self::Remove => &mut cfg.remove,
             Self::Hide => &mut cfg.hide,
             Self::Spoof => &mut cfg.spoof,

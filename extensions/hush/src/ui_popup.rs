@@ -335,10 +335,12 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
         />
         {
             let any_rules = !snap.global_rules.block.is_empty()
+                || !snap.global_rules.allow.is_empty()
                 || !snap.global_rules.remove.is_empty()
                 || !snap.global_rules.hide.is_empty()
                 || !snap.global_rules.spoof.is_empty()
                 || !snap.site_rules.block.is_empty()
+                || !snap.site_rules.allow.is_empty()
                 || !snap.site_rules.remove.is_empty()
                 || !snap.site_rules.hide.is_empty()
                 || !snap.site_rules.spoof.is_empty();
@@ -596,10 +598,12 @@ fn FirewallLog(
         by_rule: &HashMap<String, Vec<FirewallEvent>>,
     ) {
         let blocks_iter = cfg.block.iter().map(|m| ("block", m.value.as_str()));
+        let allows_iter = cfg.allow.iter().map(|m| ("allow", m.value.as_str()));
         let removes_iter = cfg.remove.iter().map(|m| ("remove", m.value.as_str()));
         let hides_iter = cfg.hide.iter().map(|m| ("hide", m.value.as_str()));
         let spoofs_iter = cfg.spoof.iter().map(|m| ("spoof", m.value.as_str()));
         for (action, m) in blocks_iter
+            .chain(allows_iter)
             .chain(removes_iter)
             .chain(hides_iter)
             .chain(spoofs_iter)

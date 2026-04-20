@@ -345,6 +345,7 @@
     hide:   mergeArrays(globalCfg && globalCfg.hide,   siteCfg && siteCfg.hide),
     remove: mergeArrays(globalCfg && globalCfg.remove, siteCfg && siteCfg.remove),
     block:  mergeArrays(globalCfg && globalCfg.block,  siteCfg && siteCfg.block),
+    allow:  mergeArrays(globalCfg && globalCfg.allow,  siteCfg && siteCfg.allow),
     spoof:  mergeArrays(globalCfg && globalCfg.spoof,  siteCfg && siteCfg.spoof)
   };
   // Build a selector -> originating-scope map so the firewall-log
@@ -388,6 +389,20 @@
 
   const removeSelectors = cfg.remove.slice();
   const hideSelectors   = cfg.hide.slice();
+  // Allow selectors are the counterweight to Remove/Hide: any node
+  // matching an Allow selector is skipped by the Remove pass (node
+  // stays) and excluded from the Hide CSS (node renders). This is
+  // the firewall's "allow" action for DOM-level rules, mirroring
+  // how DNR's `allow` action overrides Block at the network layer.
+  const allowSelectors = cfg.allow.slice();
+  function matchesAnyAllow(el) {
+    if (!allowSelectors.length) return false;
+    for (const sel of allowSelectors) {
+      try { if (el.matches && el.matches(sel)) return true; }
+      catch (e) { /* invalid selector */ }
+    }
+    return false;
+  }
 
   const stats = {
     matchedDomain,
@@ -449,20 +464,24 @@
     for (const sel of removeSelectors) {
       try {
         const nodes = document.querySelectorAll(sel);
-        if (nodes.length) {
-          for (const el of nodes) {
-            pendingRemovedEvents.push({
-              t: new Date().toISOString(),
-              selector: sel,
-              el: describeElement(el),
-              scope: scopeForSelector("remove", sel)
-            });
-            el.remove();
-          }
-          if (pendingRemovedEvents.length > MAX_LOCAL_REMOVED) {
-            pendingRemovedEvents.splice(0, pendingRemovedEvents.length - MAX_LOCAL_REMOVED);
-          }
-          stats.remove[sel] = (stats.remove[sel] || 0) + nodes.length;
+        if (!nodes.length) continue;
+        let removed = 0;
+        for (const el of nodes) {
+          if (matchesAnyAllow(el)) continue; // allow overrides remove
+          pendingRemovedEvents.push({
+            t: new Date().toISOString(),
+            selector: sel,
+            el: describeElement(el),
+            scope: scopeForSelector("remove", sel)
+          });
+          el.remove();
+          removed++;
+        }
+        if (pendingRemovedEvents.length > MAX_LOCAL_REMOVED) {
+          pendingRemovedEvents.splice(0, pendingRemovedEvents.length - MAX_LOCAL_REMOVED);
+        }
+        if (removed) {
+          stats.remove[sel] = (stats.remove[sel] || 0) + removed;
           anyChanged = true;
         }
       } catch (e) { /* invalid selector, skip */ }
@@ -472,7 +491,18 @@
 
   function injectHideCSS() {
     if (!hideSelectors.length) return;
-    const css = hideSelectors.map(s => s + " { display: none !important; }").join("\n");
+    // Build a :not(...) suffix from allow selectors so any node
+    // matching an allow rule is excluded from the hide. Uses
+    // modern :not(selector-list) syntax (Chrome 88+). Each allow
+    // selector is inserted raw; if any individual one is invalid
+    // the browser falls back to matching zero nodes for that
+    // :not, which is the safe direction (hide still applies).
+    const allowSuffix = allowSelectors.length
+      ? allowSelectors.map(a => ":not(" + a + ")").join("")
+      : "";
+    const css = hideSelectors
+      .map(s => s + allowSuffix + " { display: none !important; }")
+      .join("\n");
     const style = document.createElement("style");
     style.textContent = css;
     style.setAttribute("data-hush", "hide");

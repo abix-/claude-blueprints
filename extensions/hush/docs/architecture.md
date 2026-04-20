@@ -144,7 +144,7 @@ list.
 | Action | Event shape | Evidence | Status |
 |---|---|---|---|
 | Block | `FirewallEvent` | `{url, resourceType}` | shipped |
-| Allow | `FirewallEvent` | `{url, overriddenRuleId}` | planned (Stage 9) |
+| Allow | `FirewallEvent` | `{url, resourceType}` (action=allow) | shipped |
 | Remove | `FirewallEvent` | `{el}` (element description) | shipped |
 | Hide | `FirewallEvent` | `None` (count-only, no per-element events) | next |
 | Spoof | `FirewallEvent` | `None` / kind-specific | next |
