@@ -6,7 +6,7 @@ Brave Shields, and academic trackers-detection work. Use this doc to pick the
 next tier to implement; each section is self-contained enough to inform a
 plan-mode spec.
 
-## Currently detected (as of Hush 0.4.0)
+## Currently detected (as of Hush 0.5.1)
 
 | Signal | API/Source | Layer | Confidence |
 |---|---|---|---|
@@ -16,14 +16,27 @@ plan-mode spec.
 | Polling endpoints | Resource Timing correlation: 4+ hits to same canonical URL in window | block | 75 |
 | First-party telemetry subdomains | Resource Timing: subdomain of tab host, all responses tiny | block | 70 |
 | Sticky overlays | DOM: position:fixed, z-index >= 100, >= 25% viewport | hide | 55 |
+| **Canvas fingerprinting** | main-world hook on `toDataURL` / `toBlob` / `getImageData`, 3+ calls per origin | block (origin) | 90 |
+| **WebGL fingerprinting (UNMASKED)** | main-world hook on `getParameter` reading `UNMASKED_RENDERER_WEBGL` / `UNMASKED_VENDOR_WEBGL` | block (origin) | 95 |
+| **WebGL fingerprinting (general)** | 8+ `getParameter` reads per origin without UNMASKED hot-read | block (origin) | 75 |
+| **Audio fingerprinting** | main-world hook on `OfflineAudioContext` construction | block (origin) | 90 |
+| **Font enumeration** | main-world hook on `measureText`, 20+ distinct font families per origin | block (origin) | 85 |
+| **Session-replay vendor globals** | main-world poll for `_hjSettings`, `FS`, `clarity`, `LogRocket`, `smartlook`, `mouseflow`, `__posthog` | block (vendor domain) | 95 |
+| **Session-replay listener density** | main-world hook on `addEventListener`, 12+ interaction listeners on document/window/body per origin | block (origin) | 80 |
 
 Main-world hooks also capture `fetch`, `XHR`, `sendBeacon`, `WebSocket.send`
-with stack traces and body previews, feeding the above signals and future
+with stack traces and body previews, feeding the above signals and
 per-origin attribution.
+
+Tier 1 and Tier 2 (bolded rows above) shipped in 0.5.0 and were fixed in
+0.5.1 — the initial 0.5.0 release dropped signal-specific fields at the
+main-world / isolated-world boundary, silently disabling UNMASKED-read,
+font-enum, listener-density, and vendor-globals detection. See
+`CHANGELOG.md`.
 
 ## Gaps, ranked by value
 
-### Tier 1 — Fingerprinting detection (HIGHEST priority)
+### Tier 1 — Fingerprinting detection (SHIPPED in 0.5.0, fixed in 0.5.1)
 
 **What it is.** Sites identify returning users without cookies by reading
 hardware and configuration signals that are stable per-device and unique
@@ -92,7 +105,7 @@ All of these have almost no legitimate non-fingerprinting uses.
 - [Canvas, Audio and WebGL analysis](https://blog.octobrowser.net/canvas-audio-and-webgl-an-in-depth-analysis-of-fingerprinting-technologies)
 - [Browser Fingerprinting: A Survey (ResearchGate)](https://www.researchgate.net/publication/332873650_Browser_Fingerprinting_A_survey)
 
-### Tier 2 — Session replay tools
+### Tier 2 — Session replay tools (SHIPPED in 0.5.0, fixed in 0.5.1)
 
 **What it is.** Hotjar, FullStory, Microsoft Clarity, LogRocket, Smartlook,
 Mouseflow, Amplitude Session Replay, and Contentsquare record every click,
@@ -236,13 +249,14 @@ identifier into storage that policies don't touch.
 ### Tier 5 — `requestAnimationFrame` loop detection
 
 **What it is.** A JavaScript `requestAnimationFrame` loop firing at 60Hz with
-no corresponding visible paint activity. This is exactly the Lottie-canvas
-case that started this project - Lottie-canvas animations running continuously
-while invisible, burning CPU/GPU for nothing.
+no corresponding visible paint activity. The canonical case: a Lottie-canvas
+animation running continuously in an invisible/offscreen element, burning
+CPU/GPU for nothing. This is the original user story that motivated Hush.
 
-**Why it matters.** The CPU/GPU cost is real (this was a 40% CPU bug in the
-very first user story). These loops also serve no user purpose - if nothing
-is painting, the animation is invisible, which means it's residual or bugged.
+**Why it matters.** The CPU/GPU cost is real (40%+ CPU usage observed in the
+original report for one such loop). These loops also serve no user purpose:
+if nothing is painting, the animation is invisible, which means it's
+residual or bugged.
 
 **Detection strategy.**
 
@@ -268,7 +282,8 @@ is painting, the animation is invisible, which means it's residual or bugged.
 
 **Sources.**
 
-- The user story that initiated this project (see session logs)
+- Original Hush user story (invisible Lottie-canvas animation burning
+  sustained CPU in a hidden element).
 
 ### Tier 6 — Service Worker registration tracking
 
@@ -321,12 +336,11 @@ These are the guardrails from the past chapters:
 
 ## Recommended implementation order
 
-1. **Tier 1 + Tier 2 together.** Both ride on existing `mainworld.js` hook
-   infrastructure. High signal, low ambiguity. Big privacy impact for users.
+1. ~~**Tier 1 + Tier 2 together.**~~ Shipped in 0.5.0, fixed in 0.5.1.
 2. **Tier 5 (rAF loop).** Smallest delta, solves the original user complaint,
-   demonstrates the "visible vs not visible" behavioral pattern.
+   demonstrates the "visible vs not visible" behavioral pattern. Next up.
 3. **Tier 3 (navigator reads).** Most nuanced (legit vs illegit); build after
-   T1/T2 so we have more signal-processing patterns to reuse.
+   T5 so we have more signal-processing patterns to reuse.
 4. **Tier 4 (supercookies).** Needs `all_frames: true` cross-origin
    coordination; bigger architectural load.
 5. **Tier 6 (service workers).** Lowest urgency; primarily disclosure rather

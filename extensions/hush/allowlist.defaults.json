@@ -1,0 +1,41 @@
+{
+  "iframes": [
+    "google.com/recaptcha",
+    "gstatic.com/recaptcha",
+    "hcaptcha.com",
+    "challenges.cloudflare.com",
+    "turnstile.cloudflare.com",
+    "stripe.com",
+    "paypal.com",
+    "paypalobjects.com",
+    "braintreegateway.com",
+    "braintree-api.com",
+    "adyen.com",
+    "squareup.com",
+    "squarecdn.com",
+    "accounts.google.com",
+    "accounts.youtube.com",
+    "appleid.apple.com",
+    "login.microsoftonline.com",
+    "login.live.com",
+    "firebaseapp.com",
+    "auth0.com",
+    "okta.com"
+  ],
+  "overlays": [
+    "#portal",
+    "[id^=\"portal-\"]",
+    "[id^=\"portal_\"]",
+    "#modal-root",
+    "#modal-container",
+    "#overlay-root",
+    "#__next",
+    "#__nuxt",
+    "#root",
+    "#app",
+    ".ReactModalPortal",
+    ".MuiPopover-root",
+    ".MuiModal-root",
+    "[class*=\"radix-\"]"
+  ]
+}

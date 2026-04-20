@@ -70,13 +70,14 @@
 
   function emit(kind, data) {
     try {
+      // Spread data so signal-specific fields (hotParam for webgl-fp, font for
+      // font-fp, eventType for listener-added, vendors for replay-global, etc)
+      // cross the isolated/main world boundary. The prior cherry-picked form
+      // dropped those fields silently, which broke the Tier 1/2 detectors.
       document.dispatchEvent(new CustomEvent("__hush_call__", {
         detail: {
+          ...(data || {}),
           kind,
-          url: data.url || "",
-          method: data.method || "",
-          bodyPreview: data.bodyPreview || null,
-          stack: data.stack || [],
           t: new Date().toISOString()
         }
       }));

@@ -8,54 +8,16 @@ const MAX_EVIDENCE = 50;
 const MAX_SEEN_RESOURCES = 500;
 const MAX_JS_CALLS = 500;
 
-// Default allowlist - known-legit things the behavioral detector shouldn't
-// surface as suggestions. Seeded into storage on first install; user can
-// add/remove entries via the options page.
-//
+// Defaults for the behavioral detector's allowlist live in
+// `allowlist.defaults.json` and are loaded via chrome.runtime.getURL.
 // iframes: URL substrings. If an iframe's src contains any entry, skip.
 // overlays: CSS selectors. If a flagged sticky element matches any selector,
-//           skip (covers React Portals, modal roots, framework root elements).
-const DEFAULT_ALLOWLIST = {
-  iframes: [
-    "google.com/recaptcha",
-    "gstatic.com/recaptcha",
-    "hcaptcha.com",
-    "challenges.cloudflare.com",
-    "turnstile.cloudflare.com",
-    "stripe.com",
-    "paypal.com",
-    "paypalobjects.com",
-    "braintreegateway.com",
-    "braintree-api.com",
-    "adyen.com",
-    "squareup.com",
-    "squarecdn.com",
-    "accounts.google.com",
-    "accounts.youtube.com",
-    "appleid.apple.com",
-    "login.microsoftonline.com",
-    "login.live.com",
-    "firebaseapp.com",
-    "auth0.com",
-    "okta.com"
-  ],
-  overlays: [
-    "#portal",
-    "[id^=\"portal-\"]",
-    "[id^=\"portal_\"]",
-    "#modal-root",
-    "#modal-container",
-    "#overlay-root",
-    "#__next",
-    "#__nuxt",
-    "#root",
-    "#app",
-    ".ReactModalPortal",
-    ".MuiPopover-root",
-    ".MuiModal-root",
-    "[class*=\"radix-\"]"
-  ]
-};
+//           skip (covers React Portals, modal roots, framework shells).
+async function loadDefaultAllowlist() {
+  const url = chrome.runtime.getURL("allowlist.defaults.json");
+  const res = await fetch(url);
+  return res.json();
+}
 
 let debugLogging = false;
 const logBuffer = [];
@@ -115,7 +77,13 @@ async function loadAllowlist() {
 async function seedAllowlistIfEmpty() {
   const existing = await chrome.storage.local.get(ALLOWLIST_KEY);
   if (existing[ALLOWLIST_KEY]) return;
-  await chrome.storage.local.set({ [ALLOWLIST_KEY]: DEFAULT_ALLOWLIST });
+  try {
+    const defaults = await loadDefaultAllowlist();
+    await chrome.storage.local.set({ [ALLOWLIST_KEY]: defaults });
+  } catch (e) {
+    logError("failed to seed default allowlist", e);
+    await chrome.storage.local.set({ [ALLOWLIST_KEY]: { iframes: [], overlays: [] } });
+  }
 }
 
 async function refreshDebugFlag() {

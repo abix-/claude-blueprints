@@ -2,50 +2,15 @@ const STORAGE_KEY = "config";
 const OPTIONS_KEY = "options";
 const ALLOWLIST_KEY = "allowlist";
 
-// Default allowlist - shipped with the extension, used by "Reset to defaults"
-// button. Duplicate of DEFAULT_ALLOWLIST in background.js (kept in sync for
-// the rare case someone resets before background has seeded storage).
-const DEFAULT_ALLOWLIST = {
-  iframes: [
-    "google.com/recaptcha",
-    "gstatic.com/recaptcha",
-    "hcaptcha.com",
-    "challenges.cloudflare.com",
-    "turnstile.cloudflare.com",
-    "stripe.com",
-    "paypal.com",
-    "paypalobjects.com",
-    "braintreegateway.com",
-    "braintree-api.com",
-    "adyen.com",
-    "squareup.com",
-    "squarecdn.com",
-    "accounts.google.com",
-    "accounts.youtube.com",
-    "appleid.apple.com",
-    "login.microsoftonline.com",
-    "login.live.com",
-    "firebaseapp.com",
-    "auth0.com",
-    "okta.com"
-  ],
-  overlays: [
-    "#portal",
-    "[id^=\"portal-\"]",
-    "[id^=\"portal_\"]",
-    "#modal-root",
-    "#modal-container",
-    "#overlay-root",
-    "#__next",
-    "#__nuxt",
-    "#root",
-    "#app",
-    ".ReactModalPortal",
-    ".MuiPopover-root",
-    ".MuiModal-root",
-    "[class*=\"radix-\"]"
-  ]
-};
+// Defaults live in allowlist.defaults.json (same file background.js uses to
+// seed storage). Loaded once at page init and kept in a module-scoped var so
+// the "Reset to defaults" button doesn't need to re-fetch.
+let DEFAULT_ALLOWLIST = { iframes: [], overlays: [] };
+async function loadDefaultAllowlist() {
+  const url = chrome.runtime.getURL("allowlist.defaults.json");
+  const res = await fetch(url);
+  return res.json();
+}
 
 const siteListEl = document.getElementById("site-list");
 const detailEl = document.getElementById("detail");
@@ -75,6 +40,11 @@ function setStatus(msg, ok) {
 }
 
 async function loadAll() {
+  try {
+    DEFAULT_ALLOWLIST = await loadDefaultAllowlist();
+  } catch (e) {
+    /* fall back to the empty default already in the module-scoped var */
+  }
   const data = await chrome.storage.local.get([STORAGE_KEY, OPTIONS_KEY, ALLOWLIST_KEY]);
   config = data[STORAGE_KEY] || {};
   const opts = data[OPTIONS_KEY] || {};
@@ -388,9 +358,15 @@ allowlistSaveBtn.addEventListener("click", async () => {
 
 allowlistResetBtn.addEventListener("click", async () => {
   if (!confirm("Reset both allowlists to the shipped defaults?")) return;
+  try {
+    DEFAULT_ALLOWLIST = await loadDefaultAllowlist();
+  } catch (e) {
+    setStatus("Reset failed: " + e.message, false);
+    return;
+  }
   await chrome.storage.local.set({ [ALLOWLIST_KEY]: DEFAULT_ALLOWLIST });
-  allowlistIframesEl.value = DEFAULT_ALLOWLIST.iframes.join("\n");
-  allowlistOverlaysEl.value = DEFAULT_ALLOWLIST.overlays.join("\n");
+  allowlistIframesEl.value = (DEFAULT_ALLOWLIST.iframes || []).join("\n");
+  allowlistOverlaysEl.value = (DEFAULT_ALLOWLIST.overlays || []).join("\n");
   setStatus("Reset allowlists to defaults", true);
 });
 

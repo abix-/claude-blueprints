@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hush",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Per-site element hiding, DOM removal, and network blocking.",
   "permissions": [
     "declarativeNetRequest",
