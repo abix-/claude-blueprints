@@ -346,4 +346,4 @@ Worked examples with full rule sets and reasoning live under [`docs/`](docs/READ
 
 ## License
 
-MIT.
+GPL-3.0-or-later. See [LICENSE](../../LICENSE) at the repo root.

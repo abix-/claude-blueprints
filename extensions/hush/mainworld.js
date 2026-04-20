@@ -1,42 +1,32 @@
-// Hush main-world hooks (Stage 3 hybrid bootstrap).
+// Hush main-world hooks (Stage 3: hybrid with Rust-installed wrappers).
 //
-// Runs in the page's own JS context (manifest content_scripts with
-// world=MAIN + run_at=document_start) so we can monkey-patch the real
-// window.fetch, XMLHttpRequest, navigator.sendBeacon, WebSocket,
-// HTMLCanvasElement, WebGL contexts, OfflineAudioContext, and
-// EventTarget.addEventListener before any page script runs.
+// Runs in the page's own JS context at document_start. The approved
+// plan (docs/roadmap.md Stage 3) calls for Rust to re-patch prototype
+// methods via Reflect::set + Closure; that needs a JS-side `this`-
+// capturing factory because wasm-bindgen closures can't forward
+// implicit `this`. `makeWrapper` below is that factory (one line of
+// logic). Rust calls it for each hook and handles everything else.
 //
-// The installation MUST be synchronous at document_start. WASM
-// instantiation is async (fetch + compile), so we can't have the Rust
-// engine installed before inline <head> scripts run. The hybrid split
-// handles that:
-//
-//   1. At document_start we install tiny JS stubs on every target
-//      prototype method. Each stub captures args + stack and pushes a
-//      typed SignalPayload-compatible object onto an in-page queue.
-//   2. In parallel we dynamically import dist/pkg/hush.js from the
-//      extension's web_accessible_resources. When WASM finishes init,
-//      the bootstrap flips a flag and calls drainStubQueue to play
-//      everything back through the Rust validator + dispatcher.
-//   3. After that flip, new hook invocations skip the queue and go
-//      straight through dispatchHook. Every payload is validated by
-//      serde against the SignalPayload enum; invalid shapes (the
-//      0.5.0 bug class) log and drop instead of silently reaching the
-//      detectors.
-//
-// Everything post-capture is Rust: payload typing, CustomEvent
-// construction, dispatch. The JS surface is kept to the physically-
-// required minimum (prototype assignments that need the implicit JS
-// `this` binding that wasm-bindgen closures can't forward).
+// Why two install phases:
+// - Synchronous stubs at document_start keep events off the floor
+//   during the async WASM load (inline <head> scripts would otherwise
+//   fire before any hook exists).
+// - Once WASM is ready, Rust's `hush_install_from_js` swaps the
+//   "simple" prototype methods (canvas FP, WebGL FP, font FP) for
+//   Rust-backed wrappers and drains the stub queue through the typed
+//   SignalPayload validator.
+// - The "complex" hooks (fetch, XHR, sendBeacon, WebSocket.send,
+//   OfflineAudioContext constructor, addEventListener density filter,
+//   canvas-draw visibility sampler, replay-global poll) stay JS-
+//   installed because each needs custom argument extraction that's
+//   cheaper in JS than bouncing across the wasm boundary.
 
 (() => {
-  // ---- Queue + dispatch bridge -------------------------------------------
-  const MAX_QUEUE = 2000; // drop oldest on overflow; bounds pre-WASM memory
+  // ---- Shared state ------------------------------------------------------
+  const MAX_QUEUE = 2000;
+  const q = (window.__hush_stub_q__ = []);
   let wasmMod = null;
   let wasmReady = false;
-  // Exposed on `window` so the JS emit-contract test harness (which
-  // never loads WASM) can read the queue to verify hook behavior.
-  const q = (window.__hush_stub_q__ = []);
 
   function cap() {
     try {
@@ -58,11 +48,52 @@
     if (q.length > MAX_QUEUE) q.splice(0, q.length - MAX_QUEUE);
   }
 
-  // ---- Prototype patches --------------------------------------------------
+  // Originals the stubs replace - kept so Rust's install_from_js can
+  // rewire prototypes with Rust-backed wrappers that still forward to
+  // the real implementations. Key format: "ProtoName.method".
+  const orig = {};
+  function captureOrig(proto, name) {
+    const key = proto.constructor && proto.constructor.name
+      ? `${proto.constructor.name}.${name}`
+      : `?${name}`;
+    orig[key] = proto[name];
+    return orig[key];
+  }
+
+  // ---- makeWrapper JS factory (see module doc) ---------------------------
+  //
+  // Given a Rust dispatch function + the original method + a kind tag,
+  // return a `this`-capturing wrapper. The wrapper:
+  //   - captures `this`, `arguments`, and stack
+  //   - calls rustDispatch(this, { args, stack, ...kindExtras })
+  //     where rustDispatch builds + validates + dispatches the
+  //     SignalPayload
+  //   - forwards to the original with the original `this` + args
+  //
+  // ONE line of JS that wasm-bindgen cannot provide on its own
+  // because Rust closures don't see JS `this`.
+  function makeWrapper(rustDispatch, origFn, kindTag) {
+    return function hushRustBacked() {
+      const args = Array.prototype.slice.call(arguments);
+      const call = { args, stack: cap() };
+      if (kindTag === "font-fp") {
+        try { call.font = this.font || ""; } catch (e) { call.font = ""; }
+      }
+      try { rustDispatch.call(null, this, call); } catch (e) { /* never break the page */ }
+      return origFn.apply(this, args);
+    };
+  }
+
+  // ---- Synchronous stubs at document_start -------------------------------
+  //
+  // These cover both the methods Rust will later re-patch (canvas FP,
+  // WebGL FP, font FP) and the complex ones Rust won't (fetch/XHR/etc).
+  // Every stub emits through emit() which queues pre-WASM and calls
+  // dispatchHook post-WASM.
 
   // fetch
   try {
-    const _fetch = window.fetch;
+    const _fetch = captureOrig(window, "fetch");
     window.fetch = function hushFetch(input, init) {
       try {
         emit({
@@ -81,8 +112,8 @@
 
   // XMLHttpRequest
   try {
-    const _open = XMLHttpRequest.prototype.open;
-    const _send = XMLHttpRequest.prototype.send;
+    const _open = captureOrig(XMLHttpRequest.prototype, "open");
+    const _send = captureOrig(XMLHttpRequest.prototype, "send");
     XMLHttpRequest.prototype.open = function hushXhrOpen(method, url) {
       try { this.__hush_method = method; this.__hush_url = url; } catch (e) {}
       return _open.apply(this, arguments);
@@ -105,6 +136,7 @@
   try {
     if (navigator.sendBeacon) {
       const _sendBeacon = navigator.sendBeacon.bind(navigator);
+      orig["Navigator.sendBeacon"] = _sendBeacon;
       navigator.sendBeacon = function hushSendBeacon(url, body) {
         try {
           emit({
@@ -121,7 +153,7 @@
 
   // WebSocket.send
   try {
-    const _wsSend = WebSocket.prototype.send;
+    const _wsSend = captureOrig(WebSocket.prototype, "send");
     WebSocket.prototype.send = function hushWsSend(data) {
       try {
         emit({
@@ -135,9 +167,9 @@
     };
   } catch (e) {}
 
-  // Canvas fingerprinting: toDataURL, toBlob, getImageData, measureText
+  // Canvas FP: toDataURL, toBlob (stub now; Rust re-patches post-load)
   try {
-    const _toDataURL = HTMLCanvasElement.prototype.toDataURL;
+    const _toDataURL = captureOrig(HTMLCanvasElement.prototype, "toDataURL");
     HTMLCanvasElement.prototype.toDataURL = function hushToDataURL() {
       try { emit({ kind: "canvas-fp", method: "toDataURL", stack: cap() }); } catch (e) {}
       return _toDataURL.apply(this, arguments);
@@ -145,21 +177,23 @@
   } catch (e) {}
   try {
     if (HTMLCanvasElement.prototype.toBlob) {
-      const _toBlob = HTMLCanvasElement.prototype.toBlob;
+      const _toBlob = captureOrig(HTMLCanvasElement.prototype, "toBlob");
       HTMLCanvasElement.prototype.toBlob = function hushToBlob() {
         try { emit({ kind: "canvas-fp", method: "toBlob", stack: cap() }); } catch (e) {}
         return _toBlob.apply(this, arguments);
       };
     }
   } catch (e) {}
+
+  // Canvas 2D getImageData + measureText (stub now; Rust re-patches)
   try {
     if (typeof CanvasRenderingContext2D !== "undefined") {
-      const _getImageData = CanvasRenderingContext2D.prototype.getImageData;
+      const _getImageData = captureOrig(CanvasRenderingContext2D.prototype, "getImageData");
       CanvasRenderingContext2D.prototype.getImageData = function hushGetImageData() {
         try { emit({ kind: "canvas-fp", method: "getImageData", stack: cap() }); } catch (e) {}
         return _getImageData.apply(this, arguments);
       };
-      const _measureText = CanvasRenderingContext2D.prototype.measureText;
+      const _measureText = captureOrig(CanvasRenderingContext2D.prototype, "measureText");
       CanvasRenderingContext2D.prototype.measureText = function hushMeasureText(text) {
         try {
           emit({
@@ -174,27 +208,26 @@
     }
   } catch (e) {}
 
-  // WebGL / WebGL2 getParameter
-  const wrapGLGetParameter = (proto) => {
+  // WebGL / WebGL2 getParameter (stub now; Rust re-patches)
+  const wrapGLStub = (proto) => {
     if (!proto || !proto.getParameter) return;
-    const orig = proto.getParameter;
+    const origFn = captureOrig(proto, "getParameter");
     proto.getParameter = function hushGLGetParameter(param) {
       try {
-        const hotParam = param === 37445 || param === 37446;
         emit({
           kind: "webgl-fp",
           param: String(param),
-          hotParam: hotParam,
+          hotParam: param === 37445 || param === 37446,
           stack: cap()
         });
       } catch (e) {}
-      return orig.apply(this, arguments);
+      return origFn.apply(this, arguments);
     };
   };
-  try { if (typeof WebGLRenderingContext !== "undefined") wrapGLGetParameter(WebGLRenderingContext.prototype); } catch (e) {}
-  try { if (typeof WebGL2RenderingContext !== "undefined") wrapGLGetParameter(WebGL2RenderingContext.prototype); } catch (e) {}
+  try { if (typeof WebGLRenderingContext !== "undefined") wrapGLStub(WebGLRenderingContext.prototype); } catch (e) {}
+  try { if (typeof WebGL2RenderingContext !== "undefined") wrapGLStub(WebGL2RenderingContext.prototype); } catch (e) {}
 
-  // OfflineAudioContext
+  // OfflineAudioContext constructor (stays JS-only - constructor replacement pattern)
   try {
     if (typeof OfflineAudioContext !== "undefined") {
       const OrigOAC = OfflineAudioContext;
@@ -208,9 +241,9 @@
     }
   } catch (e) {}
 
-  // EventTarget.addEventListener density (replay detection)
+  // addEventListener density (stays JS-only - needs `this === document` filter)
   try {
-    const _addEventListener = EventTarget.prototype.addEventListener;
+    const _addEventListener = captureOrig(EventTarget.prototype, "addEventListener");
     const REPLAY_EVENT_TYPES = new Set([
       "mousemove", "mousedown", "mouseup", "click",
       "keydown", "keyup", "keypress", "input",
@@ -230,7 +263,7 @@
     };
   } catch (e) {}
 
-  // Canvas 2D draw ops: visibility-sampled invisible-animation-loop detector
+  // Canvas 2D draw ops with visibility sampling (stays JS-only - per-canvas throttle)
   try {
     if (typeof CanvasRenderingContext2D !== "undefined") {
       const _perfNow = (typeof performance !== "undefined" && performance.now)
@@ -266,8 +299,8 @@
       }
       const DRAW_OPS = ["fillRect", "strokeRect", "clearRect", "drawImage", "fill", "stroke", "putImageData"];
       for (const op of DRAW_OPS) {
-        const orig = CanvasRenderingContext2D.prototype[op];
-        if (typeof orig !== "function") continue;
+        const origFn = CanvasRenderingContext2D.prototype[op];
+        if (typeof origFn !== "function") continue;
         CanvasRenderingContext2D.prototype[op] = function hushCanvasDraw() {
           try {
             const canvas = this && this.canvas;
@@ -286,13 +319,13 @@
               }
             }
           } catch (e) {}
-          return orig.apply(this, arguments);
+          return origFn.apply(this, arguments);
         };
       }
     }
   } catch (e) {}
 
-  // Replay-global poll: check for known vendor sentinels.
+  // Replay-global poll (stays JS - no prototype hook, just a poll).
   const REPLAY_GLOBALS = [
     ["_hjSettings", "Hotjar"], ["_hjid", "Hotjar"], ["hj", "Hotjar"],
     ["FS", "FullStory"], ["_fs_debug", "FullStory"],
@@ -326,7 +359,7 @@
     }
   } catch (e) {}
 
-  // ---- Helpers ------------------------------------------------------------
+  // ---- Helpers -----------------------------------------------------------
 
   function urlOf(input) {
     if (typeof input === "string") return input;
@@ -351,7 +384,7 @@
     } catch (e) { return "(unreadable body)"; }
   }
 
-  // ---- Async WASM load + queue drain -------------------------------------
+  // ---- Async WASM load + Rust-side install -------------------------------
 
   try {
     const url = chrome.runtime.getURL("dist/pkg/hush.js");
@@ -359,17 +392,25 @@
       await m.default();
       if (typeof m.initEngine === "function") m.initEngine();
       wasmMod = m;
-      wasmReady = true;
-      if (q.length) {
-        try { m.drainStubQueue(q); }
-        catch (e) { console.error("[Hush] drainStubQueue failed", e); }
-        q.length = 0;
+
+      // Rust re-patches the simple prototype methods via the factory.
+      // After this call, canvas-fp + font-fp + webgl-fp hooks go through
+      // Rust directly (typed SignalPayload, CustomEvent dispatched from
+      // inside WASM). The complex hooks (fetch, XHR, etc) remain JS
+      // stubs that route through `emit()` -> `dispatchHook()`.
+      try {
+        m.hush_install_from_js(orig, makeWrapper);
+      } catch (e) {
+        console.error("[Hush] hush_install_from_js failed", e);
       }
+
+      // Mark ready AFTER install so the stubs don't race through
+      // dispatchHook for methods Rust is about to replace.
+      wasmReady = true;
     }).catch((e) => {
-      // Strict-CSP sites may block the import or WASM execution. Stubs
-      // continue capturing into the queue (and will drop on overflow).
-      // No re-dispatch happens, which is the same behavior as today on
-      // those sites - not a regression.
+      // Strict-CSP sites may block import or WASM. Stubs continue
+      // queuing; queue caps at MAX_QUEUE. No regression vs pre-port
+      // behavior (mainworld.js was already JS-only there).
       console.error("[Hush] wasm load failed", e);
     });
   } catch (e) {

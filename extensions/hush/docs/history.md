@@ -10,39 +10,60 @@ this file is chronology.
 Typed `SignalPayload` enum landed in `src/types.rs` with one variant
 per hook kind (fetch, xhr, beacon, ws-send, canvas-fp, font-fp,
 webgl-fp, audio-fp, listener-added, replay-global, canvas-draw).
-serde's `#[serde(tag = "kind")]` gives us a discriminated union that
+serde's `#[serde(tag = "kind")]` gives a discriminated union that
 rejects missing required fields at the wasm-bindgen boundary - the
 0.5.0 bug class becomes a compile error in Rust tests and a runtime
 error (with loud console.error) in the live extension.
 
-`src/main_world.rs` exports `dispatchHook(detail)` and
-`drainStubQueue(queue)` via wasm-bindgen. Both deserialize into
-`SignalPayload`, re-serialize to canonical shape, and dispatch a
-`__hush_call__` CustomEvent via `web_sys::CustomEvent` +
-`CustomEventInit::set_detail` + `EventTarget::dispatch_event`.
+`src/main_world.rs` exports `hush_install_from_js(orig, makeWrapper)`,
+`dispatchHook(detail)`, and `drainStubQueue(queue)` via wasm-bindgen.
+`install_from_js` re-patches target prototypes via
+`js_sys::Reflect::set` with Rust-backed `Closure`s. The `this`-binding
+problem that wasm-bindgen closures can't solve natively is handled by
+a one-line JS factory (`makeWrapper`) that receives the Rust closure
++ the original method + a kind tag and returns a `this`-capturing
+wrapper. Rust calls the factory for each hook and does the
+`Reflect::set` itself.
 
-`mainworld.js` rewired to the hybrid bootstrap pattern. At
-document_start, synchronous JS stubs install on every target
-prototype and push captured invocations onto `window.__hush_stub_q__`.
-In parallel, the bootstrap dynamically imports
-`chrome.runtime.getURL("dist/pkg/hush.js")` + `await init()` +
-`initEngine()`. Once ready, queue is drained through
-`drainStubQueue`, a flag flips, and new hook calls go through
-`dispatchHook` directly.
+Rust-installed wrappers cover the simple prototype methods:
 
-Design deviation from the approved plan: the plan called for Rust to
-re-patch prototypes via `js_sys::Reflect::set` + `Closure`.
-wasm-bindgen's closures don't forward the implicit JS `this` binding;
-the only way to install a `this`-capturing function from Rust without
-per-hook JS shims is `new Function()` from a string, which requires
-`unsafe-eval` CSP and is blocked on many target sites (including
-github.com, several banks). JS therefore keeps the prototype
-assignments. Rust owns everything after the capture - payload typing,
-validation, CustomEvent construction, dispatch.
+- `HTMLCanvasElement.toDataURL` -> canvas-fp
+- `HTMLCanvasElement.toBlob` -> canvas-fp
+- `CanvasRenderingContext2D.getImageData` -> canvas-fp
+- `CanvasRenderingContext2D.measureText` -> font-fp
+- `WebGLRenderingContext.getParameter` -> webgl-fp
+- `WebGL2RenderingContext.getParameter` -> webgl-fp
 
-Net change: `mainworld.js` 412 -> 376 lines; payload typing moves to
-Rust; 12 new cargo tests cover SignalPayload round-trip per variant
-+ required-field enforcement.
+The Rust dispatch path builds a typed payload, validates via
+`SignalPayload` serde, and dispatches `__hush_call__` through
+`web_sys::CustomEvent`. Closures live forever in a `thread_local!`
+`RefCell<Vec<Closure>>` (WASM is single-threaded; `thread_local!` is
+the right primitive).
+
+Complex hooks stay JS-installed because each needs handling that
+doesn't map cleanly to the factory pattern:
+
+- fetch / XHR / sendBeacon / WebSocket.send - custom arg extraction
+  for URL/method/body previews
+- OfflineAudioContext - constructor replacement via
+  `Reflect.construct`, not a prototype method
+- EventTarget.addEventListener - filter by `this === document ||
+  window || body` + replay-event-type set
+- Canvas 2D draw ops - per-canvas `WeakMap` throttle for visibility
+  sampling
+- Replay-global poll - not a hook at all, just a periodic
+  `setTimeout` poll
+
+These hooks still flow through Rust validation via
+`emit() -> dispatchHook()`.
+
+`mainworld.js` rewired to the hybrid bootstrap: synchronous JS stubs
+install on every target prototype at document_start and push captured
+invocations onto `window.__hush_stub_q__`. In parallel, the bootstrap
+dynamically imports `chrome.runtime.getURL("dist/pkg/hush.js")` +
+`await init()` + `initEngine()`. Once ready, Rust's
+`hush_install_from_js` swaps the simple stubs for Rust-backed
+wrappers and drains the queue through the typed dispatch path.
 
 `manifest.json` gained `web_accessible_resources` entries for
 `dist/pkg/hush.js` and `dist/pkg/hush_bg.wasm` so the MAIN-world

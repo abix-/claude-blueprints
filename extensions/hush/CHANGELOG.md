@@ -9,6 +9,12 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [0.10.0] - 2026-04-19
 
+### Licensing
+- Project is now GPL-3.0-or-later. `LICENSE` file added at repo root
+  (matches the license on abix-/endless and other sibling repos).
+  Previous label was MIT; the code did not ship on a release so there
+  are no downstream obligations.
+
 ### Added
 - **Stage 3 of the Rust port**: main-world hook payloads now round-trip
   through a typed `SignalPayload` discriminated union in Rust. Every
