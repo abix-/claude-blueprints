@@ -40,12 +40,5 @@
     "block": [
       "||collector.github.com"
     ]
-  },
-  "claude.ai": {
-    "hide": [],
-    "remove": [
-      ".model-chat-content__sticker-chips-block"
-    ],
-    "block": []
   }
 }
