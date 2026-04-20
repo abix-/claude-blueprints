@@ -51,9 +51,12 @@ rule-health roll-up in the log header. Pure-Rust `src/lint.rs`
 module with 9 unit tests for the shadow heuristic. Phase B
 (options-editor per-rule badges, broken-selector detection,
 dead-vs-no-hits distinction) is deferred.
-Stage 13: **Rule simulate** — test-match UI. Given a URL or a
-DOM snippet, show which rule would fire (block / allow / remove
-/ hide / spoof / neuter / silence) and why.
+Stage 13: **Rule simulate shipped** — "Test a URL against your
+rules" collapsible in the options page. Pure
+`simulate::simulate_url` walks the active config; UI renders
+every matching rule with action / scope / value / priority
+plus a winner checkmark on the DNR-resolved winner. Disabled
+rules surface with strikethrough.
 Stage 14: **Neuter + silence shipped** — two new main-world
 actions for session-replay neutralization. Neuter denies the
 capture surface (addEventListener) at document_start; silence
@@ -63,15 +66,12 @@ block.
 
 ## Next up (priority order)
 
-1. **Stage 13** — rule simulate / test-match UI. Useful once
-   rule sets grow past a dozen entries across global + per-site
-   scopes.
-2. **Stage 12 phase B** — options-editor rule-health badges,
+1. **Stage 12 phase B** — options-editor rule-health badges,
    broken-selector detection, and a dead-rule category
    computed by walking the persistent firewall log.
-3. **Stage 8** — canvas / audio / font-enum spoofs. Fingerprint
+2. **Stage 8** — canvas / audio / font-enum spoofs. Fingerprint
    coverage expansion, orthogonal to the audit stages.
-4. **Stage 10** — rule import/export profiles. UX polish on top
+3. **Stage 10** — rule import/export profiles. UX polish on top
    of everything above.
 
 ### Stage 3: Main-world hooks in Rust [x] Complete

@@ -7,6 +7,36 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+### Stage 13: rule simulate / test-match UI
+- New `src/simulate.rs` module with a pure `simulate_url(config,
+  site_host, url) -> Vec<RuleMatch>` function. Walks global +
+  site-scoped block / allow / neuter / silence rules, returns
+  every match with action / scope / priority and flags the DNR
+  winner (allow beats block at the same priority). Neuter and
+  silence matches are reported but don't compete for the winner —
+  they're a different dimension (stack-origin vs. request URL).
+- Shared `url_filter_matches()` helper supports the uBlock-style
+  shapes the editor produces: `||host[/path][^]` anchored matches
+  and bare-substring. Host match checks exact or suffix
+  (subdomain); path match is prefix; `^` enforces a boundary
+  (end-of-URL, `/`, `?`, `#`). Wildcards are out of scope for
+  the MVP — add when a user hits a gap.
+- 13 unit tests cover anchored matches, subdomain resolution,
+  path prefix, caret boundary, bare substring, disabled rules,
+  winner resolution, neuter/silence reporting, suffix site-scope
+  match.
+- WASM export `simulateUrl(config, siteHost, url)` for any JS
+  caller. Pure Rust — no storage read, no DNR call, no side
+  effect.
+- New options-page component `UrlSimulator` in
+  `src/ui_options.rs`: collapsible "Test a URL against your
+  rules" section. URL input + optional site-scope input
+  (defaults to the URL's host when blank, via
+  `web_sys::Url::new`). Submit → spawned load of
+  `chrome.storage.local["config"]` → simulate → render a
+  table with winner checkmark, action badge, scope, match
+  value, priority. Disabled rules surface with strikethrough.
+
 ## [0.12.0] - 2026-04-20
 
 ### Stage 14: neuter + silence actions (replay-vendor kill chain)

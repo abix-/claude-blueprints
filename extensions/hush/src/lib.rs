@@ -17,6 +17,7 @@ mod detectors;
 mod learn;
 mod lint;
 mod main_world;
+mod simulate;
 mod stack;
 mod suggestion;
 pub mod types;
@@ -79,6 +80,22 @@ pub fn canonicalize_url_wasm(url: &str) -> String {
 #[wasm_bindgen(js_name = "patternKeyword")]
 pub fn pattern_keyword_wasm(pattern: &str) -> String {
     pattern_keyword(pattern).to_string()
+}
+
+/// WASM-exported rule simulator. Options page hands in the current
+/// config, a site-host to simulate under, and the URL under test;
+/// receives back an ordered list of RuleMatches with the winner
+/// flagged. Pure function — no storage reads, no DNR calls.
+#[wasm_bindgen(js_name = "simulateUrl")]
+pub fn simulate_url_wasm(
+    config: JsValue,
+    site_host: &str,
+    url: &str,
+) -> Result<JsValue, JsValue> {
+    let config: Config =
+        serde_wasm_bindgen::from_value(config).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let matches = simulate::simulate_url(&config, site_host, url);
+    crate::chrome_bridge::to_js(&matches).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 /// WASM-exported iframe-allowlist membership check. Used by the hidden-

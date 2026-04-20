@@ -160,6 +160,7 @@ fn OptionsRoot(snap: OptionsSnapshot) -> impl IntoView {
             status=status
         />
         <ConfigToolbar status=status />
+        <UrlSimulator />
         <StatusBanner status=status />
     }
 }
@@ -1295,6 +1296,205 @@ fn JsonEditor() -> impl IntoView {
             </div>
         </div>
     }
+}
+
+/// Rule simulator / test-match. User types a URL (and optionally a
+/// site hostname to simulate "as if on this site"); the pure
+/// `simulate::simulate_url` walks the active config and returns
+/// every rule that would fire plus the DNR winner. Read-only —
+/// nothing fires, no network egress, no config write.
+#[component]
+fn UrlSimulator() -> impl IntoView {
+    let url = RwSignal::new(String::new());
+    let site = RwSignal::new(String::new());
+    let busy = RwSignal::new(false);
+    let matches: RwSignal<Vec<crate::simulate::RuleMatch>> = RwSignal::new(Vec::new());
+    let ran = RwSignal::new(false);
+
+    let on_simulate = move |_| {
+        if busy.get() {
+            return;
+        }
+        let url_val = url.get().trim().to_string();
+        if url_val.is_empty() {
+            set_options_status("Enter a URL first".into(), false);
+            return;
+        }
+        busy.set(true);
+        let site_val = site.get().trim().to_string();
+        // If site is empty, infer the URL's host so the site-scope
+        // suffix match still resolves. Keeps the "just paste a URL"
+        // workflow one-click.
+        let inferred_site = if site_val.is_empty() {
+            infer_host(&url_val)
+        } else {
+            site_val
+        };
+        spawn_local(async move {
+            let config = match chrome_bridge::get_popup_storage().await {
+                Ok(s) => s.config,
+                Err(e) => {
+                    set_options_status(format!("Load failed: {:?}", e), false);
+                    busy.set(false);
+                    return;
+                }
+            };
+            let result = crate::simulate::simulate_url(&config, &inferred_site, &url_val);
+            let n = result.len();
+            matches.set(result);
+            ran.set(true);
+            busy.set(false);
+            set_options_status(
+                format!(
+                    "Simulated: {} rule{} matched",
+                    n,
+                    if n == 1 { "" } else { "s" }
+                ),
+                true,
+            );
+        });
+    };
+
+    let input_style = "width:100%; font-size: 12px; padding: 4px 8px; \
+                       border: 1px solid #ccc; border-radius: 4px; \
+                       box-sizing: border-box; font-family: ui-monospace, monospace;";
+
+    view! {
+        <details class="rust-simulator" style="margin-top: 16px;">
+            <summary style="cursor: pointer; font-weight: 600; font-size: 13px;">
+                "Test a URL against your rules"
+            </summary>
+            <p style="color:#666; font-size:12px; margin: 4px 0 8px;">
+                "Read-only audit. Enter a URL; optionally pin a site scope
+                 (defaults to the URL's host). Every matching rule across
+                 global + site scopes is listed, with the DNR winner flagged."
+            </p>
+            <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+                <input type="text"
+                       placeholder="https://doubleclick.net/adx/ad"
+                       style=format!("{} flex: 2;", input_style)
+                       prop:value=move || url.get()
+                       on:input=move |ev| {
+                           let v = ev.target()
+                               .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+                               .map(|i| i.value())
+                               .unwrap_or_default();
+                           url.set(v);
+                       } />
+                <input type="text"
+                       placeholder="site hostname (optional)"
+                       style=format!("{} flex: 1;", input_style)
+                       prop:value=move || site.get()
+                       on:input=move |ev| {
+                           let v = ev.target()
+                               .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+                               .map(|i| i.value())
+                               .unwrap_or_default();
+                           site.set(v);
+                       } />
+                <button on:click=on_simulate
+                        disabled=move || busy.get()
+                        class="primary"
+                        style="padding: 6px 14px; font-size: 13px; cursor: pointer;
+                               background: #2b7cff; color: white;
+                               border: 1px solid #2b7cff; border-radius: 5px;
+                               white-space: nowrap;">
+                    "Simulate"
+                </button>
+            </div>
+            {move || {
+                if !ran.get() {
+                    return view! { <div /> }.into_any();
+                }
+                let ms = matches.get();
+                if ms.is_empty() {
+                    return view! {
+                        <div style="color:#666; font-size:12px; padding: 8px 0;
+                                    font-style: italic;">
+                            "No rules matched."
+                        </div>
+                    }.into_any();
+                }
+                let rows = ms.into_iter().map(render_match_row).collect::<Vec<_>>();
+                view! {
+                    <table style="width: 100%; font-size: 12px;
+                                  border-collapse: collapse; margin-top: 6px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #ddd; color: #666;">
+                                <th style="text-align: left; padding: 3px 6px;">""</th>
+                                <th style="text-align: left; padding: 3px 6px;">"action"</th>
+                                <th style="text-align: left; padding: 3px 6px;">"scope"</th>
+                                <th style="text-align: left; padding: 3px 6px;">"match"</th>
+                                <th style="text-align: left; padding: 3px 6px;">"priority"</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows}
+                        </tbody>
+                    </table>
+                }.into_any()
+            }}
+        </details>
+    }
+}
+
+fn render_match_row(m: crate::simulate::RuleMatch) -> impl IntoView {
+    let (badge_bg, badge_label) = match m.action.as_str() {
+        "block" => ("#d85c4f", "BLOCK"),
+        "allow" => ("#2f9e4a", "ALLOW"),
+        "neuter" => ("#6b5cd4", "NEUTER"),
+        "silence" => ("#4fa89a", "SILENCE"),
+        _ => ("#666", m.action.as_str()),
+    };
+    let winner_marker = if m.is_winner { "\u{2713}" } else { "" };
+    let winner_style = if m.is_winner {
+        "color: #2f9e4a; font-weight: 700; font-size: 14px;"
+    } else {
+        ""
+    };
+    let text_style = if m.disabled {
+        "color: #999; text-decoration: line-through; font-family: ui-monospace, monospace;"
+    } else {
+        "font-family: ui-monospace, monospace;"
+    };
+    view! {
+        <tr style="border-bottom: 1px dotted #e8e8e8;">
+            <td style=format!("padding: 4px 6px; {}", winner_style)>
+                {winner_marker}
+            </td>
+            <td style="padding: 4px 6px;">
+                <span style=format!(
+                    "display:inline-block; padding: 1px 6px; background: {};
+                     color: #fff; border-radius: 3px; font-size: 10px;
+                     font-weight: 600; font-family: ui-monospace, monospace;",
+                    badge_bg
+                )>
+                    {badge_label.to_string()}
+                </span>
+            </td>
+            <td style="padding: 4px 6px; color: #555;">{m.scope}</td>
+            <td style=format!("padding: 4px 6px; {}", text_style)>{m.value}</td>
+            <td style="padding: 4px 6px; color: #777; font-family: ui-monospace, monospace;">
+                {m.priority}
+            </td>
+        </tr>
+    }
+}
+
+/// Best-effort host extraction from a user-typed URL. Used so the
+/// simulator's "site scope" input can default to the URL's own host
+/// when the user leaves it blank. No `url` crate dependency here —
+/// we already have `web_sys::Url` from Leptos transitively.
+fn infer_host(raw: &str) -> String {
+    let with_scheme = if raw.contains("://") {
+        raw.to_string()
+    } else {
+        format!("https://{raw}")
+    };
+    web_sys::Url::new(&with_scheme)
+        .ok()
+        .map(|u| u.host())
+        .unwrap_or_default()
 }
 
 /// Split a `\n`-separated textarea value into a trimmed, non-empty
