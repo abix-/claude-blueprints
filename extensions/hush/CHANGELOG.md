@@ -105,6 +105,25 @@ changes expected).
   from 148 LOC to 20. Stage 5 bootstrap-LOC goal met: popup 20 +
   options 34 + content 32 = 86 across the three shims.
 
+### Service worker port (background.js -> Rust)
+- `src/background.rs` ports the 988-line background service worker
+  to Rust. The new module owns every listener (onInstalled,
+  onStartup, storage.onChanged, webNavigation.onCommitted,
+  tabs.onRemoved, declarativeNetRequest.onRuleMatchedDebug,
+  runtime.onMessage), every message handler (hush:stats, hush:log,
+  hush:js-calls, hush:scan, hush:get-tab-stats,
+  hush:get-rule-diagnostics, hush:get-suggestions,
+  hush:accept-suggestion, hush:allowlist-add-suggestion,
+  hush:dismiss-suggestion, hush:get-debug-info), DNR rule sync with
+  serialize-chain, rule fire tracking, per-tab stats + behavior with
+  chrome.storage.session persistence, rule diagnostics. State lives
+  in `thread_local! RefCell<BackgroundState>`; SW cold-wake rebuilds
+  it via the hydrate path. `background.js` collapsed from 988 LOC
+  to 18 (pure wasm bootstrap). Added `manifest.json`
+  `content_security_policy.extension_pages` with `wasm-unsafe-eval`
+  (required by MV3 for WASM), and a pinned `"key"` so the unpacked
+  extension ID no longer churns on reload.
+
 ## [0.10.0] - 2026-04-19
 
 ### Licensing

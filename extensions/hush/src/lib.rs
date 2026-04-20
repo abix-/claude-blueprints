@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 mod allowlist;
+mod background;
 mod canon;
 mod chrome_bridge;
 mod compute;
