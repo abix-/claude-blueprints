@@ -10,11 +10,132 @@
 //! is covered by unit tests here and (eventually) a JS-Rust golden
 //! snapshot test in Session B's follow-up.
 
+// `foldhash::HashMap` is the std `HashMap<K, V, RandomState>` with
+// foldhash swapped in. Beats SipHash / FxHash / aHash on small-string
+// keys (all our per-host aggregation is hostname-keyed).
+use foldhash::fast::RandomState as FoldHashState;
 use std::collections::HashMap;
+use std::sync::Arc;
+type FastMap<K, V> = HashMap<K, V, FoldHashState>;
+
+/// Default capacity for every per-detector aggregation HashMap. Sized
+/// so the typical host-count / origin-count / signal-kind-count fits
+/// without a grow operation (heavy_tab caps at ~10 unique hosts per
+/// stream; 16 gives one doubling of headroom). Bump here, not per
+/// call site.
+const AGG_MAP_CAPACITY: usize = 16;
+
+#[inline]
+fn agg_map<K, V>() -> FastMap<K, V> {
+    FastMap::with_capacity_and_hasher(AGG_MAP_CAPACITY, FoldHashState::default())
+}
+
+/// DNR block-pattern string for a host. Every block-layer detector
+/// builds this shape; centralized so the pattern syntax can evolve
+/// in one place (e.g. adding `^` anchors, wildcards, etc.).
+#[inline]
+fn block_value(host: &str) -> String {
+    format!("||{host}")
+}
+
+/// Dedup key for a block suggestion. Mirrors what the popup uses when
+/// filtering already-applied rules.
+#[inline]
+fn block_key(value: &str) -> String {
+    format!("block::{value}")
+}
+
+/// English plural suffix for a count. Avoids
+/// `if n > 1 { "s" } else { "" }` noise at every reason-string call
+/// site.
+#[inline]
+const fn plural(n: usize) -> &'static str {
+    if n > 1 { "s" } else { "" }
+}
 
 use crate::types::{
-    BuildSuggestionInput, IframeHit, JsCall, Resource, StickyHit, Suggestion, SuggestionLayer,
+    Allowlist, BehaviorState, BuildSuggestionInput, IframeHit, JsCall, Resource, StickyHit,
+    Suggestion, SuggestionLayer,
 };
+
+/// Uniform interface for every detection pass. Each implementor pulls
+/// the slice of `BehaviorState` (and optionally `Allowlist`) it cares
+/// about and returns freshly-built suggestions.
+///
+/// The trait lets [`crate::compute::compute_suggestions`] iterate over
+/// a static [`DETECTORS`] list instead of calling each detector by
+/// name. Adding a new detector = add a ZST + `impl Detector` block +
+/// one entry in `DETECTORS`. No orchestrator edits needed.
+///
+/// `dyn Detector` adds one pointer indirection per call. With 7
+/// detectors per `compute_suggestions` that's sub-nanosecond overhead
+/// and well inside the noise floor; worth it for the extensibility.
+pub(crate) trait Detector: Sync {
+    fn detect(
+        &self,
+        ctx: &DetectCtx,
+        state: &BehaviorState,
+        allowlist: &Allowlist,
+    ) -> Vec<Suggestion>;
+}
+
+pub(crate) struct BeaconDetector;
+pub(crate) struct PixelDetector;
+pub(crate) struct FirstPartyTelemetryDetector;
+pub(crate) struct PollingDetector;
+pub(crate) struct HiddenIframeDetector;
+pub(crate) struct JsCallsDetector;
+pub(crate) struct StickyOverlayDetector;
+
+impl Detector for BeaconDetector {
+    fn detect(&self, ctx: &DetectCtx, state: &BehaviorState, _: &Allowlist) -> Vec<Suggestion> {
+        detect_beacon(ctx, &state.seen_resources)
+    }
+}
+impl Detector for PixelDetector {
+    fn detect(&self, ctx: &DetectCtx, state: &BehaviorState, _: &Allowlist) -> Vec<Suggestion> {
+        detect_pixels(ctx, &state.seen_resources)
+    }
+}
+impl Detector for FirstPartyTelemetryDetector {
+    fn detect(&self, ctx: &DetectCtx, state: &BehaviorState, _: &Allowlist) -> Vec<Suggestion> {
+        detect_first_party_telemetry(ctx, &state.seen_resources)
+    }
+}
+impl Detector for PollingDetector {
+    fn detect(&self, ctx: &DetectCtx, state: &BehaviorState, _: &Allowlist) -> Vec<Suggestion> {
+        detect_polling(ctx, &state.seen_resources)
+    }
+}
+impl Detector for HiddenIframeDetector {
+    fn detect(&self, ctx: &DetectCtx, state: &BehaviorState, a: &Allowlist) -> Vec<Suggestion> {
+        detect_hidden_iframes(ctx, &state.latest_iframes, &a.iframes)
+    }
+}
+impl Detector for JsCallsDetector {
+    fn detect(&self, ctx: &DetectCtx, state: &BehaviorState, _: &Allowlist) -> Vec<Suggestion> {
+        detect_from_js_calls(ctx, &state.js_calls)
+    }
+}
+impl Detector for StickyOverlayDetector {
+    fn detect(&self, ctx: &DetectCtx, state: &BehaviorState, _: &Allowlist) -> Vec<Suggestion> {
+        detect_sticky_overlays(ctx, &state.latest_stickies)
+    }
+}
+
+/// Ordered list of detectors run by [`crate::compute::compute_suggestions`].
+/// Order here does not affect correctness - suggestions are
+/// re-sorted by confidence+count at the end - but matches the
+/// historical JS order for readability when comparing output.
+pub(crate) static DETECTORS: &[&(dyn Detector + Sync)] = &[
+    &BeaconDetector,
+    &PixelDetector,
+    &FirstPartyTelemetryDetector,
+    &PollingDetector,
+    &HiddenIframeDetector,
+    &JsCallsDetector,
+    &StickyOverlayDetector,
+];
 
 use crate::allowlist::is_legit_hidden_iframe;
 use crate::canon::canonicalize_url;
@@ -28,9 +149,13 @@ pub(crate) struct DetectCtx<'a> {
     pub hostname: &'a str,
     pub matched_key: Option<&'a str>,
     pub config_has_site: bool,
-    pub existing_block: &'a [String],
-    pub existing_remove: &'a [String],
-    pub existing_hide: &'a [String],
+    // `Arc<[String]>` so fanout to every emitted suggestion is a
+    // refcount bump, not a Vec data copy. compute.rs allocates the
+    // Arcs once per compute_suggestions call; every detector push
+    // clones cheaply from there.
+    pub existing_block: Arc<[String]>,
+    pub existing_remove: Arc<[String]>,
+    pub existing_hide: Arc<[String]>,
 }
 
 impl<'a> DetectCtx<'a> {
@@ -74,9 +199,9 @@ impl<'a> DetectCtx<'a> {
             tab_hostname: self.hostname.to_string(),
             matched_key: self.matched_key.map(str::to_string),
             config_has_site: self.config_has_site,
-            existing_block: self.existing_block.to_vec(),
-            existing_remove: self.existing_remove.to_vec(),
-            existing_hide: self.existing_hide.to_vec(),
+            existing_block: Arc::clone(&self.existing_block),
+            existing_remove: Arc::clone(&self.existing_remove),
+            existing_hide: Arc::clone(&self.existing_hide),
             // Sentinel defaults - every detector overrides these:
             key: String::new(),
             layer: SuggestionLayer::Block,
@@ -184,7 +309,7 @@ fn parse_ts_millis(t: &str) -> Option<i64> {
 /// Detector 1: sendBeacon targets. A third-party host receiving any
 /// `navigator.sendBeacon()` call is treated as telemetry.
 pub(crate) fn detect_beacon(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Suggestion> {
-    let mut by_host: HashMap<&str, Vec<&Resource>> = HashMap::new();
+    let mut by_host: FastMap<&str, Vec<&Resource>> = agg_map();
     for r in resources {
         if r.initiator_type != "beacon" {
             continue;
@@ -194,19 +319,18 @@ pub(crate) fn detect_beacon(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
         }
         by_host.entry(&r.host).or_default().push(r);
     }
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(8);
     for (host, hits) in by_host {
-        let value = format!("||{host}");
+        let value = block_value(host);
         if ctx.has_block(&value) {
             continue;
         }
         let from_frame = first_non_top_frame(hits.iter().copied(), ctx.hostname);
-        let plural = if hits.len() > 1 { "s" } else { "" };
         out.push(ctx.finish(BuildSuggestionInput {
-            key: format!("block::{value}"),
+            key: block_key(&value),
             layer: SuggestionLayer::Block,
             value: value.clone(),
-            reason: format!("sendBeacon target ({} beacon{} sent)", hits.len(), plural),
+            reason: format!("sendBeacon target ({} beacon{} sent)", hits.len(), plural(hits.len())),
             confidence: 95,
             count: hits.len() as u32,
             evidence: hits.iter().take(5).map(|h| h.url.clone()).collect(),
@@ -221,7 +345,7 @@ pub(crate) fn detect_beacon(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
 /// Detector 2: tracking pixels. Third-party `<img>` responses under
 /// 200 bytes are the classic 1x1 pixel pattern.
 pub(crate) fn detect_pixels(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Suggestion> {
-    let mut by_host: HashMap<&str, Vec<&Resource>> = HashMap::new();
+    let mut by_host: FastMap<&str, Vec<&Resource>> = agg_map();
     for r in resources {
         if r.initiator_type != "img" {
             continue;
@@ -234,23 +358,22 @@ pub(crate) fn detect_pixels(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sugg
         }
         by_host.entry(&r.host).or_default().push(r);
     }
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(8);
     for (host, hits) in by_host {
-        let value = format!("||{host}");
+        let value = block_value(host);
         if ctx.has_block(&value) {
             continue;
         }
         let med = median(hits.iter().map(|h| h.transfer_size).collect());
         let from_frame = first_non_top_frame(hits.iter().copied(), ctx.hostname);
-        let plural = if hits.len() > 1 { "s" } else { "" };
         out.push(ctx.finish(BuildSuggestionInput {
-            key: format!("block::{value}"),
+            key: block_key(&value),
             layer: SuggestionLayer::Block,
             value: value.clone(),
             reason: format!(
                 "tracking pixels: {} tiny image{} (median {}b)",
                 hits.len(),
-                plural,
+                plural(hits.len()),
                 med
             ),
             confidence: 85,
@@ -275,7 +398,7 @@ pub(crate) fn detect_first_party_telemetry(
     ctx: &DetectCtx,
     resources: &[Resource],
 ) -> Vec<Suggestion> {
-    let mut by_host: HashMap<&str, Vec<&Resource>> = HashMap::new();
+    let mut by_host: FastMap<&str, Vec<&Resource>> = agg_map();
     for r in resources {
         if r.host.is_empty() || r.host == ctx.hostname {
             continue;
@@ -285,7 +408,7 @@ pub(crate) fn detect_first_party_telemetry(
         }
         by_host.entry(&r.host).or_default().push(r);
     }
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(8);
     for (host, requests) in by_host {
         let sizes: Vec<i64> = requests
             .iter()
@@ -300,20 +423,19 @@ pub(crate) fn detect_first_party_telemetry(
         if med >= 1024 || max >= 5120 {
             continue;
         }
-        let value = format!("||{host}");
+        let value = block_value(host);
         if ctx.has_block(&value) {
             continue;
         }
         let from_frame = first_non_top_frame(requests.iter().copied(), ctx.hostname);
-        let plural = if requests.len() > 1 { "s" } else { "" };
         out.push(ctx.finish(BuildSuggestionInput {
-            key: format!("block::{value}"),
+            key: block_key(&value),
             layer: SuggestionLayer::Block,
             value: value.clone(),
             reason: format!(
                 "first-party subdomain with {} tiny response{} (median {}b)",
                 requests.len(),
-                plural,
+                plural(requests.len()),
                 med
             ),
             confidence: 70,
@@ -347,7 +469,7 @@ pub(crate) fn detect_polling(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sug
         host: &'a str,
         sample: &'a str,
     }
-    let mut by_canon: HashMap<String, PollEntry> = HashMap::new();
+    let mut by_canon: FastMap<String, PollEntry> = agg_map();
     for r in resources {
         if r.host.is_empty() || r.host == ctx.hostname {
             continue;
@@ -370,7 +492,7 @@ pub(crate) fn detect_polling(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sug
             entry.last_seen = r.start_time;
         }
     }
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(8);
     for (_canon, info) in by_canon {
         if info.count < 4 {
             continue;
@@ -383,11 +505,13 @@ pub(crate) fn detect_polling(ctx: &DetectCtx, resources: &[Resource]) -> Vec<Sug
         if med >= 2048 {
             continue;
         }
-        let value = format!("||{}^", info.host);
+        // Polling keeps a trailing "^" anchor so the rule doesn't
+        // collide with same-host non-polling block rules on dedup.
+        let value = format!("{}^", block_value(info.host));
         if ctx.has_block(&value) {
             continue;
         }
-        let key = format!("block::{value}");
+        let key = block_key(&value);
         if out.iter().any(|s: &Suggestion| s.key == key) {
             continue;
         }
@@ -428,7 +552,7 @@ pub(crate) fn detect_hidden_iframes(
         reasons: std::collections::BTreeSet<String>,
         samples: Vec<&'a IframeHit>,
     }
-    let mut by_host: HashMap<&str, IframeInfo> = HashMap::new();
+    let mut by_host: FastMap<&str, IframeInfo> = agg_map();
     for f in iframes {
         if f.src.is_empty() || f.host.is_empty() {
             continue;
@@ -445,7 +569,7 @@ pub(crate) fn detect_hidden_iframes(
         }
         entry.samples.push(f);
     }
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(8);
     for (host, info) in by_host {
         let selector = format!("iframe[src*=\"{host}\"]");
         if ctx.has_remove(&selector) {
@@ -481,7 +605,7 @@ pub(crate) fn detect_sticky_overlays(
     stickies: &[StickyHit],
 ) -> Vec<Suggestion> {
     let mut seen = std::collections::BTreeSet::new();
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(8);
     for s in stickies {
         if s.selector.is_empty() {
             continue;
@@ -537,12 +661,12 @@ fn emit_origin_block(
     if origin.is_empty() {
         return;
     }
-    let value = format!("||{origin}");
+    let value = block_value(origin);
     if ctx.has_block(&value) {
         return;
     }
     out.push(ctx.finish(BuildSuggestionInput {
-        key: format!("block::{value}::{kind_tag}"),
+        key: format!("{}::{kind_tag}", block_key(&value)),
         layer: SuggestionLayer::Block,
         value: value.clone(),
         reason,
@@ -560,12 +684,12 @@ fn emit_origin_block(
 /// detector.
 struct JsCallSummary {
     seconds_since_first: i64,
-    origins_by_kind: HashMap<String, HashMap<String, u32>>,
-    hot_params_by_origin: HashMap<String, u32>,
-    distinct_fonts_by_origin: HashMap<String, std::collections::BTreeSet<String>>,
-    listener_types_by_origin: HashMap<String, ListenerInfo>,
-    replay_vendors: HashMap<String, u32>,
-    raf_waste_by_key: HashMap<String, RafWasteEntry>,
+    origins_by_kind: FastMap<String, FastMap<String, u32>>,
+    hot_params_by_origin: FastMap<String, u32>,
+    distinct_fonts_by_origin: FastMap<String, std::collections::BTreeSet<String>>,
+    listener_types_by_origin: FastMap<String, ListenerInfo>,
+    replay_vendors: FastMap<String, u32>,
+    raf_waste_by_key: FastMap<String, RafWasteEntry>,
 }
 
 struct ListenerInfo {
@@ -595,13 +719,16 @@ fn summarize_js_calls(js_calls: &[JsCall]) -> JsCallSummary {
         .unwrap_or(first_ts);
     let seconds_since_first = ((latest_ts - first_ts) / 1000).max(1);
 
-    let mut origins_by_kind: HashMap<String, HashMap<String, u32>> = HashMap::new();
-    let mut hot_params_by_origin: HashMap<String, u32> = HashMap::new();
-    let mut distinct_fonts_by_origin: HashMap<String, std::collections::BTreeSet<String>> =
-        HashMap::new();
-    let mut listener_types_by_origin: HashMap<String, ListenerInfo> = HashMap::new();
-    let mut replay_vendors: HashMap<String, u32> = HashMap::new();
-    let mut raf_waste_by_key: HashMap<String, RafWasteEntry> = HashMap::new();
+    // Every aggregation map starts pre-sized via `agg_map()` so the
+    // first 2-3 grows are free; 11 signal kinds + typically <20
+    // distinct origins means AGG_MAP_CAPACITY is enough headroom.
+    let mut origins_by_kind: FastMap<String, FastMap<String, u32>> = agg_map();
+    let mut hot_params_by_origin: FastMap<String, u32> = agg_map();
+    let mut distinct_fonts_by_origin: FastMap<String, std::collections::BTreeSet<String>> =
+        agg_map();
+    let mut listener_types_by_origin: FastMap<String, ListenerInfo> = agg_map();
+    let mut replay_vendors: FastMap<String, u32> = agg_map();
+    let mut raf_waste_by_key: FastMap<String, RafWasteEntry> = agg_map();
 
     for c in js_calls {
         let origin = {
@@ -700,7 +827,7 @@ pub(crate) fn detect_from_js_calls(
     js_calls: &[JsCall],
 ) -> Vec<Suggestion> {
     let s = summarize_js_calls(js_calls);
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(8);
 
     // Canvas fingerprinting: 3+ toDataURL/toBlob/getImageData from one origin.
     if let Some(origins) = s.origins_by_kind.get("canvas-fp") {
@@ -799,7 +926,7 @@ pub(crate) fn detect_from_js_calls(
         let Some(vendor_host) = vendor_host else {
             continue;
         };
-        let value = format!("||{vendor_host}");
+        let value = block_value(vendor_host);
         if ctx.has_block(&value) {
             continue;
         }
@@ -814,7 +941,7 @@ pub(crate) fn detect_from_js_calls(
             _ => "?",
         };
         out.push(ctx.finish(BuildSuggestionInput {
-            key: format!("block::{value}::replay-{vendor}"),
+            key: format!("{}::replay-{vendor}", block_key(&value)),
             layer: SuggestionLayer::Block,
             value: value.clone(),
             reason: format!(
@@ -867,17 +994,14 @@ pub(crate) fn detect_from_js_calls(
         if entry.origin.is_empty() || entry.origin == "(unknown script)" {
             continue;
         }
-        let value = format!("||{}", entry.origin);
+        let value = block_value(&entry.origin);
         if ctx.has_block(&value) {
             continue;
         }
         let seconds = ((span / 1000) as u32).max(1);
         let rate_per_sec = (entry.invisible as f64 / seconds as f64 * 10.0).round() / 10.0;
         out.push(ctx.finish(BuildSuggestionInput {
-            key: format!(
-                "block::{value}::raf-waste::{}",
-                entry.canvas_sel
-            ),
+            key: format!("{}::raf-waste::{}", block_key(&value), entry.canvas_sel),
             layer: SuggestionLayer::Block,
             value: value.clone(),
             reason: format!(
@@ -913,9 +1037,9 @@ mod tests {
             hostname,
             matched_key: None,
             config_has_site: false,
-            existing_block: &[],
-            existing_remove: &[],
-            existing_hide: &[],
+            existing_block: Arc::from([] as [String; 0]),
+            existing_remove: Arc::from([] as [String; 0]),
+            existing_hide: Arc::from([] as [String; 0]),
         }
     }
 

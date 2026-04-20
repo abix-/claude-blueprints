@@ -5,12 +5,11 @@
 //! user's per-tab-session dismissal set + the cross-session allowlist,
 //! and returns suggestions sorted by confidence then by count.
 
+use std::sync::Arc;
+
 use crate::types::{Allowlist, BehaviorState, Config, SiteConfig, Suggestion};
 
-use crate::detectors::{
-    detect_beacon, detect_first_party_telemetry, detect_from_js_calls, detect_hidden_iframes,
-    detect_pixels, detect_polling, detect_sticky_overlays, DetectCtx,
-};
+use crate::detectors::{DetectCtx, DETECTORS};
 
 /// Run every detector against `state` + `config`, applying dismissals
 /// and the allowlist. This is the direct Rust port of the old JS
@@ -32,32 +31,33 @@ pub fn compute_suggestions(
         None => (None, None),
     };
 
-    let existing_block = normalize_block_patterns(cfg.map(|c| c.block.as_slice()).unwrap_or(&[]));
-    let existing_remove: Vec<String> =
-        cfg.map(|c| c.remove.clone()).unwrap_or_default();
-    let existing_hide: Vec<String> = cfg.map(|c| c.hide.clone()).unwrap_or_default();
+    // Allocate the three existing-rule lists once per compute_suggestions
+    // call. `Arc<[String]>` means every detector's emit-time clone is a
+    // refcount bump (2 instructions) rather than a Vec data copy.
+    // Across a heavy_tab run with ~30 suggestions that's ~90 heap
+    // allocations avoided.
+    let existing_block: Arc<[String]> =
+        Arc::from(normalize_block_patterns(cfg.map(|c| c.block.as_slice()).unwrap_or(&[])));
+    let existing_remove: Arc<[String]> =
+        cfg.map(|c| Arc::from(c.remove.as_slice())).unwrap_or_else(|| Arc::from([] as [String; 0]));
+    let existing_hide: Arc<[String]> =
+        cfg.map(|c| Arc::from(c.hide.as_slice())).unwrap_or_else(|| Arc::from([] as [String; 0]));
 
     let ctx = DetectCtx {
         hostname,
         matched_key,
         config_has_site: matched_key.is_some(),
-        existing_block: &existing_block,
-        existing_remove: &existing_remove,
-        existing_hide: &existing_hide,
+        existing_block,
+        existing_remove,
+        existing_hide,
     };
 
-    let mut out = Vec::new();
-    out.extend(detect_beacon(&ctx, &state.seen_resources));
-    out.extend(detect_pixels(&ctx, &state.seen_resources));
-    out.extend(detect_first_party_telemetry(&ctx, &state.seen_resources));
-    out.extend(detect_polling(&ctx, &state.seen_resources));
-    out.extend(detect_hidden_iframes(
-        &ctx,
-        &state.latest_iframes,
-        &allowlist.iframes,
-    ));
-    out.extend(detect_from_js_calls(&ctx, &state.js_calls));
-    out.extend(detect_sticky_overlays(&ctx, &state.latest_stickies));
+    // Heavy tabs typically emit 20-40 suggestions; pre-sizing avoids
+    // the first ~4 Vec growth reallocs as each detector extends `out`.
+    let mut out = Vec::with_capacity(64);
+    for detector in DETECTORS {
+        out.extend(detector.detect(&ctx, state, allowlist));
+    }
 
     apply_filters_and_sort(out, &state.dismissed, &allowlist.suggestions)
 }
@@ -67,14 +67,25 @@ fn apply_filters_and_sort(
     dismissed: &[String],
     allowlist_suggestions: &[String],
 ) -> Vec<Suggestion> {
-    let dismissed_set: std::collections::HashSet<&str> =
-        dismissed.iter().map(String::as_str).collect();
-    let allow_set: std::collections::HashSet<&str> =
-        allowlist_suggestions.iter().map(String::as_str).collect();
-    out.retain(|s| !dismissed_set.contains(s.key.as_str()));
-    out.retain(|s| !allow_set.contains(s.key.as_str()));
-    // Higher confidence first, then higher count.
-    out.sort_by(|a, b| {
+    // Swiss-table + foldhash sets for O(1) membership checks. Typical
+    // dismissed + allowlist sizes are <100 each so capacity hint is
+    // small; foldhash's string-key throughput is what matters.
+    let hasher = foldhash::fast::RandomState::default();
+    let mut dismissed_set: std::collections::HashSet<&str, foldhash::fast::RandomState> =
+        std::collections::HashSet::with_capacity_and_hasher(dismissed.len(), hasher.clone());
+    for s in dismissed {
+        dismissed_set.insert(s.as_str());
+    }
+    let mut allow_set: std::collections::HashSet<&str, foldhash::fast::RandomState> =
+        std::collections::HashSet::with_capacity_and_hasher(allowlist_suggestions.len(), hasher);
+    for s in allowlist_suggestions {
+        allow_set.insert(s.as_str());
+    }
+    out.retain(|s| !dismissed_set.contains(s.key.as_str()) && !allow_set.contains(s.key.as_str()));
+    // Higher confidence first, then higher count. sort_unstable is safe
+    // here because Suggestion has no semantic "equal" ordering beyond
+    // confidence+count - any ordering among ties is acceptable.
+    out.sort_unstable_by(|a, b| {
         b.confidence
             .cmp(&a.confidence)
             .then(b.count.cmp(&a.count))

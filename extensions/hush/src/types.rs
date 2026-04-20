@@ -14,6 +14,7 @@
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Which of the three layers a suggestion targets. Matches the JS runtime
 /// `layer` string field exactly.
@@ -98,12 +99,16 @@ pub struct BuildSuggestionInput {
     pub matched_key: Option<String>,
     #[serde(rename = "configHasSite", default)]
     pub config_has_site: bool,
+    // `Arc<[String]>` so the detectors can fan out the same list to
+    // every emitted suggestion as a refcount bump (2 instructions)
+    // instead of a Vec data copy. Across a heavy_tab run with ~30
+    // suggestions that's 90 saved allocations on the hot path.
     #[serde(rename = "existingBlock", default)]
-    pub existing_block: Vec<String>,
+    pub existing_block: Arc<[String]>,
     #[serde(rename = "existingRemove", default)]
-    pub existing_remove: Vec<String>,
+    pub existing_remove: Arc<[String]>,
     #[serde(rename = "existingHide", default)]
-    pub existing_hide: Vec<String>,
+    pub existing_hide: Arc<[String]>,
 }
 
 /// Persistent allowlist in `chrome.storage.local`. All three lists are

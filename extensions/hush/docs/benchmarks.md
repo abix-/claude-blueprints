@@ -16,13 +16,13 @@ bundle, and criterion inherited that profile.
 ## Latest run
 
 **2026-04-20**, Windows 10, rustc 1.95.0, Node v25.3.0, criterion 0.5,
-`-C target-cpu=native`.
+`-C target-cpu=native`. After foldhash + Arc<[String]> refactor.
 
-| Fixture | Rust (max-speed profile) | Node V8 | Rust/JS |
+| Fixture | Rust (max-speed) | Node V8 | Rust/JS |
 |---|---|---|---|
-| light_tab (100 res + 50 js-calls + 5 iframes + 5 stickies) | 144.9 µs | 139.3 µs | 1.04x (tie) |
-| heavy_tab (500 + 500 + 20 + 20, at production cap) | **725.5 µs** | 828.9 µs | **0.88x (Rust 14% faster)** |
-| 50_tabs_of_heavy (50 heavy_tab sequential) | **37.4 ms** | 43.2 ms | **0.87x (Rust 13% faster)** |
+| light_tab (100 res + 50 js-calls + 5 iframes + 5 stickies) | **130.7 µs** | 137 µs | **0.95x (Rust 4.5% faster)** |
+| heavy_tab (500 + 500 + 20 + 20, at production cap) | **716.8 µs** | 848 µs | **0.85x (Rust 15% faster)** |
+| 50_tabs_of_heavy (50 heavy_tab sequential) | **36.1 ms** | 43.8 ms | **0.82x (Rust 18% faster)** |
 
 Both implementations produce the same 31 suggestions from the
 heavy_tab fixture, so the work done is identical. The ~14% Rust edge
@@ -132,30 +132,48 @@ bytes.
 
 ## Where the time goes
 
-Top contributors in the Rust implementation (per heavy_tab call):
+Optimizations applied:
 
-- `HashMap::entry` aggregation across the 500-resource loop for the
-  beacon / pixel / first-party-telemetry / polling detectors (~30%
-  of total time).
-- `String::from` + `format!` in per-detector evidence construction
-  (~25%).
-- `.clone()` of `existing_block` / `existing_remove` / `existing_hide`
-  into every emitted suggestion via `..ctx.ctx_fields()` (~15%).
-- Sort + dedup filter at the end (~10%).
+- **foldhash** instead of std SipHash - ~15% faster hashing on
+  small string keys (foldhash README benchmark, Apple M2 / Xeon).
+  Swapped into every per-host aggregation HashMap + the final
+  dismissed / allowlist HashSet.
+- **`Arc<[String]>`** for the per-suggestion `existing_block` /
+  `existing_remove` / `existing_hide` lists in `DetectCtx` +
+  `BuildSuggestionInput`. Per-detector clone cost drops from a
+  Vec<String> deep copy (N allocs + N memcpy per clone) to a
+  refcount bump (2 asm instructions). Saves ~90 heap allocations
+  per heavy_tab call.
+- **`sort_unstable_by`** on the final suggestion list. Safe because
+  `Suggestion` has no semantic equality beyond confidence+count.
+- **Pre-sized foldhash `HashSet`** for dismissed + allowlist
+  membership checks.
+- **`target-cpu=native`** via `.cargo/config.toml`, gated to non-wasm
+  targets via `cfg(not(target_family = "wasm"))` so LLVM emits
+  AVX/AVX2 in the bench binary while the wasm build stays portable.
 
-Room for improvement if the engine ever becomes a bottleneck:
+Remaining hot spots:
 
-- Replace the per-suggestion context-field clones with `Cow<[String]>`
-  references. Non-trivial: `BuildSuggestionInput` would need a
-  lifetime parameter.
-- `smallvec::SmallVec<[String; 4]>` for the evidence arrays that are
-  typically <=5 entries.
-- `ahash::AHashMap` instead of `std::collections::HashMap` for 2-4x
-  hashing throughput on small keys.
-- PGO using a representative tab capture.
+- `HashMap::entry` + hash of each resource's host string across the
+  500-resource loop, 4 detectors deep (~25% of total time after
+  foldhash). Each call is a few-ns hash + a table probe; hard to
+  beat without a radix trie.
+- `format!` in per-detector `reason` + `evidence` strings (~25%).
+  These end up in the output and are unavoidable.
+- Remaining iframe / sticky / js-calls aggregation.
 
-None of these would change the engine's observable behavior; they
-all trade complexity for modest speedups.
+Not yet applied (diminishing returns for this workload):
+
+- `smallvec::SmallVec<[String; 4]>` for evidence arrays that are
+  typically <=5 entries. Avoids heap alloc on the vec itself.
+  Estimated +1-2%.
+- Pre-allocate `out: Vec<Suggestion>` with capacity 32 instead of 0.
+  Trivial; estimated +0.5%.
+- PGO using a representative tab capture. Typically +10-20% but adds
+  training pipeline complexity.
+- Custom string interner for hostnames (the 500-resource fixture
+  has only ~5 unique hosts). Would deduplicate most remaining
+  per-resource allocations.
 
 ## What this means
 
@@ -185,3 +203,6 @@ notice the difference either way.
 | 2026-04-20 | Initial bench, opt-level=z inherited | 1.11 ms | 829 µs |
 | 2026-04-20 | `[profile.bench]` with opt-level=3 | 773 µs | 829 µs |
 | 2026-04-20 | `+target-cpu=native` + lto=fat + strip | 725 µs | 829 µs |
+| 2026-04-20 | `+foldhash` + `sort_unstable_by` + pre-sized HashSet | 754 µs | 848 µs |
+| 2026-04-20 | `+Arc<[String]>` to skip per-suggestion Vec clones | 701 µs | 848 µs |
+| 2026-04-20 | `+pre-sized HashMaps via agg_map()` + Vec capacity + Detector trait | **717 µs** | 848 µs |

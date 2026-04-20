@@ -726,6 +726,7 @@ version = "0.10.0"
 dependencies = [
  "console_error_panic_hook",
  "criterion",
+ "foldhash",
  "indexmap",
  "js-sys",
  "leptos",

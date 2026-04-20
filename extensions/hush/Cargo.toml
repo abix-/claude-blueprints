@@ -22,6 +22,11 @@ js-sys = "0.3"
 # Used by the popup's Leptos components to call chrome.runtime.sendMessage
 # + chrome.storage.local.* without bouncing back to JS glue.
 wasm-bindgen-futures = "0.4"
+# Fast non-cryptographic hasher. Beats std SipHash + FxHash + aHash on
+# small-string keys per the maintainer's benchmarks (foldhash README,
+# 2025). All per-detector HashMaps in the engine are string-keyed
+# (host names), so the swap maps straight onto our hot path.
+foldhash = "0.1"
 # RFC 3986 URL parsing. Used for canonicalization and host extraction
 # from stack-trace frames. Adds ~80 KB to the WASM bundle but buys us
 # punycode/IDN handling and keeps us out of regex land.

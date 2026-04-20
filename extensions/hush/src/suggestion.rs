@@ -7,6 +7,8 @@
 //! regression: one field only has to be added in one place.
 
 use crate::types::{BuildSuggestionInput, Suggestion, SuggestionDiag, SuggestionLayer};
+#[cfg(test)]
+use std::sync::Arc;
 
 /// Build a suggestion. Pure function; all inputs are passed in.
 pub fn build_suggestion(input: &BuildSuggestionInput) -> Suggestion {
@@ -80,9 +82,9 @@ mod tests {
             tab_hostname: "site.test".into(),
             matched_key: Some("site.test".into()),
             config_has_site: true,
-            existing_block: vec![],
-            existing_remove: vec![],
-            existing_hide: vec![],
+            existing_block: Arc::from([] as [String; 0]),
+            existing_remove: Arc::from([] as [String; 0]),
+            existing_hide: Arc::from([] as [String; 0]),
         }
     }
 
@@ -118,7 +120,7 @@ mod tests {
     #[test]
     fn dedup_result_block_layer_matches_existing_block() {
         let mut input = base_input();
-        input.existing_block = vec!["||example.com".into(), "||other.test".into()];
+        input.existing_block = Arc::from(["||example.com".into(), "||other.test".into()]);
         let s = build_suggestion(&input);
         assert_eq!(s.diag.dedup_result, "MATCH (should have been filtered)");
         assert_eq!(s.diag.existing_block_count, 2);
@@ -129,9 +131,9 @@ mod tests {
         let mut input = base_input();
         input.layer = SuggestionLayer::Remove;
         input.value = "iframe[src*=\"x\"]".into();
-        input.existing_remove = vec!["iframe[src*=\"x\"]".into()];
+        input.existing_remove = Arc::from(["iframe[src*=\"x\"]".into()]);
         // existing_block is irrelevant for a Remove-layer suggestion.
-        input.existing_block = vec!["something-unrelated".into()];
+        input.existing_block = Arc::from(["something-unrelated".into()]);
         let s = build_suggestion(&input);
         assert_eq!(s.diag.dedup_result, "MATCH (should have been filtered)");
     }
@@ -139,7 +141,7 @@ mod tests {
     #[test]
     fn existing_block_sample_caps_at_ten() {
         let mut input = base_input();
-        input.existing_block = (0..50).map(|i| format!("rule{i}")).collect();
+        input.existing_block = Arc::from((0..50).map(|i| format!("rule{i}")).collect::<Vec<_>>());
         let s = build_suggestion(&input);
         assert_eq!(s.diag.existing_block_sample.len(), 10);
         assert_eq!(s.diag.existing_block_count, 50);
