@@ -39,13 +39,19 @@
 
   function emit(detail) {
     detail.t = new Date().toISOString();
-    if (wasmReady && wasmMod) {
-      try { wasmMod.dispatchHook(detail); }
-      catch (e) { console.error("[Hush] dispatchHook failed", e, detail); }
-      return;
-    }
+    // Push to the window-exposed queue (capture buffer for the jsdom
+    // emit-contract tests, and a debug aid in live pages). Capped so
+    // a long-running tab doesn't grow it unboundedly.
     q.push(detail);
     if (q.length > MAX_QUEUE) q.splice(0, q.length - MAX_QUEUE);
+    // Dispatch a CustomEvent to the isolated-world content script,
+    // which runs WASM and validates every payload against the typed
+    // `SignalPayload` union on receipt. The main world cannot itself
+    // load the WASM bundle (no `chrome.runtime.getURL` here), so
+    // validation happens entirely on the other side of this event.
+    try {
+      document.dispatchEvent(new CustomEvent("__hush_call__", { detail }));
+    } catch (e) { /* CustomEvent may fail in deeply-strict contexts */ }
   }
 
   // Originals the stubs replace - kept so Rust's install_from_js can
@@ -384,36 +390,10 @@
     } catch (e) { return "(unreadable body)"; }
   }
 
-  // ---- Async WASM load + Rust-side install -------------------------------
-
-  try {
-    const url = chrome.runtime.getURL("dist/pkg/hush.js");
-    import(url).then(async (m) => {
-      await m.default();
-      if (typeof m.initEngine === "function") m.initEngine();
-      wasmMod = m;
-
-      // Rust re-patches the simple prototype methods via the factory.
-      // After this call, canvas-fp + font-fp + webgl-fp hooks go through
-      // Rust directly (typed SignalPayload, CustomEvent dispatched from
-      // inside WASM). The complex hooks (fetch, XHR, etc) remain JS
-      // stubs that route through `emit()` -> `dispatchHook()`.
-      try {
-        m.hush_install_from_js(orig, makeWrapper);
-      } catch (e) {
-        console.error("[Hush] hush_install_from_js failed", e);
-      }
-
-      // Mark ready AFTER install so the stubs don't race through
-      // dispatchHook for methods Rust is about to replace.
-      wasmReady = true;
-    }).catch((e) => {
-      // Strict-CSP sites may block import or WASM. Stubs continue
-      // queuing; queue caps at MAX_QUEUE. No regression vs pre-port
-      // behavior (mainworld.js was already JS-only there).
-      console.error("[Hush] wasm load failed", e);
-    });
-  } catch (e) {
-    console.error("[Hush] dynamic import unavailable", e);
-  }
+  // Main-world WASM load is intentionally absent: content_scripts with
+  // world: "MAIN" do not have access to chrome.runtime.getURL, so there's
+  // no way to resolve the WASM URL from here. The JS stubs above
+  // dispatch `__hush_call__` CustomEvents via `emit()` directly to the
+  // isolated-world content script, which runs WASM and validates every
+  // payload against the typed `SignalPayload` union on receipt.
 })();
