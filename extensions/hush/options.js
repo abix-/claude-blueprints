@@ -19,6 +19,7 @@ const debugToggleEl = document.getElementById("debug-toggle");
 const suggestionsToggleEl = document.getElementById("suggestions-toggle");
 const allowlistIframesEl = document.getElementById("allowlist-iframes");
 const allowlistOverlaysEl = document.getElementById("allowlist-overlays");
+const allowlistSuggestionsEl = document.getElementById("allowlist-suggestions");
 const allowlistSaveBtn = document.getElementById("allowlist-save");
 const allowlistResetBtn = document.getElementById("allowlist-reset");
 const exportBtn = document.getElementById("export");
@@ -53,6 +54,7 @@ async function loadAll() {
   const al = data[ALLOWLIST_KEY] || DEFAULT_ALLOWLIST;
   allowlistIframesEl.value = (al.iframes || []).join("\n");
   allowlistOverlaysEl.value = (al.overlays || []).join("\n");
+  allowlistSuggestionsEl.value = (al.suggestions || []).join("\n");
   render();
 }
 
@@ -346,12 +348,14 @@ jsonRefreshBtn.addEventListener("click", () => {
 allowlistSaveBtn.addEventListener("click", async () => {
   const allowlist = {
     iframes: linesToList(allowlistIframesEl.value),
-    overlays: linesToList(allowlistOverlaysEl.value)
+    overlays: linesToList(allowlistOverlaysEl.value),
+    suggestions: linesToList(allowlistSuggestionsEl.value)
   };
   await chrome.storage.local.set({ [ALLOWLIST_KEY]: allowlist });
   setStatus(
     "Saved allowlists (" + allowlist.iframes.length + " iframes, " +
-    allowlist.overlays.length + " overlays)",
+    allowlist.overlays.length + " overlays, " +
+    allowlist.suggestions.length + " suggestions)",
     true
   );
 });
@@ -367,6 +371,7 @@ allowlistResetBtn.addEventListener("click", async () => {
   await chrome.storage.local.set({ [ALLOWLIST_KEY]: DEFAULT_ALLOWLIST });
   allowlistIframesEl.value = (DEFAULT_ALLOWLIST.iframes || []).join("\n");
   allowlistOverlaysEl.value = (DEFAULT_ALLOWLIST.overlays || []).join("\n");
+  allowlistSuggestionsEl.value = (DEFAULT_ALLOWLIST.suggestions || []).join("\n");
   setStatus("Reset allowlists to defaults", true);
 });
 

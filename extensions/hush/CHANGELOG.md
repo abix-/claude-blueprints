@@ -7,6 +7,32 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-19
+
+### Added
+- **Permanent "Allow" button on every suggestion.** Dismiss remained
+  per-tab-session only, which meant any false positive (a new captcha
+  provider, a legit hidden widget) came back on every page load. The
+  Allow button writes the suggestion's key to `allowlist.suggestions`
+  and `computeSuggestions` filters it out on every site, across sessions.
+  Covers all suggestion types uniformly: block, remove, and hide, across
+  every tier (beacons, pixels, polling, hidden iframes, fingerprinting,
+  session replay, invisible animation loops, sticky overlays).
+- New "Suggestion allowlist" section in the options page. Editable
+  textarea, one key per line. Remove a line to re-enable detection of
+  that specific suggestion.
+- New message handler `hush:allowlist-add-suggestion` in background
+  persists the key, refreshes the in-memory cache, and drops the
+  allowed suggestion from every tab's state.
+
+### Changed
+- `allowlist.defaults.json` gains an empty `suggestions` array.
+- `allowlistCache` shape is now `{iframes, overlays, suggestions}`.
+- README's "Hidden-iframe allowlist" section renamed+expanded to cover
+  the unified Allow behavior for all suggestion types.
+- Popup CSS: new `.allow` button variant (green outline) distinguishes
+  it from the blue primary Add button.
+
 ## [0.6.0] - 2026-04-19
 
 ### Added

@@ -37,5 +37,6 @@
     ".MuiPopover-root",
     ".MuiModal-root",
     "[class*=\"radix-\"]"
-  ]
+  ],
+  "suggestions": []
 }

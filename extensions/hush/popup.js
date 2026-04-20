@@ -241,6 +241,7 @@ function renderSuggRow(tabId, hostname, s, isMatched) {
   const dismissBtn = document.createElement("button");
   dismissBtn.className = "dismiss";
   dismissBtn.textContent = "Dismiss";
+  dismissBtn.title = "Hide this suggestion for the current tab session only. A reload will bring it back.";
   dismissBtn.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({
       type: "hush:dismiss-suggestion",
@@ -251,6 +252,34 @@ function renderSuggRow(tabId, hostname, s, isMatched) {
     refreshSuggestions(tabId, hostname);
   });
   actions.appendChild(dismissBtn);
+
+  // "Allow" persists the suggestion key in the allowlist so this exact
+  // suggestion never surfaces again on any site. Use for legit things Hush
+  // misidentifies (new captcha provider, a real hidden widget you use, etc).
+  // Revocable from the options page's allowlist editor.
+  const allowBtn = document.createElement("button");
+  allowBtn.className = "allow";
+  allowBtn.textContent = "Allow";
+  allowBtn.title = "Permanently allow this detection on all sites. Manage the full allowlist in Options.";
+  allowBtn.addEventListener("click", async () => {
+    allowBtn.disabled = true;
+    allowBtn.textContent = "Allowing...";
+    const resp = await chrome.runtime.sendMessage({
+      type: "hush:allowlist-add-suggestion",
+      key: s.key
+    }).catch(() => null);
+    if (resp && resp.ok) {
+      allowBtn.textContent = "Allowed";
+      setTimeout(() => {
+        li.remove();
+        refreshSuggestions(tabId, hostname);
+      }, 400);
+    } else {
+      allowBtn.disabled = false;
+      allowBtn.textContent = "Allow";
+    }
+  });
+  actions.appendChild(allowBtn);
 
   // "Why here?" - inline diagnostic explaining the dedup decision,
   // so the user can see WHY a suggestion appears even when they think

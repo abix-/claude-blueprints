@@ -62,14 +62,25 @@ async function loadOptions() {
 
 // In-memory cache of the allowlist. Updated whenever storage changes so
 // detector paths don't hit async storage on every iframe/overlay check.
-let allowlistCache = { iframes: [], overlays: [] };
+//
+// Three lists:
+//   iframes     - URL substrings. skip suggesting an iframe removal when its
+//                 src contains any entry (captcha, OAuth, payment).
+//   overlays    - CSS selectors. skip suggesting a sticky hide when the
+//                 element matches any selector (React portals, modal roots).
+//   suggestions - full suggestion keys (e.g. "block::||example.com::canvas-fp").
+//                 populated by the popup's "Allow" button. any matching
+//                 suggestion is filtered out at emit time, permanent across
+//                 sessions until the user removes the entry in Options.
+let allowlistCache = { iframes: [], overlays: [], suggestions: [] };
 
 async function loadAllowlist() {
   const data = await chrome.storage.local.get(ALLOWLIST_KEY);
   const raw = data[ALLOWLIST_KEY] || {};
   allowlistCache = {
     iframes: Array.isArray(raw.iframes) ? raw.iframes : [],
-    overlays: Array.isArray(raw.overlays) ? raw.overlays : []
+    overlays: Array.isArray(raw.overlays) ? raw.overlays : [],
+    suggestions: Array.isArray(raw.suggestions) ? raw.suggestions : []
   };
   return allowlistCache;
 }
@@ -933,9 +944,15 @@ function computeSuggestions(state, config) {
     });
   }
 
-  // Apply dismissals
+  // Apply tab-session dismissals and the cross-session suggestion allowlist.
+  const allowlistedKeys = new Set(
+    (allowlistCache && Array.isArray(allowlistCache.suggestions))
+      ? allowlistCache.suggestions
+      : []
+  );
   return out
     .filter(s => !dismissed.has(s.key))
+    .filter(s => !allowlistedKeys.has(s.key))
     .sort((a, b) => (b.confidence - a.confidence) || (b.count - a.count));
 }
 
@@ -1236,6 +1253,46 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true, configKey: targetKey });
       } catch (e) {
         logError("accept-suggestion failed", e);
+        sendResponse({ ok: false, error: String(e) });
+      }
+    })();
+    return true;
+  }
+
+  if (msg.type === "hush:allowlist-add-suggestion") {
+    // Persist the suggestion key in allowlistCache.suggestions so this
+    // particular value never surfaces again on any site. Unlike dismiss
+    // (per-tab-session), this persists across sessions and browser restarts
+    // until the user removes the entry from the options page.
+    (async () => {
+      try {
+        const key = msg.key;
+        if (!key || typeof key !== "string") {
+          sendResponse({ ok: false, error: "missing key" });
+          return;
+        }
+        const data = await chrome.storage.local.get(ALLOWLIST_KEY);
+        const raw = data[ALLOWLIST_KEY] || {};
+        const iframes = Array.isArray(raw.iframes) ? raw.iframes : [];
+        const overlays = Array.isArray(raw.overlays) ? raw.overlays : [];
+        const suggestions = Array.isArray(raw.suggestions) ? raw.suggestions.slice() : [];
+        if (!suggestions.includes(key)) suggestions.push(key);
+        await chrome.storage.local.set({
+          [ALLOWLIST_KEY]: { iframes, overlays, suggestions }
+        });
+        // onChanged will refresh the cache, but do it now so callers that
+        // recompute suggestions immediately see the filter.
+        await loadAllowlist();
+        // Drop the newly-allowed suggestion from every tab's state + refresh badges.
+        for (const [tabId, state] of tabBehavior) {
+          const before = state.suggestions.length;
+          state.suggestions = state.suggestions.filter(s => s.key !== key);
+          if (state.suggestions.length !== before) updateBadge(tabId);
+        }
+        schedulePersistBehavior();
+        sendResponse({ ok: true });
+      } catch (e) {
+        logError("allowlist-add-suggestion failed", e);
         sendResponse({ ok: false, error: String(e) });
       }
     })();

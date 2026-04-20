@@ -213,10 +213,20 @@ they never surface as remove suggestions. Current allowlist:
 - **OAuth / auth:** `accounts.google.com`, `appleid.apple.com`,
   `login.microsoftonline.com`, `login.live.com`, `*.firebaseapp.com`, `auth0.com`, `okta.com`
 
-If Hush ever does surface an iframe you believe is legit (e.g., a new
-captcha provider we haven't allowlisted), just **Dismiss** the suggestion.
-Dismissals persist for the current tab session; a fresh page load restarts
-detection.
+If Hush ever does surface a suggestion you believe is legit (a new
+captcha provider we haven't allowlisted, a real hidden widget you use,
+etc.), you have two options:
+
+- **Dismiss** - per-tab-session only. A fresh page load restarts detection
+  and the suggestion comes back.
+- **Allow** - permanent. The suggestion key is written to
+  `allowlist.suggestions` and filtered out on every site until you
+  remove it from the Suggestion allowlist editor on the options page.
+  Use this for false positives you never want to see again.
+
+Every suggestion carries both buttons regardless of its layer (block,
+remove, or hide) or detection tier (fingerprinting, session replay,
+animation loop, etc.).
 
 ### Scan timing
 

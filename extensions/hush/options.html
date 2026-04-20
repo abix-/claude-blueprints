@@ -537,6 +537,16 @@ iframe[src*="tracker.example.com"]
     </p>
     <textarea id="allowlist-overlays" spellcheck="false" style="width:100%;height:140px;font-family:ui-monospace,monospace;font-size:12px;padding:10px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"></textarea>
 
+    <h3 style="font-size: 13px; margin: 16px 0 4px; font-weight: 600;">Suggestion allowlist</h3>
+    <p style="color:#666; font-size:12px; margin: 0 0 8px;">
+      One suggestion key per line. Populated by the popup's <b>Allow</b>
+      button; any listed key is filtered out at emit time, on every site,
+      forever. Remove a line to re-enable a suggestion. Keys look like
+      <code>block::||example.com::canvas-fp</code> or
+      <code>remove::iframe[src*="captcha.com"]</code>.
+    </p>
+    <textarea id="allowlist-suggestions" spellcheck="false" style="width:100%;height:140px;font-family:ui-monospace,monospace;font-size:12px;padding:10px;border:1px solid #ccc;border-radius:5px;box-sizing:border-box;"></textarea>
+
     <div class="toolbar" style="margin-top:10px;">
       <button id="allowlist-save" class="primary">Save allowlists</button>
       <button id="allowlist-reset">Reset to defaults</button>
