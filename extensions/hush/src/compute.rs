@@ -26,10 +26,16 @@ pub fn compute_suggestions(
     }
 
     let matched = find_config_entry(config, hostname);
-    let (matched_key, cfg): (Option<&str>, Option<&SiteConfig>) = match matched {
-        Some((k, c)) => (Some(k.as_str()), Some(c)),
-        None => (None, None),
-    };
+    let matched_key: Option<&str> = matched.as_ref().map(|(k, _)| k.as_str());
+
+    // Dedup against BOTH the site-matched rules AND the reserved
+    // `__global__` scope, because a rule under `__global__` still
+    // fires on every tab. Without this merge, a user-authored
+    // global block rule wouldn't suppress a matching suggestion.
+    let merged = crate::types::merged_site_config(
+        config,
+        matched_key.unwrap_or(crate::types::GLOBAL_SCOPE_KEY),
+    );
 
     // Allocate the three existing-rule lists once per compute_suggestions
     // call. `Arc<[String]>` means every detector's emit-time clone is a
@@ -37,11 +43,9 @@ pub fn compute_suggestions(
     // Across a heavy_tab run with ~30 suggestions that's ~90 heap
     // allocations avoided.
     let existing_block: Arc<[String]> =
-        Arc::from(normalize_block_patterns(cfg.map(|c| c.block.as_slice()).unwrap_or(&[])));
-    let existing_remove: Arc<[String]> =
-        cfg.map(|c| Arc::from(c.remove.as_slice())).unwrap_or_else(|| Arc::from([] as [String; 0]));
-    let existing_hide: Arc<[String]> =
-        cfg.map(|c| Arc::from(c.hide.as_slice())).unwrap_or_else(|| Arc::from([] as [String; 0]));
+        Arc::from(normalize_block_patterns(merged.block.as_slice()));
+    let existing_remove: Arc<[String]> = Arc::from(merged.remove.as_slice());
+    let existing_hide: Arc<[String]> = Arc::from(merged.hide.as_slice());
 
     let ctx = DetectCtx {
         hostname,
@@ -239,6 +243,39 @@ mod tests {
         );
         let out = compute_suggestions(&s, &config, &Allowlist::default());
         assert!(out.is_empty(), "existing block rule dedups");
+    }
+
+    #[test]
+    fn global_scope_block_rule_suppresses_suggestion() {
+        // A block rule under the reserved `__global__` scope must
+        // dedup a matching suggestion even when the tab's hostname
+        // doesn't have a site-specific entry. Without the merge in
+        // compute_suggestions, this regresses: the suggestion fires
+        // every scan because the dedup only reads the site-scoped
+        // block list.
+        let mut s = state("site.test");
+        s.seen_resources = vec![Resource {
+            url: "https://t.test/p".into(),
+            host: "t.test".into(),
+            initiator_type: "beacon".into(),
+            transfer_size: 0,
+            duration: 0,
+            start_time: 0,
+            reporter_frame: None,
+        }];
+        let mut config = Config::new();
+        config.insert(
+            crate::types::GLOBAL_SCOPE_KEY.into(),
+            SiteConfig {
+                block: vec!["||t.test".into()],
+                ..Default::default()
+            },
+        );
+        let out = compute_suggestions(&s, &config, &Allowlist::default());
+        assert!(
+            out.is_empty(),
+            "global-scope block rule dedups suggestions"
+        );
     }
 
     #[test]
