@@ -40,5 +40,13 @@
     "block": [
       "||collector.github.com"
     ]
+  },
+  "chapturist.com": {
+    "hide": [],
+    "remove": [],
+    "block": [],
+    "spoof": [
+      "webgl-unmasked"
+    ]
   }
 }

@@ -706,15 +706,21 @@ fn SiteDetailBody(
             domain=domain.clone()
             layer=LayerKind::Hide
         />
+        <LayerSection
+            config=config
+            domain=domain.clone()
+            layer=LayerKind::Spoof
+        />
     }
 }
 
-/// Which of the three config-layer arrays a `LayerSection` edits.
+/// Which of the config-layer arrays a `LayerSection` edits.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum LayerKind {
     Block,
     Remove,
     Hide,
+    Spoof,
 }
 
 impl LayerKind {
@@ -723,6 +729,7 @@ impl LayerKind {
             Self::Block => "Block (network)",
             Self::Remove => "Remove (DOM)",
             Self::Hide => "Hide (CSS)",
+            Self::Spoof => "Spoof (fingerprint)",
         }
     }
     fn help(&self) -> &'static str {
@@ -739,6 +746,12 @@ impl LayerKind {
                 "CSS selectors applied with display: none !important. Elements stay in \
                  the DOM but don't render."
             }
+            Self::Spoof => {
+                "Fingerprint kind tags to neutralize by returning bland, \
+                 identical-across-users values instead of blocking the site. \
+                 Currently supported: `webgl-unmasked` (WebGL UNMASKED_VENDOR + \
+                 UNMASKED_RENDERER)."
+            }
         }
     }
     fn placeholder(&self) -> &'static str {
@@ -746,6 +759,7 @@ impl LayerKind {
             Self::Block => "Add URL pattern like ||ads.example.com",
             Self::Remove => "Add CSS selector like .modal-overlay",
             Self::Hide => "Add CSS selector like .popup",
+            Self::Spoof => "Add kind tag like webgl-unmasked",
         }
     }
     fn read<'a>(&self, cfg: &'a SiteConfig) -> &'a [String] {
@@ -753,6 +767,7 @@ impl LayerKind {
             Self::Block => &cfg.block,
             Self::Remove => &cfg.remove,
             Self::Hide => &cfg.hide,
+            Self::Spoof => &cfg.spoof,
         }
     }
     fn modify<'a>(&self, cfg: &'a mut SiteConfig) -> &'a mut Vec<String> {
@@ -760,6 +775,7 @@ impl LayerKind {
             Self::Block => &mut cfg.block,
             Self::Remove => &mut cfg.remove,
             Self::Hide => &mut cfg.hide,
+            Self::Spoof => &mut cfg.spoof,
         }
     }
 }

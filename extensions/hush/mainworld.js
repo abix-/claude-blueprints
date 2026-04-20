@@ -215,6 +215,21 @@
   } catch (e) {}
 
   // WebGL / WebGL2 getParameter (stub now; Rust re-patches)
+  //
+  // The wrapper does two things:
+  //   1. emit a webgl-fp observation for the detector
+  //   2. if the site's `spoof` config includes "webgl-unmasked", return
+  //      bland identical-across-users strings for UNMASKED_VENDOR_WEBGL
+  //      (37445) and UNMASKED_RENDERER_WEBGL (37446) instead of the real
+  //      GPU identity. Every other param passes through unchanged, so
+  //      legitimate rendering code (size limits, extension queries, etc.)
+  //      keeps working.
+  //
+  // Spoof opt-in is communicated from the isolated-world content script
+  // via `document.documentElement.dataset.hushSpoof` (comma-separated
+  // kind tags). Read at call time, not install time, so the inherent
+  // race between content.js and mainworld.js at document_start is moot
+  // by the time any page script invokes WebGL.
   const wrapGLStub = (proto) => {
     if (!proto || !proto.getParameter) return;
     const origFn = captureOrig(proto, "getParameter");
@@ -227,6 +242,15 @@
           stack: cap()
         });
       } catch (e) {}
+      if (param === 37445 || param === 37446) {
+        try {
+          const el = document.documentElement;
+          const spoof = el && el.dataset && el.dataset.hushSpoof;
+          if (spoof && spoof.indexOf("webgl-unmasked") >= 0) {
+            return param === 37445 ? "Google Inc." : "ANGLE (Generic)";
+          }
+        } catch (e) { /* fall through to real value */ }
+      }
       return origFn.apply(this, arguments);
     };
   };

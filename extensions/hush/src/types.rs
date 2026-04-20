@@ -193,6 +193,13 @@ pub struct SiteConfig {
     pub remove: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub block: Vec<String>,
+    /// Fingerprint signals to neutralize for this site. Each entry
+    /// is a kind tag; the main-world hook checks the tag and returns
+    /// bland, identical-across-users values instead of the real ones.
+    /// Currently supported: `webgl-unmasked` (WebGL UNMASKED_VENDOR
+    /// and UNMASKED_RENDERER). Future kinds: `canvas`, `audio`, etc.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spoof: Vec<String>,
 }
 
 /// Top-level user config, keyed by domain. `IndexMap` preserves

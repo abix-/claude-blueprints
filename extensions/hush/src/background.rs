@@ -1455,6 +1455,7 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
                 "hide" => &mut entry.hide,
                 "remove" => &mut entry.remove,
                 "block" => &mut entry.block,
+                "spoof" => &mut entry.spoof,
                 _ => {
                     let reply = Object::new();
                     let _ = Reflect::set(&reply, &JsValue::from_str("ok"), &JsValue::FALSE);

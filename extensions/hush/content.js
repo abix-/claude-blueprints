@@ -303,6 +303,18 @@
   const matchedDomain = match.key;
   log(location.hostname, "- matched:", matchedDomain);
 
+  // Signal the main-world hook about any fingerprint signals the user
+  // has opted to spoof on this site. Comma-separated kind tags. The
+  // main-world `getParameter` wrapper reads this dataset attribute at
+  // call time, so the write ordering between content-script and
+  // main-world install is irrelevant - by the time the page calls
+  // WebGL, documentElement.dataset.hushSpoof is set.
+  if (Array.isArray(cfg.spoof) && cfg.spoof.length) {
+    try {
+      document.documentElement.dataset.hushSpoof = cfg.spoof.join(",");
+    } catch (e) { /* documentElement not ready yet */ }
+  }
+
   const removeSelectors = Array.isArray(cfg.remove) ? cfg.remove.slice() : [];
   const hideSelectors   = Array.isArray(cfg.hide)   ? cfg.hide.slice()   : [];
 
