@@ -19,6 +19,7 @@ Each case study documents:
 ## Roadmap
 
 - [heuristic-roadmap.md](heuristic-roadmap.md) - gap analysis of detection signals Hush doesn't catch yet, ranked by value. Covers fingerprinting, session replay tools, navigator-read patterns, supercookies, rAF-loop detection, and service worker tracking. Source material for future implementation chapters.
+- [rust-migration-plan.md](rust-migration-plan.md) - plan to port Hush from JavaScript to a max-Rust architecture (engine, UI, content script, and main-world hooks all in Rust + WASM, with only ~75 lines of JS bootstrap remaining). Thesis, target architecture, session-by-session plan.
 
 ## Contributing your own
 
