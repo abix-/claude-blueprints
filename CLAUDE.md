@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+@.claude/project_state.md
+
 ALWAYS read and follow `~/.claude/skills/try-harder/SKILL.md`. NEVER skip it
 
 ALWAYS read the matching skill before starting. NEVER begin work without reading it first
