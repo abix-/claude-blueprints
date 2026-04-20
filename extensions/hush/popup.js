@@ -1,20 +1,14 @@
-// Popup is an ES module (see popup.html) so we can dynamically load the
-// Rust/Leptos runtime. Stage 4 scaffold: mount the Leptos component
-// tree into #rust-popup-root at the top of the popup. Over subsequent
-// commits, the per-section JS renderers below get ported to Leptos
-// components and their corresponding `#block-list` / `#sugg-list` roots
-// disappear. The hybrid coexists until the port is complete.
-(async () => {
-  try {
-    const url = chrome.runtime.getURL("dist/pkg/hush.js");
-    const mod = await import(url);
-    await mod.default();
-    if (typeof mod.initEngine === "function") mod.initEngine();
-    if (typeof mod.mountPopup === "function") mod.mountPopup();
-  } catch (e) {
-    console.error("[Hush popup] leptos mount failed", e);
-  }
-})();
+// Popup is an ES module (popup.html uses type="module"). Import the
+// wasm-bindgen glue statically so instantiation starts at parse time.
+// The returned `wasmReady` promise is awaited in main() before mounting
+// the Leptos subtree. Over subsequent commits, the per-section JS
+// renderers below get ported to Leptos components and their
+// corresponding `#block-list` / `#sugg-list` roots disappear.
+import initWasm, { initEngine, mountPopup } from "./dist/pkg/hush.js";
+
+const wasmReady = initWasm().then(() => {
+  try { initEngine(); } catch (e) { console.error("[Hush popup] initEngine failed", e); }
+}).catch(e => console.error("[Hush popup] wasm init failed", e));
 
 const OPTIONS_KEY = "options";
 const STORAGE_KEY = "config";
@@ -25,7 +19,7 @@ async function main() {
   const tabId = tab && tab.id;
   const hostname = tab && tab.url ? safeHostname(tab.url) : "";
 
-  const matchEl = document.getElementById("match");
+  // #match is now rendered by the Leptos component at #rust-popup-root.
   const sectionsEl = document.getElementById("sections");
   const unmatchedEl = document.getElementById("unmatched");
   const createSiteBtn = document.getElementById("create-site");
@@ -101,7 +95,7 @@ async function main() {
   });
 
   if (typeof tabId !== "number") {
-    matchEl.textContent = "No active tab";
+    try { await wasmReady; mountPopup({ hostname: "", matchedDomain: null, blockCount: 0, removeCount: 0, hideCount: 0, suggestionCount: 0 }); } catch (e) {}
     return;
   }
 
@@ -125,14 +119,9 @@ async function main() {
   const isMatched = !!matchedDomain;
 
   if (!isMatched) {
-    matchEl.textContent = hostname || "-";
     unmatchedEl.hidden = false;
     createSiteBtn.style.display = "inline-block";
   } else {
-    matchEl.innerHTML = "Matched: <b>" + escapeHtml(matchedDomain) + "</b>" +
-      (hostname && hostname !== matchedDomain
-        ? " <span style=\"color:#999\">(" + escapeHtml(hostname) + ")</span>"
-        : "");
     sectionsEl.hidden = false;
 
     // Render in aggressiveness order: block > remove > hide.
@@ -143,6 +132,20 @@ async function main() {
     const removeKeys = new Set(Object.keys(stats.remove || {}));
     renderSelectorList("hide", stats.hide || {}, removeKeys);
   }
+
+  // Hand everything the Leptos root needs in one snapshot.
+  const sumCounts = (m) => Object.values(m || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+  try {
+    await wasmReady;
+    mountPopup({
+      hostname: hostname || "",
+      matchedDomain: matchedDomain || null,
+      blockCount: stats.block || 0,
+      removeCount: sumCounts(stats.remove),
+      hideCount: sumCounts(stats.hide),
+      suggestionCount: suggestions.length,
+    });
+  } catch (e) { console.error("[Hush popup] mountPopup failed", e); }
 
   // Suggestions block is always visible; content varies by enabled state.
   suggBlock.hidden = false;
