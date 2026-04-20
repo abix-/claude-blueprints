@@ -262,12 +262,13 @@ in the log referencing the overridden block rule's ID.*
       by value. `compute_suggestions` dedup walks the ordered
       list, consulting `disabled` + effective `allow`
       overrides.
-- [ ] Persistent log: move `tab_events` from `BackgroundState`
-      to `chrome.storage.session[\"firewall_log\"]` — single
-      FIFO buffer (10k cap) tagged by `tabId`. `FirewallEvent`
-      gains `tags: Vec<String>` and `disposition: "block" |
-      "allow"`; allow events carry the overridden `rule_id` in
-      evidence.
+- [x] Persistent log: moved `tab_events` off the in-memory
+      per-tab `HashMap` into `chrome.storage.session["firewallLog"]`.
+      Single global FIFO (10k cap) tagged by `tab_id` on each
+      event. Hydrates on SW cold-wake; survives tab close and
+      navigation. Popup filters by `tab_id` (This tab / All tabs),
+      action (block/allow/remove/hide/spoof), and substring
+      search across rule_id / match / url / element description.
 - [ ] Options UI: up/down reorder buttons on every rule row;
       new Allow section next to Block/Remove/Hide/Spoof; tag
       input (comma-separated); comment field.

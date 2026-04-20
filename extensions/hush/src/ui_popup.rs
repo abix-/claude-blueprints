@@ -352,6 +352,7 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
                         site_rules=snap.site_rules.clone()
                         site_scope=snap.matched_domain.clone()
                             .unwrap_or_else(|| snap.hostname.clone())
+                        current_tab_id=tab_id.unwrap_or(-1)
                     />
                 }.into_any()
             } else { view! { <div /> }.into_any() }
@@ -576,105 +577,156 @@ fn FirewallLog(
     global_rules: SiteConfig,
     site_rules: SiteConfig,
     site_scope: String,
+    current_tab_id: i32,
 ) -> impl IntoView {
     use std::collections::HashMap;
-    // Group events by rule_id so each rule gets its aggregated hit
-    // count + recent-evidence list. Newest events appended last by
-    // the background ring buffer, so we don't need to re-sort here.
-    let mut by_rule: HashMap<String, Vec<FirewallEvent>> = HashMap::new();
-    for ev in events {
-        by_rule.entry(ev.rule_id.clone()).or_default().push(ev);
-    }
+    use std::sync::Arc;
 
-    // Enumerate every configured rule (scope × action × match). Rule
-    // order: block > remove > hide > spoof within each scope; global
-    // scope before site scope. This matches the aggressiveness
-    // ordering used elsewhere in the UI.
-    let mut rows: Vec<RuleRow> = Vec::new();
-    fn emit_rows(
-        rows: &mut Vec<RuleRow>,
-        scope: &str,
-        cfg: &SiteConfig,
-        by_rule: &HashMap<String, Vec<FirewallEvent>>,
-    ) {
-        let blocks_iter = cfg.block.iter().map(|m| ("block", m.value.as_str()));
-        let allows_iter = cfg.allow.iter().map(|m| ("allow", m.value.as_str()));
-        let removes_iter = cfg.remove.iter().map(|m| ("remove", m.value.as_str()));
-        let hides_iter = cfg.hide.iter().map(|m| ("hide", m.value.as_str()));
-        let spoofs_iter = cfg.spoof.iter().map(|m| ("spoof", m.value.as_str()));
-        for (action, m) in blocks_iter
-            .chain(allows_iter)
-            .chain(removes_iter)
-            .chain(hides_iter)
-            .chain(spoofs_iter)
-        {
-            let id = crate::types::rule_id(action, scope, m);
-            let hits = by_rule.get(&id).map(|v| v.len() as u32).unwrap_or(0);
-            let last_t = by_rule
-                .get(&id)
-                .and_then(|v| v.last())
-                .map(|e| e.t.clone());
-            rows.push(RuleRow {
-                rule_id: id,
-                action: action.to_string(),
-                scope: scope.to_string(),
-                match_: m.to_string(),
-                hits,
-                last_t,
-            });
-        }
-    }
-    emit_rows(&mut rows, GLOBAL_SCOPE_KEY, &global_rules, &by_rule);
-    if !site_scope.is_empty() {
-        emit_rows(&mut rows, &site_scope, &site_rules, &by_rule);
-    }
+    // Filter state — three independent signals so each control can
+    // re-render only its own part of the tree. Default to "This tab"
+    // when there's a current tab to scope to; degrade to "All tabs"
+    // when the popup is opened on a chrome:// page or similar where
+    // `current_tab_id` is absent (represented as -1).
+    let show_all_tabs = RwSignal::new(current_tab_id < 0);
+    let action_filter = RwSignal::new(String::new()); // "" = all
+    let search = RwSignal::new(String::new());
 
-    // Append "orphan" rule rows for events whose rule_id isn't in
-    // the configured rules. Shouldn't normally happen, but guards
-    // against config-drifted events showing up nowhere. Rare enough
-    // that we don't bother prettifying.
-    let configured_ids: std::collections::HashSet<String> =
-        rows.iter().map(|r| r.rule_id.clone()).collect();
-    for (rid, evs) in &by_rule {
-        if configured_ids.contains(rid) {
-            continue;
-        }
-        if let Some(first) = evs.first() {
-            rows.push(RuleRow {
-                rule_id: rid.clone(),
-                action: first.action.clone(),
-                scope: first.scope.clone(),
-                match_: first.match_.clone(),
-                hits: evs.len() as u32,
-                last_t: evs.last().map(|e| e.t.clone()),
-            });
-        }
-    }
+    // Shared input; the reactive closure below clones Rcs cheaply
+    // rather than deep-copying the event list each time a filter
+    // flips.
+    let events_rc = Arc::new(events);
+    let global_rules_rc = Arc::new(global_rules);
+    let site_rules_rc = Arc::new(site_rules);
+    let site_scope_rc = Arc::new(site_scope);
 
-    // Sort: rows with hits first (DESC), then unfired rules (by
-    // action-then-scope-then-match lexicographic). Matches how a
-    // firewall UI surfaces "things that fired" over "things that
-    // didn't yet".
-    rows.sort_by(|a, b| b.hits.cmp(&a.hits).then(a.rule_id.cmp(&b.rule_id)));
+    // Aggregate + filter. Rebuilt whenever any of the three filter
+    // signals change. Returns the sorted row list plus the event map
+    // so the row components can render their expandable evidence
+    // lists without re-aggregating.
+    let render_body = {
+        let events_rc = events_rc.clone();
+        let global_rules_rc = global_rules_rc.clone();
+        let site_rules_rc = site_rules_rc.clone();
+        let site_scope_rc = site_scope_rc.clone();
+        move || {
+            let q = search.get().trim().to_lowercase();
+            let action_f = action_filter.get();
+            let all_tabs = show_all_tabs.get();
 
-    let total_hits: u32 = rows.iter().map(|r| r.hits).sum();
-    let rule_count = rows.len();
+            // Filter stage: narrow the event list before aggregation
+            // so the row hit counts reflect only what matched the
+            // current filters.
+            let filtered: Vec<FirewallEvent> = events_rc
+                .iter()
+                .filter(|e| {
+                    if !all_tabs && e.tab_id != current_tab_id {
+                        return false;
+                    }
+                    if !action_f.is_empty() && e.action != action_f {
+                        return false;
+                    }
+                    if !q.is_empty() {
+                        let url = match &e.evidence {
+                            FirewallEvidence::Block { url, .. } => url.as_str(),
+                            _ => "",
+                        };
+                        let el = match &e.evidence {
+                            FirewallEvidence::Remove { el } => el.as_str(),
+                            _ => "",
+                        };
+                        let hay = format!(
+                            "{} {} {} {}",
+                            e.rule_id.to_lowercase(),
+                            e.match_.to_lowercase(),
+                            url.to_lowercase(),
+                            el.to_lowercase()
+                        );
+                        if !hay.contains(&q) {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .cloned()
+                .collect();
 
-    view! {
-        <details class="section firewall-log" open=true>
-            <summary class="section-head">
-                <span class="section-name">"Firewall log"</span>
-                <span class="count" style="background: #2d4d8a; color: #fff;">
-                    {total_hits}
-                </span>
-            </summary>
-            <div style="color: #888; font-size: 10px; margin-top: 4px;">
-                {rule_count} " rule" {if rule_count == 1 { "" } else { "s" }}
-                " active on this tab (" {total_hits} " total hits)"
-            </div>
-            {if rows.is_empty() {
+            // Group by rule_id for per-row hit counts + evidence.
+            let mut by_rule: HashMap<String, Vec<FirewallEvent>> = HashMap::new();
+            for ev in filtered {
+                by_rule.entry(ev.rule_id.clone()).or_default().push(ev);
+            }
+
+            // Enumerate every configured rule across global + site
+            // scopes. An action filter hides whole rule rows whose
+            // action doesn't match — makes the "all rules with 0 hits"
+            // noise go away when the user wants to see only blocks.
+            let mut rows: Vec<RuleRow> = Vec::new();
+            let emit_rows = |rows: &mut Vec<RuleRow>, scope: &str, cfg: &SiteConfig| {
+                let iter = cfg
+                    .block
+                    .iter()
+                    .map(|m| ("block", m.value.as_str()))
+                    .chain(cfg.allow.iter().map(|m| ("allow", m.value.as_str())))
+                    .chain(cfg.remove.iter().map(|m| ("remove", m.value.as_str())))
+                    .chain(cfg.hide.iter().map(|m| ("hide", m.value.as_str())))
+                    .chain(cfg.spoof.iter().map(|m| ("spoof", m.value.as_str())));
+                for (action, m) in iter {
+                    if !action_f.is_empty() && action != action_f {
+                        continue;
+                    }
+                    let id = crate::types::rule_id(action, scope, m);
+                    let hits = by_rule.get(&id).map(|v| v.len() as u32).unwrap_or(0);
+                    let last_t = by_rule.get(&id).and_then(|v| v.last()).map(|e| e.t.clone());
+                    rows.push(RuleRow {
+                        rule_id: id,
+                        action: action.to_string(),
+                        scope: scope.to_string(),
+                        match_: m.to_string(),
+                        hits,
+                        last_t,
+                    });
+                }
+            };
+            emit_rows(&mut rows, GLOBAL_SCOPE_KEY, &global_rules_rc);
+            if !site_scope_rc.is_empty() {
+                emit_rows(&mut rows, &site_scope_rc, &site_rules_rc);
+            }
+
+            // Orphan rows — events whose rule is no longer in the
+            // config. Survive the action filter because the loop
+            // already dropped non-matching events above.
+            let configured_ids: std::collections::HashSet<String> =
+                rows.iter().map(|r| r.rule_id.clone()).collect();
+            for (rid, evs) in &by_rule {
+                if configured_ids.contains(rid) {
+                    continue;
+                }
+                if let Some(first) = evs.first() {
+                    rows.push(RuleRow {
+                        rule_id: rid.clone(),
+                        action: first.action.clone(),
+                        scope: first.scope.clone(),
+                        match_: first.match_.clone(),
+                        hits: evs.len() as u32,
+                        last_t: evs.last().map(|e| e.t.clone()),
+                    });
+                }
+            }
+
+            rows.sort_by(|a, b| b.hits.cmp(&a.hits).then(a.rule_id.cmp(&b.rule_id)));
+
+            let total_hits: u32 = rows.iter().map(|r| r.hits).sum();
+            let rule_count = rows.len();
+
+            let scope_hint = if all_tabs {
+                "across all tabs".to_string()
+            } else {
+                "on this tab".to_string()
+            };
+
+            let body = if rows.is_empty() {
                 view! {
-                    <div class="no-sels">"No rules configured for this tab"</div>
+                    <div class="no-sels">"No matching events"</div>
                 }.into_any()
             } else {
                 rows.into_iter().map(|row| {
@@ -683,7 +735,66 @@ fn FirewallLog(
                         <FirewallLogRow row=row events=events_for_row />
                     }
                 }).collect::<Vec<_>>().into_any()
-            }}
+            };
+
+            view! {
+                <div style="color: #888; font-size: 10px; margin-top: 4px;">
+                    {rule_count} " rule" {if rule_count == 1 { "" } else { "s" }}
+                    " " {scope_hint} " (" {total_hits} " hits matching filters)"
+                </div>
+                {body}
+            }
+            .into_any()
+        }
+    };
+
+    let input_style = "font-size: 11px; padding: 2px 6px; border: 1px solid #ccc; \
+                       border-radius: 3px; box-sizing: border-box;";
+
+    view! {
+        <details class="section firewall-log" open=true>
+            <summary class="section-head">
+                <span class="section-name">"Firewall log"</span>
+                <span class="count" style="background: #2d4d8a; color: #fff;">
+                    {move || events_rc.len() as u32}
+                </span>
+            </summary>
+            <div style="display:flex; gap:6px; align-items:center; margin-top:6px;
+                        flex-wrap: wrap; font-size: 11px;">
+                <label style="display:flex; gap:3px; align-items:center; cursor:pointer;">
+                    <input type="checkbox"
+                           prop:checked=move || show_all_tabs.get()
+                           on:change=move |_| show_all_tabs.update(|v| *v = !*v) />
+                    "All tabs"
+                </label>
+                <select style=input_style
+                        on:change=move |ev| {
+                            let val = ev.target()
+                                .and_then(|t| t.dyn_into::<web_sys::HtmlSelectElement>().ok())
+                                .map(|s| s.value())
+                                .unwrap_or_default();
+                            action_filter.set(val);
+                        }>
+                    <option value="" selected=true>"all actions"</option>
+                    <option value="block">"block"</option>
+                    <option value="allow">"allow"</option>
+                    <option value="remove">"remove"</option>
+                    <option value="hide">"hide"</option>
+                    <option value="spoof">"spoof"</option>
+                </select>
+                <input type="text"
+                       placeholder="search rule / url / selector"
+                       style=format!("{} flex: 1; min-width: 120px;", input_style)
+                       prop:value=move || search.get()
+                       on:input=move |ev| {
+                           let val = ev.target()
+                               .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+                               .map(|i| i.value())
+                               .unwrap_or_default();
+                           search.set(val);
+                       } />
+            </div>
+            {render_body}
         </details>
     }
 }

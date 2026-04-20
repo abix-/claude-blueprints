@@ -38,15 +38,17 @@ const MAX_LOG_ENTRIES: usize = 300;
 const MAX_EVIDENCE: usize = 50;
 const MAX_SEEN_RESOURCES: usize = 500;
 const MAX_JS_CALLS: usize = 500;
-/// Per-tab firewall-log event ring buffer cap. Sized so a verbose
-/// site (lots of per-scroll remove events) has enough history for
-/// the popup's firewall-log view without ballooning session storage.
-const MAX_FIREWALL_EVENTS: usize = 500;
+/// Global firewall-log ring buffer cap. A single FIFO across every
+/// tab (tag per event is `tabId`), persisted to chrome.storage.session
+/// so the log survives SW wake and tab close. ~200 bytes per event
+/// * 10k = ~2 MB, well under the 10 MB session-storage quota.
+const MAX_FIREWALL_EVENTS: usize = 10_000;
 const STORAGE_KEY: &str = "config";
 const OPTIONS_KEY: &str = "options";
 const ALLOWLIST_KEY: &str = "allowlist";
 const SESSION_TABSTATS_KEY: &str = "tabStats";
 const SESSION_BEHAVIOR_KEY: &str = "tabBehavior";
+const SESSION_FIREWALL_LOG_KEY: &str = "firewallLog";
 
 // ---------------------------------------------------------------------------
 // State.
@@ -69,13 +71,17 @@ struct BackgroundState {
     rule_fire_count: HashMap<i32, u32>,
     tab_stats: HashMap<i32, TabStatsEntry>,
     tab_behavior: HashMap<i32, BehaviorState>,
-    /// Per-tab ring buffer of unified firewall-log events.
-    /// Capped at [`MAX_FIREWALL_EVENTS`] per tab so a long-lived
-    /// session doesn't balloon. Newest events appended at the back.
-    tab_events: HashMap<i32, VecDeque<FirewallEvent>>,
+    /// Global FIFO of firewall-log events across every tab. Each
+    /// event carries its originating `tab_id` so the popup can
+    /// filter by tab client-side. Capped at
+    /// [`MAX_FIREWALL_EVENTS`] with FIFO eviction. Persisted
+    /// to `chrome.storage.session[SESSION_FIREWALL_LOG_KEY]` on
+    /// a debounced schedule so SW cold-wake restores the buffer.
+    firewall_log: VecDeque<FirewallEvent>,
     allowlist_cache: Allowlist,
     persist_stats_scheduled: bool,
     persist_behavior_scheduled: bool,
+    persist_firewall_log_scheduled: bool,
     sync_in_flight: bool,
     sync_pending: bool,
 }
@@ -140,6 +146,7 @@ async fn bg_woke_up() -> Result<(), JsValue> {
     load_allowlist().await?;
     hydrate_tab_stats().await;
     hydrate_tab_behavior().await;
+    hydrate_firewall_log().await;
     rehydrate_rule_patterns().await;
     log("service worker started / woke up");
     Ok(())
@@ -611,26 +618,86 @@ fn get_stats_mut<R>(tab_id: i32, f: impl FnOnce(&mut TabStatsEntry) -> R) -> R {
     })
 }
 
-/// Append a unified firewall-log event to the per-tab ring buffer.
-/// Caps the buffer at [`MAX_FIREWALL_EVENTS`]; oldest entries drop.
-fn push_firewall_event(tab_id: i32, event: FirewallEvent) {
+/// Append a unified firewall-log event to the global FIFO buffer.
+/// The caller's `tab_id` is stamped onto the event before push so
+/// the popup can filter by tab. Caps the buffer at
+/// [`MAX_FIREWALL_EVENTS`]; oldest entries drop.
+/// Schedules a debounced persist to chrome.storage.session.
+fn push_firewall_event(tab_id: i32, mut event: FirewallEvent) {
+    event.tab_id = tab_id;
     STATE.with(|s| {
         let mut st = s.borrow_mut();
-        let buf = st.tab_events.entry(tab_id).or_default();
-        buf.push_back(event);
-        while buf.len() > MAX_FIREWALL_EVENTS {
-            buf.pop_front();
+        st.firewall_log.push_back(event);
+        while st.firewall_log.len() > MAX_FIREWALL_EVENTS {
+            st.firewall_log.pop_front();
         }
     });
+    schedule_persist_firewall_log();
+}
+
+fn schedule_persist_firewall_log() {
+    let already = STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        if st.persist_firewall_log_scheduled {
+            true
+        } else {
+            st.persist_firewall_log_scheduled = true;
+            false
+        }
+    });
+    if already {
+        return;
+    }
+    set_timeout(
+        || {
+            STATE.with(|s| s.borrow_mut().persist_firewall_log_scheduled = false);
+            spawn_local(async {
+                let snapshot: Vec<FirewallEvent> = STATE.with(|s| {
+                    s.borrow().firewall_log.iter().cloned().collect()
+                });
+                match crate::chrome_bridge::to_js(&snapshot) {
+                    Ok(v) => {
+                        if let Err(e) =
+                            storage_session_set_one(SESSION_FIREWALL_LOG_KEY, &v).await
+                        {
+                            log_error(&format!("persist firewallLog failed: {:?}", e));
+                        }
+                    }
+                    Err(e) => log_error(&format!("persist firewallLog serialize failed: {}", e)),
+                }
+            });
+        },
+        500,
+    );
+}
+
+async fn hydrate_firewall_log() {
+    let v = match storage_session_get_one(SESSION_FIREWALL_LOG_KEY).await {
+        Ok(v) if !v.is_undefined() && !v.is_null() => v,
+        _ => return,
+    };
+    let Ok(events): Result<Vec<FirewallEvent>, _> = serde_wasm_bindgen::from_value(v) else {
+        return;
+    };
+    let n = events.len();
+    STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        st.firewall_log = events.into_iter().collect();
+        while st.firewall_log.len() > MAX_FIREWALL_EVENTS {
+            st.firewall_log.pop_front();
+        }
+    });
+    log(&format!("hydrated firewallLog with {} event(s)", n));
 }
 
 fn reset_stats(tab_id: i32) {
     STATE.with(|s| {
         let mut st = s.borrow_mut();
         st.tab_stats.insert(tab_id, TabStatsEntry::default());
-        // Navigation = fresh page = fresh firewall-log window.
-        st.tab_events.remove(&tab_id);
     });
+    // The firewall log is global + persistent; navigation does
+    // not clear it. Per-tab counters above reset so the
+    // blocked-URLs panel matches the current page.
     update_badge(tab_id);
     schedule_persist_stats();
 }
@@ -1039,7 +1106,10 @@ fn install_tabs_on_removed() -> Result<(), JsValue> {
             let mut st = s.borrow_mut();
             st.tab_stats.remove(&id);
             st.tab_behavior.remove(&id);
-            st.tab_events.remove(&id);
+            // The firewall log is global + persistent; events from
+            // a closed tab stay in the log so historical activity
+            // is still inspectable until the 10k cap rolls them
+            // off or the browser restarts.
         });
         schedule_persist_stats();
         schedule_persist_behavior();
@@ -1138,6 +1208,7 @@ fn install_dnr_on_rule_matched_debug() -> Result<(), JsValue> {
                     url: url.clone(),
                     resource_type: resource_type.clone(),
                 },
+                tab_id: tid,
             },
         );
         update_badge(tid);
@@ -1317,6 +1388,7 @@ fn handle_stats(msg: &JsValue, sender: &JsValue) {
                 scope,
                 match_: ev.selector.clone(),
                 evidence: FirewallEvidence::Remove { el: ev.el.clone() },
+                tab_id,
             },
         );
     }
@@ -1487,19 +1559,14 @@ fn handle_get_tab_stats(msg: &JsValue, sender: &JsValue, send_response: &JsValue
     call_send_response(send_response, &reply.into());
 }
 
-fn handle_get_firewall_events(msg: &JsValue, sender: &JsValue, send_response: &JsValue) {
-    let tab_id = msg_or_sender_tab_id(msg, sender);
-    let events: Vec<FirewallEvent> = if let Some(id) = tab_id {
-        STATE.with(|s| {
-            s.borrow()
-                .tab_events
-                .get(&id)
-                .map(|buf| buf.iter().cloned().collect())
-                .unwrap_or_default()
-        })
-    } else {
-        Vec::new()
-    };
+fn handle_get_firewall_events(_msg: &JsValue, _sender: &JsValue, send_response: &JsValue) {
+    // Firewall log is now a single global FIFO across every tab.
+    // The popup filters by `tab_id` client-side, so we hand over
+    // the full ring buffer regardless of the caller's tab. Shipping
+    // 10k events (~2 MB serialized) fits comfortably inside Chrome's
+    // sendMessage budget; if it ever doesn't, we'll add pagination.
+    let events: Vec<FirewallEvent> =
+        STATE.with(|s| s.borrow().firewall_log.iter().cloned().collect());
     let reply = Object::new();
     if let Ok(v) = crate::chrome_bridge::to_js(&events) {
         let _ = Reflect::set(&reply, &JsValue::from_str("events"), &v);

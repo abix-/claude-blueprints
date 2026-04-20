@@ -191,7 +191,7 @@ pub struct FirewallEvent {
     /// Stable per-rule ID: `"{action}::{scope}::{match}"`.
     #[serde(rename = "ruleId")]
     pub rule_id: String,
-    /// `"block" | "remove" | "hide" | "spoof"`.
+    /// `"block" | "allow" | "remove" | "hide" | "spoof"`.
     pub action: String,
     /// The rule's scope key: [`GLOBAL_SCOPE_KEY`] or a hostname.
     pub scope: String,
@@ -200,6 +200,11 @@ pub struct FirewallEvent {
     pub match_: String,
     /// Action-specific supporting data.
     pub evidence: FirewallEvidence,
+    /// Tab the event fired on. Set at emit time by the background
+    /// service worker. Drives the popup's "This tab" vs "All tabs"
+    /// filter. Legacy events missing this field deserialize to 0.
+    #[serde(rename = "tabId", default)]
+    pub tab_id: i32,
 }
 
 /// Action-specific fields attached to a [`FirewallEvent`]. Serialized

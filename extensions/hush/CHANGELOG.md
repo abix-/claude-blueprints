@@ -53,6 +53,36 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
   alongside Block / Remove / Hide / Spoof.
 - Firewall log enumerates allow rules in the per-rule breakdown.
 
+### Stage 9 phase 3: persistent searchable firewall log
+- `BackgroundState.tab_events: HashMap<i32, VecDeque<_>>` replaced
+  by `firewall_log: VecDeque<FirewallEvent>` — one global FIFO
+  across every tab. Cap raised from 500/tab to 10k total (~2 MB
+  serialized; comfortable under the 10 MB `chrome.storage.session`
+  quota).
+- `FirewallEvent` gains a `tabId` field stamped at emit time by
+  `push_firewall_event`. Drives the popup's "This tab" vs "All
+  tabs" filter.
+- Persistence: `schedule_persist_firewall_log` writes the deque
+  to `chrome.storage.session["firewallLog"]` on a 500ms debounce;
+  `hydrate_firewall_log` restores it during SW init, same pattern
+  as `tabStats` / `tabBehavior`. Log now survives SW cold-wake
+  and tab close (used to wipe on both).
+- `handle_get_firewall_events` returns the full global log; the
+  popup filters client-side. No pagination yet; revisit if the
+  per-popup marshal ever feels slow.
+- Popup `FirewallLog` component gains filter controls:
+  - **All tabs** checkbox (defaults to This-tab; inverts when
+    popup opens on a chrome:// page with no active tab).
+  - **Action** dropdown: all / block / allow / remove / hide /
+    spoof. When narrowed, rows whose action doesn't match are
+    hidden entirely (not just greyed out), so "show me just the
+    allow hits" actually declutters.
+  - **Search** input: substring match across rule_id / match /
+    URL / element-description.
+  - Row aggregation re-runs reactively on any filter change via
+    Leptos signals. `Arc`-shared event + config inputs so the
+    closures don't deep-copy on every keystroke.
+
 ### Stage 4 progress: popup UI porting to Leptos
 - Iter 1 scaffold: Leptos 0.8 + `src/ui_popup.rs` + `mountPopup`
   wasm-bindgen export + `popup.js` bootstrap + `<div
