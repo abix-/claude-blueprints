@@ -1,2 +1,9 @@
 node_modules/
 package-lock.json
+
+# Rust build artifacts
+/target/
+# wasm-pack output (regenerated from crates/engine by `wasm-pack build`)
+/pkg/
+# Cargo local state
+**/*.rs.bk

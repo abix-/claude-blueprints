@@ -240,6 +240,60 @@ Outcome: popup is Rust-driven. `popup.js` is a ~15-line bootstrap.
 
 Outcome: ~95% Rust, ~5% JS bootstrap. HTML and CSS unchanged.
 
+## Crate inventory
+
+Principle: use popular maintained crates until they suck. Reinvent only
+when the wheel is old, unmaintained, or genuinely wrong for the job.
+
+### Adopted in Session A
+
+| Crate | Role | Why |
+|---|---|---|
+| `serde` + `serde-wasm-bindgen` | JS/Rust value conversion | Official preferred approach per wasm-bindgen docs; smaller code size than JSON-based serde bindings. |
+| `wasm-bindgen` + `js-sys` | FFI with JS | The foundation. No alternative. |
+| `url` | RFC 3986 parsing | Used by reqwest, hyper, the entire Rust HTTP ecosystem. Handles punycode/IDN/encoded segments that hand-rolled parsing misses. ~80 KB WASM cost accepted. |
+| `indexmap` | Ordered hash map | Config key order preservation. Matches JS object iteration semantics better than `BTreeMap`'s alphabetical sort. |
+| `console_error_panic_hook` | Rust panic to DevTools | Behind `panic-hook` feature flag. ~4 KB, worth it for debuggable WASM. |
+
+### Planned for Session B (detectors + computeSuggestions)
+
+| Crate | Role |
+|---|---|
+| `thiserror` | Structured errors at the wasm-bindgen boundary. |
+| `proptest` (dev-dep) | Property-based fuzz tests for aggregators and canonicalization. |
+| `insta` (dev-dep) | Snapshot/golden tests for JS-vs-Rust parity of `computeSuggestions`. |
+
+### Planned for Session C (main-world hooks)
+
+| Crate | Role |
+|---|---|
+| `web-sys` | Typed bindings to browser APIs. Canonical wasm-bindgen companion. |
+| `gloo-events` / `gloo-timers` | Ergonomic wrappers around DOM events and `setTimeout`. Smaller and more Rust-native than hand-rolling via `web-sys`. |
+| `wasm-bindgen-test` (dev-dep) | Runs tests in a real browser via WASM. Needed once hooks touch `document`, `Performance`, etc. |
+
+### Planned for Session D/E (UI)
+
+| Crate | Role |
+|---|---|
+| `leptos` (recommended) or `yew` | Rust WASM UI framework. Leptos wins on bundle size and fine-grained reactivity; Yew wins on contributor familiarity. Decision deferred to Session D. |
+| `gloo-utils` | DOM utilities both UI frameworks already use. |
+
+### Benchmarking + tooling (any session)
+
+| Crate | Role |
+|---|---|
+| `criterion` (dev-dep) | Statistical benchmarks with regression gates. Replaces the absence of JS benchmarking. |
+| `log` + `console_log` | Bridge Rust `log!` macros to Chrome DevTools console. |
+
+### Deferred until there is a reason
+
+| Crate | Reason to skip now |
+|---|---|
+| `regex` / `regex-lite` | No Rust-side regex work yet. DNR does URL matching natively; if we add filter-list rules, revisit. |
+| `blake3` / `xxhash-rust` | No fingerprint hashing yet. Revisit when we do cross-site correlation. |
+| `ahash` / `foldhash` | No hot hash-table loops. std is fine. |
+| `bitflags` | No large bitflag surfaces yet. |
+
 ## Testing strategy
 
 - Replace `test/emit_contract.test.mjs` with `cargo test` in
