@@ -12,7 +12,8 @@
 
 use crate::chrome_bridge;
 use crate::types::{
-    BlockDiagnostic, BlockedUrl, RemovedElement, Suggestion, SuggestionDiag, SuggestionLayer,
+    BlockDiagnostic, BlockedUrl, FirewallEvent, FirewallEvidence, RemovedElement, SiteConfig,
+    Suggestion, SuggestionDiag, SuggestionLayer, GLOBAL_SCOPE_KEY,
 };
 use indexmap::IndexMap;
 use js_sys::Reflect;
@@ -139,6 +140,21 @@ pub struct PopupSnapshot {
     /// it in the clipboard payload. Empty when there's no active tab.
     #[serde(default)]
     pub tab_url: String,
+    /// Unified firewall-log event buffer for the active tab. Fed to
+    /// the `FirewallLog` component so it can aggregate by rule_id
+    /// and render Palo-Alto-style per-rule hit counts + recent
+    /// evidence.
+    #[serde(default)]
+    pub events: Vec<FirewallEvent>,
+    /// Global-scope rules active on this tab (from the reserved
+    /// `__global__` config entry, if any). Rendered alongside
+    /// site-scoped rules in the firewall log.
+    #[serde(default)]
+    pub global_rules: SiteConfig,
+    /// Site-scoped rules for the matched domain (empty when no
+    /// site config matched).
+    #[serde(default)]
+    pub site_rules: SiteConfig,
 }
 
 /// WASM entry. Called by `popup.js` once per popup open.
@@ -181,11 +197,12 @@ pub async fn hush_popup_main() -> Result<(), JsValue> {
     // snapshot so the UI still renders without the per-tab sections.
     let Some(tab_id) = tab.tab_id else {
         return mount_popup_inner(PopupSnapshot {
-            hostname,
+            hostname: hostname.clone(),
             tab_url: tab.url.clone(),
             ..PopupSnapshot::default()
         });
     };
+    let _ = hostname; // remains valid below; above branch took a copy.
 
     // Sequential fetch: stats, suggestions, diagnostics, stored
     // options + config. Each branch degrades independently so a dead
@@ -206,6 +223,9 @@ pub async fn hush_popup_main() -> Result<(), JsValue> {
             config: crate::types::Config::default(),
         },
     );
+    let events = chrome_bridge::get_firewall_events(tab_id)
+        .await
+        .unwrap_or_default();
 
     // matched_domain resolves from the tab's running stats first, then
     // falls back to a hostname-suffix lookup in the user config. This
@@ -219,6 +239,16 @@ pub async fn hush_popup_main() -> Result<(), JsValue> {
     let hide_count: u32 = stats.hide.values().sum();
     let suggestion_count = suggestions.len() as u32;
 
+    let global_rules = storage
+        .config
+        .get(GLOBAL_SCOPE_KEY)
+        .cloned()
+        .unwrap_or_default();
+    let site_rules = matched_domain
+        .as_ref()
+        .and_then(|d| storage.config.get(d))
+        .cloned()
+        .unwrap_or_default();
     let snap = PopupSnapshot {
         hostname,
         matched_domain,
@@ -232,6 +262,9 @@ pub async fn hush_popup_main() -> Result<(), JsValue> {
         is_matched,
         blocked_urls: stats.blocked_urls,
         block_diagnostics: diagnostics,
+        events,
+        global_rules,
+        site_rules,
         remove_selectors: stats.remove,
         hide_selectors: stats.hide,
         removed_elements: stats.removed_elements,
@@ -300,6 +333,27 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
             detector_enabled=snap.detector_enabled
             tab_id=tab_id
         />
+        {
+            let any_rules = !snap.global_rules.block.is_empty()
+                || !snap.global_rules.remove.is_empty()
+                || !snap.global_rules.hide.is_empty()
+                || !snap.global_rules.spoof.is_empty()
+                || !snap.site_rules.block.is_empty()
+                || !snap.site_rules.remove.is_empty()
+                || !snap.site_rules.hide.is_empty()
+                || !snap.site_rules.spoof.is_empty();
+            if any_rules || !snap.events.is_empty() {
+                view! {
+                    <FirewallLog
+                        events=snap.events.clone()
+                        global_rules=snap.global_rules.clone()
+                        site_rules=snap.site_rules.clone()
+                        site_scope=snap.matched_domain.clone()
+                            .unwrap_or_else(|| snap.hostname.clone())
+                    />
+                }.into_any()
+            } else { view! { <div /> }.into_any() }
+        }
         {if snap.is_matched {
             view! {
                 <div class="rust-sections" style="padding: 4px 0;">
@@ -505,6 +559,265 @@ fn FooterButtons(
             </button>
         </footer>
     }
+}
+
+/// Firewall log — unified per-rule view. Enumerates every rule in
+/// the tab's active policy (global + site-scoped), joins in any
+/// matching [`FirewallEvent`]s to show hit counts + most-recent
+/// evidence, and renders one row per rule. Palo-Alto-flavored:
+/// rules that have fired surface with a hit count; rules that
+/// haven't show `no traffic` / `no hits` so the user can spot a
+/// rule that's never catching.
+#[component]
+fn FirewallLog(
+    events: Vec<FirewallEvent>,
+    global_rules: SiteConfig,
+    site_rules: SiteConfig,
+    site_scope: String,
+) -> impl IntoView {
+    use std::collections::HashMap;
+    // Group events by rule_id so each rule gets its aggregated hit
+    // count + recent-evidence list. Newest events appended last by
+    // the background ring buffer, so we don't need to re-sort here.
+    let mut by_rule: HashMap<String, Vec<FirewallEvent>> = HashMap::new();
+    for ev in events {
+        by_rule.entry(ev.rule_id.clone()).or_default().push(ev);
+    }
+
+    // Enumerate every configured rule (scope × action × match). Rule
+    // order: block > remove > hide > spoof within each scope; global
+    // scope before site scope. This matches the aggressiveness
+    // ordering used elsewhere in the UI.
+    let mut rows: Vec<RuleRow> = Vec::new();
+    fn emit_rows(
+        rows: &mut Vec<RuleRow>,
+        scope: &str,
+        cfg: &SiteConfig,
+        by_rule: &HashMap<String, Vec<FirewallEvent>>,
+    ) {
+        let blocks_iter = cfg.block.iter().map(|m| ("block", m.as_str()));
+        let removes_iter = cfg.remove.iter().map(|m| ("remove", m.as_str()));
+        let hides_iter = cfg.hide.iter().map(|m| ("hide", m.as_str()));
+        let spoofs_iter = cfg.spoof.iter().map(|m| ("spoof", m.as_str()));
+        for (action, m) in blocks_iter
+            .chain(removes_iter)
+            .chain(hides_iter)
+            .chain(spoofs_iter)
+        {
+            let id = crate::types::rule_id(action, scope, m);
+            let hits = by_rule.get(&id).map(|v| v.len() as u32).unwrap_or(0);
+            let last_t = by_rule
+                .get(&id)
+                .and_then(|v| v.last())
+                .map(|e| e.t.clone());
+            rows.push(RuleRow {
+                rule_id: id,
+                action: action.to_string(),
+                scope: scope.to_string(),
+                match_: m.to_string(),
+                hits,
+                last_t,
+            });
+        }
+    }
+    emit_rows(&mut rows, GLOBAL_SCOPE_KEY, &global_rules, &by_rule);
+    if !site_scope.is_empty() {
+        emit_rows(&mut rows, &site_scope, &site_rules, &by_rule);
+    }
+
+    // Append "orphan" rule rows for events whose rule_id isn't in
+    // the configured rules. Shouldn't normally happen, but guards
+    // against config-drifted events showing up nowhere. Rare enough
+    // that we don't bother prettifying.
+    let configured_ids: std::collections::HashSet<String> =
+        rows.iter().map(|r| r.rule_id.clone()).collect();
+    for (rid, evs) in &by_rule {
+        if configured_ids.contains(rid) {
+            continue;
+        }
+        if let Some(first) = evs.first() {
+            rows.push(RuleRow {
+                rule_id: rid.clone(),
+                action: first.action.clone(),
+                scope: first.scope.clone(),
+                match_: first.match_.clone(),
+                hits: evs.len() as u32,
+                last_t: evs.last().map(|e| e.t.clone()),
+            });
+        }
+    }
+
+    // Sort: rows with hits first (DESC), then unfired rules (by
+    // action-then-scope-then-match lexicographic). Matches how a
+    // firewall UI surfaces "things that fired" over "things that
+    // didn't yet".
+    rows.sort_by(|a, b| b.hits.cmp(&a.hits).then(a.rule_id.cmp(&b.rule_id)));
+
+    let total_hits: u32 = rows.iter().map(|r| r.hits).sum();
+    let rule_count = rows.len();
+
+    view! {
+        <details class="section firewall-log" open=true>
+            <summary class="section-head">
+                <span class="section-name">"Firewall log"</span>
+                <span class="count" style="background: #2d4d8a; color: #fff;">
+                    {total_hits}
+                </span>
+            </summary>
+            <div style="color: #888; font-size: 10px; margin-top: 4px;">
+                {rule_count} " rule" {if rule_count == 1 { "" } else { "s" }}
+                " active on this tab (" {total_hits} " total hits)"
+            </div>
+            {if rows.is_empty() {
+                view! {
+                    <div class="no-sels">"No rules configured for this tab"</div>
+                }.into_any()
+            } else {
+                rows.into_iter().map(|row| {
+                    let events_for_row = by_rule.get(&row.rule_id).cloned().unwrap_or_default();
+                    view! {
+                        <FirewallLogRow row=row events=events_for_row />
+                    }
+                }).collect::<Vec<_>>().into_any()
+            }}
+        </details>
+    }
+}
+
+/// One row in the firewall-log table. State is local (each row has
+/// its own expand/collapse signal) so expanding a busy rule doesn't
+/// re-render the whole log.
+#[component]
+fn FirewallLogRow(row: RuleRow, events: Vec<FirewallEvent>) -> impl IntoView {
+    let open = RwSignal::new(false);
+    let can_expand = !events.is_empty();
+
+    let (badge_bg, badge_fg, badge_label) = match row.action.as_str() {
+        "block" => ("#d85c4f", "#fff", "BLOCK"),
+        "remove" => ("#d89a4f", "#fff", "REMOVE"),
+        "hide" => ("#6b8ad4", "#fff", "HIDE"),
+        "spoof" => ("#8a4fc3", "#fff", "SPOOF"),
+        _ => ("#666", "#fff", "?"),
+    };
+    let scope_label = if row.scope == GLOBAL_SCOPE_KEY {
+        "global".to_string()
+    } else {
+        row.scope.clone()
+    };
+    let status_text = if row.hits > 0 {
+        format!("{} hits", row.hits)
+    } else {
+        "no hits".to_string()
+    };
+    let status_color = if row.hits > 0 { "#125a12" } else { "#999" };
+    let last_hit = row
+        .last_t
+        .as_deref()
+        .map(time_only)
+        .unwrap_or_default();
+
+    view! {
+        <div class="firewall-row"
+             style="padding: 6px 0; border-bottom: 1px dotted #e8e8e8;">
+            <div style="display: flex; align-items: center; gap: 6px;
+                        font-size: 10px;">
+                <span style=format!(
+                    "display:inline-block; padding: 1px 6px; background: {};
+                     color: {}; border-radius: 3px; font-weight: 600;
+                     font-family: ui-monospace, monospace;",
+                     badge_bg, badge_fg
+                )>
+                    {badge_label}
+                </span>
+                <span style="font-size: 10px; color: #555;
+                             padding: 1px 5px; background: #eef1f6;
+                             border-radius: 3px;
+                             font-family: ui-monospace, monospace;">
+                    {scope_label}
+                </span>
+                <span style=format!("margin-left: auto; color: {};", status_color)>
+                    {status_text}
+                </span>
+                {if !last_hit.is_empty() {
+                    view! {
+                        <span style="color: #aaa;
+                                     font-family: ui-monospace, monospace;">
+                            {last_hit}
+                        </span>
+                    }.into_any()
+                } else { view! { <span /> }.into_any() }}
+            </div>
+            <div style="font-family: ui-monospace, monospace; font-size: 11px;
+                        color: #333; margin-top: 2px; word-break: break-all;">
+                {row.match_.clone()}
+            </div>
+            {if can_expand {
+                view! {
+                    <div style="margin-top: 3px;">
+                        <span class="evidence-toggle"
+                              on:click=move |_| open.update(|v| *v = !*v)>
+                            {move || if open.get() {
+                                "Hide evidence"
+                            } else {
+                                "Show recent evidence"
+                            }}
+                        </span>
+                        {move || if open.get() {
+                            view! {
+                                <FirewallEvidence events=events.clone() />
+                            }.into_any()
+                        } else { view! { <span /> }.into_any() }}
+                    </div>
+                }.into_any()
+            } else { view! { <div /> }.into_any() }}
+        </div>
+    }
+}
+
+/// Expanded per-rule evidence list. Shows each event's timestamp +
+/// action-appropriate detail (URL for block, element description
+/// for remove, placeholder for hide/spoof/none). Newest first.
+#[component]
+fn FirewallEvidence(events: Vec<FirewallEvent>) -> impl IntoView {
+    let rows: Vec<_> = events
+        .into_iter()
+        .rev()
+        .take(20)
+        .map(|ev| {
+            let ts = time_only(&ev.t);
+            let body = match &ev.evidence {
+                FirewallEvidence::Block { url, resource_type } => {
+                    let rt = resource_type
+                        .as_deref()
+                        .map(|t| format!(" [{}]", t))
+                        .unwrap_or_default();
+                    format!("{}{}", url, rt)
+                }
+                FirewallEvidence::Remove { el } => el.clone(),
+                FirewallEvidence::None {} => String::new(),
+            };
+            view! {
+                <li>
+                    <span class="ts">{ts}</span>
+                    <span>{body}</span>
+                </li>
+            }
+        })
+        .collect();
+    view! {
+        <ul class="evidence-list">{rows}</ul>
+    }
+}
+
+/// One aggregated rule row in the firewall log.
+#[derive(Clone)]
+struct RuleRow {
+    rule_id: String,
+    action: String,
+    scope: String,
+    match_: String,
+    hits: u32,
+    last_t: Option<String>,
 }
 
 /// Blocked (network) section. Replaces the `#block-count` / `#block-list`
