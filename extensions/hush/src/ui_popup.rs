@@ -244,8 +244,13 @@ pub async fn hush_popup_main() -> Result<(), JsValue> {
         .get(GLOBAL_SCOPE_KEY)
         .cloned()
         .unwrap_or_default();
+    // Site-rules pass only when matched_domain names a real site
+    // entry. When matched_domain is the reserved `__global__` key,
+    // `config.get(d)` would alias back to global_rules and cause
+    // the firewall log to enumerate the same entries twice.
     let site_rules = matched_domain
         .as_ref()
+        .filter(|d| d.as_str() != GLOBAL_SCOPE_KEY)
         .and_then(|d| storage.config.get(d))
         .cloned()
         .unwrap_or_default();
@@ -625,7 +630,13 @@ fn FirewallLog(
             }
         };
         ingest(GLOBAL_SCOPE_KEY, &global_rules);
-        if !site_scope.is_empty() {
+        // Skip the site-scope pass when matched_domain is the
+        // reserved `__global__` key. Upstream, PopupSnapshot loads
+        // `site_rules` from `config[matched_domain]`, which for a
+        // page with only global rules resolves to the SAME
+        // SiteConfig — enumerating twice would produce duplicate
+        // log rows (one "BLOCK global ||x" row per duplicate).
+        if !site_scope.is_empty() && site_scope.as_str() != GLOBAL_SCOPE_KEY {
             ingest(&site_scope, &site_rules);
         }
         m
@@ -799,7 +810,14 @@ fn FirewallLog(
                 }
             };
             emit_rows(&mut rows, GLOBAL_SCOPE_KEY, &global_rules_rc);
-            if !site_scope_rc.is_empty() {
+            // Same dedup guard as in the rule_tags ingest above —
+            // when matched_domain is `__global__` the upstream
+            // site_rules alias-points at the global config, so
+            // enumerating a second time would produce duplicate
+            // rule rows in the log.
+            if !site_scope_rc.is_empty()
+                && site_scope_rc.as_str() != GLOBAL_SCOPE_KEY
+            {
                 emit_rows(&mut rows, &site_scope_rc, &site_rules_rc);
             }
 
