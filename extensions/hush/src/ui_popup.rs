@@ -353,6 +353,8 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
                         site_scope=snap.matched_domain.clone()
                             .unwrap_or_else(|| snap.hostname.clone())
                         current_tab_id=tab_id.unwrap_or(-1)
+                        remove_counts=snap.remove_selectors.clone()
+                        hide_counts=snap.hide_selectors.clone()
                     />
                 }.into_any()
             } else { view! { <div /> }.into_any() }
@@ -578,6 +580,8 @@ fn FirewallLog(
     site_rules: SiteConfig,
     site_scope: String,
     current_tab_id: i32,
+    remove_counts: IndexMap<String, u32>,
+    hide_counts: IndexMap<String, u32>,
 ) -> impl IntoView {
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -642,6 +646,8 @@ fn FirewallLog(
     let global_rules_rc = Arc::new(global_rules);
     let site_rules_rc = Arc::new(site_rules);
     let site_scope_rc = Arc::new(site_scope);
+    let remove_counts = Arc::new(remove_counts);
+    let hide_counts = Arc::new(hide_counts);
 
     // Aggregate + filter. Rebuilt whenever any of the three filter
     // signals change. Returns the sorted row list plus the event map
@@ -653,6 +659,8 @@ fn FirewallLog(
         let site_rules_rc = site_rules_rc.clone();
         let site_scope_rc = site_scope_rc.clone();
         let rule_tags = rule_tags.clone();
+        let remove_counts = remove_counts.clone();
+        let hide_counts = hide_counts.clone();
         move || {
             let q = search.get().trim().to_lowercase();
             let action_f = action_filter.get();
@@ -717,6 +725,17 @@ fn FirewallLog(
             // scopes. An action filter hides whole rule rows whose
             // action doesn't match — makes the "all rules with 0 hits"
             // noise go away when the user wants to see only blocks.
+            //
+            // All allow rules across both scopes are collected up-front
+            // so each block row can ask "am I shadowed by any allow?"
+            // without re-walking the config per block.
+            let all_allows: Vec<crate::types::RuleEntry> = global_rules_rc
+                .allow
+                .iter()
+                .chain(site_rules_rc.allow.iter())
+                .cloned()
+                .collect();
+
             let mut rows: Vec<RuleRow> = Vec::new();
             let emit_rows = |rows: &mut Vec<RuleRow>, scope: &str, cfg: &SiteConfig| {
                 let iter = cfg
@@ -734,6 +753,31 @@ fn FirewallLog(
                     let id = crate::types::rule_id(action, scope, m);
                     let hits = by_rule.get(&id).map(|v| v.len() as u32).unwrap_or(0);
                     let last_t = by_rule.get(&id).and_then(|v| v.last()).map(|e| e.t.clone());
+                    // Shadow detection only applies to block rules.
+                    // An allow rule can't shadow itself; remove/hide
+                    // don't have the same DNR-priority dynamic.
+                    let shadowed_by = if action == "block" {
+                        crate::lint::block_shadowed_by(&all_allows, m)
+                            .map(|e| e.value.clone())
+                    } else {
+                        None
+                    };
+                    // Zero-match only applies to remove/hide. A hit
+                    // count of 0 on current-tab stats means the CSS
+                    // selector didn't match any element on the page;
+                    // show "no DOM match" to surface typos or stale
+                    // selectors. Only checked in This-tab view —
+                    // All-tabs would produce false positives for a
+                    // selector that matches on some other tab.
+                    let zero_match = if !all_tabs {
+                        match action {
+                            "remove" => remove_counts.get(m).copied().unwrap_or(0) == 0,
+                            "hide" => hide_counts.get(m).copied().unwrap_or(0) == 0,
+                            _ => false,
+                        }
+                    } else {
+                        false
+                    };
                     rows.push(RuleRow {
                         rule_id: id,
                         action: action.to_string(),
@@ -741,6 +785,8 @@ fn FirewallLog(
                         match_: m.to_string(),
                         hits,
                         last_t,
+                        shadowed_by,
+                        zero_match,
                     });
                 }
             };
@@ -766,6 +812,8 @@ fn FirewallLog(
                         match_: first.match_.clone(),
                         hits: evs.len() as u32,
                         last_t: evs.last().map(|e| e.t.clone()),
+                        shadowed_by: None,
+                        zero_match: false,
                     });
                 }
             }
@@ -774,11 +822,19 @@ fn FirewallLog(
 
             let total_hits: u32 = rows.iter().map(|r| r.hits).sum();
             let rule_count = rows.len();
+            let shadowed_count = rows.iter().filter(|r| r.shadowed_by.is_some()).count();
+            let zero_match_count = rows.iter().filter(|r| r.zero_match).count();
 
             let scope_hint = if all_tabs {
                 "across all tabs".to_string()
             } else {
                 "on this tab".to_string()
+            };
+            let health_hint = match (shadowed_count, zero_match_count) {
+                (0, 0) => String::new(),
+                (s, 0) => format!(" · {s} shadowed"),
+                (0, z) => format!(" · {z} zero-match"),
+                (s, z) => format!(" · {s} shadowed · {z} zero-match"),
             };
 
             let body = if rows.is_empty() {
@@ -797,7 +853,8 @@ fn FirewallLog(
             view! {
                 <div style="color: #888; font-size: 10px; margin-top: 4px;">
                     {rule_count} " rule" {if rule_count == 1 { "" } else { "s" }}
-                    " " {scope_hint} " (" {total_hits} " hits matching filters)"
+                    " " {scope_hint} " (" {total_hits} " hits matching filters"
+                    {health_hint} ")"
                 </div>
                 {body}
             }
@@ -971,6 +1028,41 @@ fn FirewallLogRow(row: RuleRow, events: Vec<FirewallEvent>) -> impl IntoView {
                         color: #333; margin-top: 2px; word-break: break-all;">
                 {row.match_.clone()}
             </div>
+            {
+                // Rule-health annotations. Shadow only surfaces on
+                // block rules that an allow pattern covers; zero-match
+                // surfaces on remove/hide selectors that didn't bind
+                // on the current tab's latest scan.
+                let shadow_line = row.shadowed_by.clone().map(|shadow| {
+                    view! {
+                        <div style="font-size: 10px; color: #8a5a16;
+                                    background: #fff4e2; padding: 2px 6px;
+                                    margin-top: 3px; border-radius: 3px;
+                                    border: 1px solid #f0d8a8;">
+                            "shadowed by allow: "
+                            <code style="font-family: ui-monospace, monospace;">
+                                {shadow}
+                            </code>
+                        </div>
+                    }.into_any()
+                });
+                let zero_line = if row.zero_match {
+                    Some(view! {
+                        <div style="font-size: 10px; color: #7a7a7a;
+                                    background: #f2f2f2; padding: 2px 6px;
+                                    margin-top: 3px; border-radius: 3px;
+                                    border: 1px solid #dcdcdc;">
+                            "no DOM match on this tab (selector matched 0 elements)"
+                        </div>
+                    }.into_any())
+                } else {
+                    None
+                };
+                view! {
+                    {shadow_line}
+                    {zero_line}
+                }
+            }
             {if can_expand {
                 view! {
                     <div style="margin-top: 3px;">
@@ -1038,6 +1130,13 @@ struct RuleRow {
     match_: String,
     hits: u32,
     last_t: Option<String>,
+    /// Rule-health flags surfaced by the Stage 12 lint pass.
+    /// `shadowed_by` = value of the allow rule whose URL filter
+    /// covers this block rule, making it DNR-unreachable.
+    /// `zero_match` = true when this remove/hide selector has
+    /// count=0 on the current tab's latest stats snapshot.
+    shadowed_by: Option<String>,
+    zero_match: bool,
 }
 
 /// Blocked (network) section. Replaces the `#block-count` / `#block-list`

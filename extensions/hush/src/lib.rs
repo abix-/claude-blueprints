@@ -15,6 +15,7 @@ mod chrome_bridge;
 mod compute;
 mod detectors;
 mod learn;
+mod lint;
 mod main_world;
 mod stack;
 mod suggestion;

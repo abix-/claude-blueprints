@@ -44,24 +44,25 @@ Stage 11: **Auto-tags shipped** — accepted suggestions inherit
 the originating detector's signal kind as an `auto:<kind>` tag
 on the resulting rule. Popup firewall log gains a tag-chip
 filter row built from the distinct tags across every rule.
-Stage 12: **Rule lint** — dead-rule detection (configured rules
-that have never matched), allow-shadow detection (block rules
-unreachable because an earlier allow covers them), selector
-validation (remove/hide rules whose selector is syntactically
-valid but matches zero elements on a typical page). Extends the
-Stage 7 block-rule diagnostics pattern to the other actions.
+Stage 12: **Rule lint (phase A shipped)** — shadow detection for
+block rules and zero-match detection for remove/hide selectors,
+both surfaced as inline badges in the popup firewall log + a
+rule-health roll-up in the log header. Pure-Rust `src/lint.rs`
+module with 9 unit tests for the shadow heuristic. Phase B
+(options-editor per-rule badges, broken-selector detection,
+dead-vs-no-hits distinction) is deferred.
 Stage 13: **Rule simulate** — test-match UI. Given a URL or a
 DOM snippet, show which rule would fire (block / allow / remove
 / hide / spoof) and why.
 
 ## Next up (priority order)
 
-1. **Stage 12** — rule lint. Dead + shadowed + never-matched
-   rule detection. Classic firewall-audit surface, extends
-   Stage 7's existing block-diagnostics shape.
-2. **Stage 13** — rule simulate / test-match UI. Useful once
+1. **Stage 13** — rule simulate / test-match UI. Useful once
    rule sets grow past a dozen entries across global + per-site
    scopes.
+2. **Stage 12 phase B** — options-editor rule-health badges,
+   broken-selector detection, and a dead-rule category
+   computed by walking the persistent firewall log.
 3. **Stage 8** — canvas / audio / font-enum spoofs. Fingerprint
    coverage expansion, orthogonal to the audit stages.
 4. **Stage 10** — rule import/export profiles. UX polish on top
@@ -357,22 +358,33 @@ per-rule badge in the options editor + a roll-up panel in the
 popup. Extends the Stage 7 `BlockDiagnostic` shape to the
 remaining actions.*
 
-- [ ] Extend per-rule diagnostics beyond block: `RemoveDiagnostic`,
-      `HideDiagnostic`, `SpoofDiagnostic`, `AllowDiagnostic` with
+- [x] Shadow detection: `src/lint.rs::block_shadowed_by()`
+      heuristic — allow's normalized pattern is a prefix of
+      block's normalized pattern (`||` and `^` stripped).
+      Popup firewall-log annotates the shadowing allow on
+      every block row it covers. 9 unit tests cover the
+      heuristic shape.
+- [x] Zero-match selector check: popup reads the per-tab
+      remove/hide stats maps it already receives and flags
+      selectors with count=0 on the current tab. Only active
+      in This-tab view so All-tabs doesn't false-flag a
+      selector that matches on a different tab.
+- [x] Popup firewall-log header roll-up: "N hits · X shadowed
+      · Y zero-match" alongside the rule-count summary.
+- [ ] **Phase B**: Extend per-rule diagnostics beyond block:
+      `RemoveDiagnostic` / `HideDiagnostic` / `SpoofDiagnostic`
+      / `AllowDiagnostic` with
       `status: "firing" | "no-hits" | "shadowed" | "broken"`.
-- [ ] Shadow-check: for each block rule, look for any earlier
-      allow rule (same scope or layered global) whose URL
-      pattern would match every URL the block pattern matches.
-      Initial heuristic: a shadowing allow exists when its
-      pattern is a prefix of or broader than the block pattern.
-- [ ] Zero-match selector check: the content script samples its
-      active rule set against the current DOM snapshot after
-      DOMContentLoaded; selectors matching zero elements get
-      reported back.
-- [ ] Options editor: per-row diagnostic badge (dot indicator +
-      tooltip) next to disabled/up/down.
-- [ ] Popup: new "Rule health" roll-up above the firewall log
-      showing dead / shadowed / broken counts.
+- [ ] **Phase B**: Broken-selector surfacing. content.js
+      already `try/catch`es `querySelectorAll` — collect which
+      selectors threw and report them back in the stats
+      message.
+- [ ] **Phase B**: Dead-rule distinction — walk the persistent
+      firewall-log in the background handler to compute
+      per-rule "never fired in this session" vs. "not fired
+      on this tab yet".
+- [ ] **Phase B**: Options editor: per-row health badge (dot
+      indicator + tooltip) next to disabled / up / down.
 
 ### Stage 13: Rule simulate
 

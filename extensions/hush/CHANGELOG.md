@@ -108,6 +108,29 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
   the detector keeps surfacing matches while a rule is parked.
   Regression test locks the dedup behaviour.
 
+### Stage 12: rule lint (shadow + zero-match)
+- New `src/lint.rs` module with `block_shadowed_by()`: pure
+  function returning the first allow rule whose normalized URL
+  filter is a prefix of a given block pattern. Matches the
+  "broader allow covers narrower block" audit case that makes
+  a block rule DNR-unreachable. 9 unit tests cover prefix /
+  caret normalization / disabled / empty / first-wins ordering.
+- Popup firewall log uses `lint::block_shadowed_by` to annotate
+  each block rule row with "shadowed by allow: <pattern>" when
+  the block is dominated. All allow rules from global + site
+  scopes are collected once per filter pass so shadow lookup
+  is O(allow_count) per block instead of re-walking config.
+- Zero-match selector detection: remove/hide rules whose on-tab
+  stats map reports count=0 render a "no DOM match on this tab"
+  badge. Only active in This-tab view so an All-tabs roll-up
+  doesn't false-flag a selector that matches elsewhere.
+- Firewall log header gains a rule-health roll-up: "N hits ·
+  X shadowed · Y zero-match" when either count is non-zero.
+- Deferred to Stage 12b: options-editor per-rule badges, broken-
+  selector detection (currently swallowed by content.js
+  try/catch), and dead-vs-no-hits distinction (requires walking
+  the firewall log server-side).
+
 ### Stage 11: auto-tags
 - Every `Suggestion` now carries the originating detector's
   canonical signal kind in a new `kind` field (`"beacon"`,
