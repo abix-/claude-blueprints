@@ -7,6 +7,30 @@ this file is chronology.
 
 ## Stage 5 (in progress): Options + content-script cleanup
 
+**Iter 6 (content.rs)**: the content script ported to Rust/WASM in
+one pass. `src/content.rs` (~1000 LOC) owns every subsystem that
+lived in `content.js`: layer application (`apply_remove`,
+`inject_hide_css`, `recount_hide`), DOM scans
+(`scan_hidden_iframes`, `scan_sticky_overlays`, `describe_element`),
+the `PerformanceObserver` resource stream, the `MutationObserver`
+that re-applies Remove on DOM mutations, the `__hush_call__` event
+listener that validates payloads against `SignalPayload` and
+flattens into `JsCall`, the `chrome.runtime.onMessage` listener for
+`hush:scan-once`, and the three fire-and-forget message senders
+(`hush:scan`, `hush:stats`, `hush:js-calls`, `hush:log`). Per-tab
+state lives in a `thread_local! { static STATE:
+RefCell<Option<ContentState>> }`; closures are pinned in a second
+`thread_local!` `Vec<Box<dyn Any>>` so the MutationObserver and
+PerformanceObserver callbacks don't get dropped while the tab is
+live. `content.js` collapsed from 464 LOC to a 32-line dynamic-
+import bootstrap that reads `chrome.storage.local` and hands the
+three-key snapshot to `hushContentMain`. Cargo.toml grew web-sys
+features for `PerformanceObserver`, `MutationObserver`,
+`HtmlIFrameElement`, `HtmlStyleElement`, `Location`, and the
+related init bags.
+
+
+
 **Iter 5 (site list + per-site editor)**: the last big
 per-site-config UI port. `ConfigEditor` owns the full
 `Config = IndexMap<String, SiteConfig>` as an `RwSignal` plus a

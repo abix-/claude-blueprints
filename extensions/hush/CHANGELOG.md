@@ -83,6 +83,17 @@ changes expected).
   from 285 lines to 34 (pure bootstrap); the `.two-pane` /
   `.sidebar` / `.detail` HTML removed in favor of a single
   `#rust-config-root` div.
+- Iter 6: content script ported to Rust/WASM. `src/content.rs`
+  owns layer application (Remove + Hide CSS injection), DOM scans
+  (hidden iframes + sticky overlays + element description), the
+  `PerformanceObserver` resource stream, the `MutationObserver`
+  that re-applies Remove on mutations, and the `__hush_call__`
+  main-world bridge that validates payloads against `SignalPayload`
+  before buffering them as `JsCall` entries. `content.js` collapsed
+  from 464 LOC to a 32-line dynamic-import bootstrap. Cargo.toml
+  grew web-sys features for `PerformanceObserver`,
+  `MutationObserver`, `HtmlIFrameElement`, `HtmlStyleElement`,
+  `Location`, and related init bags.
 
 ## [0.10.0] - 2026-04-19
 

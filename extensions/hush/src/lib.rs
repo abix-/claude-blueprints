@@ -12,6 +12,7 @@ mod allowlist;
 mod canon;
 mod chrome_bridge;
 mod compute;
+mod content;
 mod detectors;
 mod learn;
 mod main_world;
