@@ -230,6 +230,28 @@
     } catch (e) { /* extension context gone */ }
   });
 
+  // Neuter + silence hit relays. Same shape as spoof-hit:
+  // mainworld dedups per (origin, page), fires at most once per
+  // matching origin per page load.
+  function relayHit(type, d) {
+    if (!d || typeof d !== "object") return;
+    try {
+      const p = chrome.runtime.sendMessage({
+        type,
+        t: String(d.t || new Date().toISOString()),
+        origin: String(d.origin || ""),
+        match: String(d.match || "")
+      });
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    } catch (e) { /* extension context gone */ }
+  }
+  document.addEventListener("__hush_neuter_hit__", (ev) => {
+    relayHit("hush:neuter-hit", ev && ev.detail);
+  });
+  document.addEventListener("__hush_silence_hit__", (ev) => {
+    relayHit("hush:silence-hit", ev && ev.detail);
+  });
+
   // --------------------------------------------------------------
   // Main-world hook bridge.
   //
@@ -360,11 +382,13 @@
   }
 
   const cfg = {
-    hide:   mergeArrays(globalCfg && globalCfg.hide,   siteCfg && siteCfg.hide),
-    remove: mergeArrays(globalCfg && globalCfg.remove, siteCfg && siteCfg.remove),
-    block:  mergeArrays(globalCfg && globalCfg.block,  siteCfg && siteCfg.block),
-    allow:  mergeArrays(globalCfg && globalCfg.allow,  siteCfg && siteCfg.allow),
-    spoof:  mergeArrays(globalCfg && globalCfg.spoof,  siteCfg && siteCfg.spoof)
+    hide:    mergeArrays(globalCfg && globalCfg.hide,    siteCfg && siteCfg.hide),
+    remove:  mergeArrays(globalCfg && globalCfg.remove,  siteCfg && siteCfg.remove),
+    block:   mergeArrays(globalCfg && globalCfg.block,   siteCfg && siteCfg.block),
+    allow:   mergeArrays(globalCfg && globalCfg.allow,   siteCfg && siteCfg.allow),
+    neuter:  mergeArrays(globalCfg && globalCfg.neuter,  siteCfg && siteCfg.neuter),
+    silence: mergeArrays(globalCfg && globalCfg.silence, siteCfg && siteCfg.silence),
+    spoof:   mergeArrays(globalCfg && globalCfg.spoof,   siteCfg && siteCfg.spoof)
   };
   // Build a selector -> originating-scope map so the firewall-log
   // event stream can attribute each hit back to the same row the
@@ -402,6 +426,22 @@
   if (cfg.spoof.length) {
     try {
       document.documentElement.dataset.hushSpoof = cfg.spoof.join(",");
+    } catch (e) { /* documentElement not ready yet */ }
+  }
+  // Neuter and silence rules carry uBlock-style URL filters that
+  // mainworld matches against the initiating-script stack origin.
+  // Same write-and-read-at-call-time pattern as spoof — mainworld
+  // reads the dataset every addEventListener / fetch / XHR / beacon
+  // call so ordering between content-script and mainworld installs
+  // doesn't matter.
+  if (cfg.neuter.length) {
+    try {
+      document.documentElement.dataset.hushNeuter = cfg.neuter.join(",");
+    } catch (e) { /* documentElement not ready yet */ }
+  }
+  if (cfg.silence.length) {
+    try {
+      document.documentElement.dataset.hushSilence = cfg.silence.join(",");
     } catch (e) { /* documentElement not ready yet */ }
   }
 

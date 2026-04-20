@@ -51,7 +51,7 @@ async function migrateConfigSchema() {
     await chrome.storage.local.set({ configSchemaVersion: CURRENT });
     return;
   }
-  const FIELDS = ["block", "allow", "remove", "hide", "spoof"];
+  const FIELDS = ["block", "allow", "neuter", "silence", "remove", "hide", "spoof"];
   const next = {};
   let converted = 0;
   for (const [domain, cfg] of Object.entries(config)) {

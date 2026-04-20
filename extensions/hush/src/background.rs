@@ -1273,6 +1273,14 @@ fn handle_message(msg: JsValue, sender: JsValue, send_response: JsValue) -> JsVa
             handle_spoof_hit(&msg, &sender);
             JsValue::UNDEFINED
         }
+        "hush:neuter-hit" => {
+            handle_main_world_hit(&msg, &sender, "neuter");
+            JsValue::UNDEFINED
+        }
+        "hush:silence-hit" => {
+            handle_main_world_hit(&msg, &sender, "silence");
+            JsValue::UNDEFINED
+        }
         "hush:log" => {
             handle_log(&msg, &sender);
             JsValue::UNDEFINED
@@ -1471,6 +1479,54 @@ fn handle_spoof_hit(msg: &JsValue, sender: &JsValue) {
             scope,
             match_: kind,
             evidence: FirewallEvidence::None {},
+            tab_id,
+        },
+    );
+    schedule_persist_stats();
+}
+
+/// Shared handler for main-world enforced actions (`neuter`,
+/// `silence`). Both have the same wire shape — origin that matched,
+/// rule value that matched — and both attribute to whichever scope
+/// authored the rule. We resolve scope through the same
+/// matched-domain heuristic `handle_spoof_hit` uses.
+fn handle_main_world_hit(msg: &JsValue, sender: &JsValue, action: &'static str) {
+    let Some(tab_id) = sender_tab_id(sender) else {
+        return;
+    };
+    let match_value = Reflect::get(msg, &JsValue::from_str("match"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .unwrap_or_default();
+    if match_value.is_empty() {
+        return;
+    }
+    let origin = Reflect::get(msg, &JsValue::from_str("origin"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .unwrap_or_default();
+    let t = Reflect::get(msg, &JsValue::from_str("t"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(iso_now);
+    let scope = spoof_scope_for_tab(tab_id, &match_value);
+    push_firewall_event(
+        tab_id,
+        FirewallEvent {
+            t,
+            rule_id: crate::types::rule_id(action, &scope, &match_value),
+            action: action.to_string(),
+            scope,
+            match_: match_value,
+            // Block variant reuses {url, resource_type}; for neuter /
+            // silence the URL is the initiating-script origin and
+            // resource_type stays None. Same shape = popup renders
+            // both via the existing Block path.
+            evidence: FirewallEvidence::Block {
+                url: origin,
+                resource_type: None,
+            },
             tab_id,
         },
     );
@@ -1791,6 +1847,8 @@ fn handle_accept_suggestion(msg: &JsValue, send_response: JsValue) {
                 "remove" => &mut entry.remove,
                 "block" => &mut entry.block,
                 "allow" => &mut entry.allow,
+                "neuter" => &mut entry.neuter,
+                "silence" => &mut entry.silence,
                 "spoof" => &mut entry.spoof,
                 _ => {
                     let reply = Object::new();

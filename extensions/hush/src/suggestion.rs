@@ -22,6 +22,11 @@ pub fn build_suggestion(input: &BuildSuggestionInput) -> Suggestion {
         SuggestionLayer::Block => &input.existing_block,
         SuggestionLayer::Remove => &input.existing_remove,
         SuggestionLayer::Hide => &input.existing_hide,
+        // Neuter / silence suggestions don't dedup yet — the
+        // detector pipeline doesn't populate their "existing"
+        // lists. Always-emit for now; revisit when the
+        // replay-listener detector upgrades to Neuter.
+        SuggestionLayer::Neuter | SuggestionLayer::Silence => &[],
     };
     let dedup_result = if existing_for_layer.iter().any(|v| v == &input.value) {
         "MATCH (should have been filtered)".to_string()

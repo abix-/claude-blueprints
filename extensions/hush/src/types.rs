@@ -16,14 +16,25 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-/// Which of the three layers a suggestion targets. Matches the JS runtime
-/// `layer` string field exactly.
+/// Which of the action layers a suggestion targets. Matches the JS
+/// runtime `layer` string field exactly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SuggestionLayer {
     Block,
     Remove,
     Hide,
+    /// Main-world action: deny capture-surface API registrations
+    /// (addEventListener for interaction events) from matching
+    /// script origins. Used by the replay-listener detector since
+    /// listener density is an upstream signal — neutering the
+    /// registration is more useful than blocking the URL.
+    Neuter,
+    /// Main-world action: short-circuit outbound fetch/XHR/beacon
+    /// calls from matching script origins with a fake success.
+    /// Fallback for cases where neuter can't match (bundled
+    /// first-party replay libraries).
+    Silence,
 }
 
 /// A suggestion surfaced in the popup. Every detector path in the engine
@@ -341,10 +352,25 @@ pub struct SiteConfig {
     pub block: Vec<RuleEntry>,
     /// Counter-rules to Block/Remove/Hide. A matching `allow` rule
     /// overrides a broader Block (via DNR priority) or excludes
-    /// matching nodes from Remove/Hide. Empty until Stage 9's
-    /// evaluator lands; reserved here so the schema is stable.
+    /// matching nodes from Remove/Hide.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub allow: Vec<RuleEntry>,
+    /// Main-world action: deny capture-surface API registrations
+    /// (interaction-event `addEventListener` calls) from matching
+    /// script origins. Each entry's `value` is a uBlock-style
+    /// URL filter matched against the caller's stack origin.
+    /// Runs at document_start before any page script; legitimate
+    /// site listeners from non-matching origins register normally.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub neuter: Vec<RuleEntry>,
+    /// Main-world action: intercept outbound fetch/XHR/sendBeacon
+    /// calls whose initiating-script origin matches and return a
+    /// fake success (204 No Content / XHR state 4 / beacon-true).
+    /// Fallback for bundled first-party replay libraries where
+    /// `neuter` can't match by origin. Each entry's `value` is a
+    /// uBlock-style URL filter against the stack origin host.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub silence: Vec<RuleEntry>,
     /// Fingerprint signals to neutralize for this site. Each entry
     /// is a kind tag; the main-world hook checks the tag and returns
     /// bland, identical-across-users values instead of the real ones.
@@ -404,6 +430,8 @@ pub fn merged_site_config(config: &Config, hostname_key: &str) -> SiteConfig {
         remove: merge(&g.remove, &s.remove),
         block: merge(&g.block, &s.block),
         allow: merge(&g.allow, &s.allow),
+        neuter: merge(&g.neuter, &s.neuter),
+        silence: merge(&g.silence, &s.silence),
         spoof: merge(&g.spoof, &s.spoof),
     }
 }
@@ -823,6 +851,59 @@ mod rule_entry_tests {
 
         let untagged = RuleEntry::from_accepted_suggestion("||t.test", "");
         assert!(untagged.tags.is_empty(), "empty kind skips the stamp");
+    }
+
+    #[test]
+    fn neuter_and_silence_roundtrip_through_site_config() {
+        // Stage 14: both new actions serialize and deserialize as
+        // plain `Vec<RuleEntry>`. Empty fields stay elided; populated
+        // fields round-trip metadata just like block/allow.
+        let cfg = SiteConfig {
+            neuter: vec![RuleEntry::new("||hotjar.com")],
+            silence: vec![RuleEntry {
+                value: "||static.hotjar.com".into(),
+                disabled: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let back: SiteConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.neuter.len(), 1);
+        assert_eq!(back.neuter[0].value, "||hotjar.com");
+        assert_eq!(back.silence.len(), 1);
+        assert!(back.silence[0].disabled);
+    }
+
+    #[test]
+    fn merged_site_config_merges_neuter_and_silence() {
+        // Stage 14: `merged_site_config` must include the new
+        // fields. Without this, global neuter/silence rules would
+        // silently drop on sites that also have any site-scoped
+        // config present.
+        let mut cfg = Config::new();
+        cfg.insert(
+            GLOBAL_SCOPE_KEY.into(),
+            SiteConfig {
+                neuter: vec![RuleEntry::new("||hotjar.com")],
+                silence: vec![RuleEntry::new("||fullstory.com")],
+                ..Default::default()
+            },
+        );
+        cfg.insert(
+            "site.test".into(),
+            SiteConfig {
+                neuter: vec![RuleEntry::new("||site-analytics.example.com")],
+                ..Default::default()
+            },
+        );
+        let merged = merged_site_config(&cfg, "site.test");
+        assert_eq!(merged.neuter.len(), 2);
+        assert_eq!(merged.silence.len(), 1);
+        let neuter_values: Vec<&str> =
+            merged.neuter.iter().map(|e| e.value.as_str()).collect();
+        assert!(neuter_values.contains(&"||hotjar.com"));
+        assert!(neuter_values.contains(&"||site-analytics.example.com"));
     }
 
     #[test]

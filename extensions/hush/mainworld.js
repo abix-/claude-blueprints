@@ -43,6 +43,113 @@
     } catch (e) { /* ignore — detached document */ }
   }
 
+  // Same dedup shape for neuter + silence — one event per
+  // (type, origin, page). Each set is keyed by the matched origin
+  // host so different replay vendors on the same page each get a
+  // firewall-log row.
+  const hushNeuterEmitted = new Set();
+  const hushSilenceEmitted = new Set();
+  function emitHit(type, origin, match) {
+    const set = type === "neuter" ? hushNeuterEmitted : hushSilenceEmitted;
+    if (set.has(origin)) return;
+    set.add(origin);
+    try {
+      document.dispatchEvent(new CustomEvent("__hush_" + type + "_hit__", {
+        detail: {
+          t: new Date().toISOString(),
+          origin: String(origin),
+          match: String(match || "")
+        }
+      }));
+    } catch (e) { /* ignore */ }
+  }
+
+  // Extract the initiating-script host from a V8 stack. Mirrors
+  // src/stack.rs::script_origin_from_stack — can't call wasm from
+  // mainworld (CSP), so reimplement the ~10 lines here. Skips Hush's
+  // own `mainworld.js` frames so we attribute to the real caller.
+  function stackOriginHost(stack) {
+    if (!Array.isArray(stack)) return "";
+    for (let i = 0; i < stack.length; i++) {
+      const frame = stack[i];
+      if (typeof frame !== "string") continue;
+      if (frame.indexOf("mainworld.js") >= 0) continue;
+      const http = frame.indexOf("http://");
+      const https = frame.indexOf("https://");
+      let start = -1;
+      if (http >= 0 && https >= 0) start = Math.min(http, https);
+      else if (http >= 0) start = http;
+      else if (https >= 0) start = https;
+      else continue;
+      const rest = frame.slice(start);
+      let end = rest.length;
+      for (let j = 0; j < rest.length; j++) {
+        const c = rest.charCodeAt(j);
+        if (c === 41 /* ) */ || c === 32 /* space */ || c === 9 /* tab */) {
+          end = j;
+          break;
+        }
+      }
+      try {
+        const u = new URL(rest.slice(0, end));
+        return u.host;
+      } catch (e) { /* not a URL, keep scanning */ }
+    }
+    return "";
+  }
+
+  // uBlock-style URL filter match against a host. Strips `||`
+  // anchor prefix and `^` boundary suffix. Returns the matched
+  // filter string on hit, "" on miss.
+  function matchesUrlFilter(host, rawFilter) {
+    if (!host || !rawFilter) return "";
+    let f = rawFilter;
+    if (f.startsWith("||")) f = f.slice(2);
+    if (f.endsWith("^")) f = f.slice(0, -1);
+    if (!f) return "";
+    // Anchored (||) = host is exactly `f` OR host ends with `.f`.
+    if (rawFilter.startsWith("||")) {
+      if (host === f || host.endsWith("." + f)) return rawFilter;
+      return "";
+    }
+    // Bare pattern = substring match on host.
+    return host.indexOf(f) >= 0 ? rawFilter : "";
+  }
+
+  // Parse the comma-separated dataset attribute into a filter list.
+  // Caller filters empty entries so the list is always usable.
+  function datasetFilters(name) {
+    try {
+      const raw = document.documentElement
+        && document.documentElement.dataset
+        && document.documentElement.dataset[name];
+      if (!raw) return [];
+      return String(raw).split(",").map(s => s.trim()).filter(Boolean);
+    } catch (e) { return []; }
+  }
+
+  // Find the first filter in dataset.<attr> that matches the host.
+  // Returns "" on no match.
+  function findFilterMatch(host, attr) {
+    if (!host) return "";
+    const filters = datasetFilters(attr);
+    for (let i = 0; i < filters.length; i++) {
+      const m = matchesUrlFilter(host, filters[i]);
+      if (m) return m;
+    }
+    return "";
+  }
+
+  // Interaction event types the neuter rule denies. Keep aligned
+  // with the replay-listener detector's own set so "we detected
+  // this signal, we neutralize it" is a 1:1 story.
+  const NEUTER_EVENT_TYPES = new Set([
+    "mousemove", "mousedown", "mouseup", "click",
+    "keydown", "keyup", "keypress", "input",
+    "scroll", "wheel",
+    "touchmove", "touchstart", "touchend"
+  ]);
+
   function cap() {
     try {
       const s = new Error().stack || "";
@@ -116,14 +223,25 @@
   try {
     const _fetch = captureOrig(window, "fetch");
     window.fetch = function hushFetch(input, init) {
+      const stack = cap();
       try {
         emit({
           kind: "fetch",
           url: urlOf(input),
           method: (init && init.method) || (input && input.method) || "GET",
           bodyPreview: previewBody(init && init.body),
-          stack: cap()
+          stack
         });
+      } catch (e) {}
+      // Silence: if the initiating-script origin matches a
+      // silence rule, skip the real fetch and fake a 204.
+      try {
+        const origin = stackOriginHost(stack);
+        const match = findFilterMatch(origin, "hushSilence");
+        if (match) {
+          emitHit("silence", origin, match);
+          return Promise.resolve(new Response(null, { status: 204 }));
+        }
       } catch (e) {}
       const p = _fetch.apply(this, arguments);
       if (p && typeof p.catch === "function") p.catch(() => {});
@@ -140,14 +258,39 @@
       return _open.apply(this, arguments);
     };
     XMLHttpRequest.prototype.send = function hushXhrSend(body) {
+      const stack = cap();
       try {
         emit({
           kind: "xhr",
           url: this.__hush_url || "",
           method: this.__hush_method || "",
           bodyPreview: previewBody(body),
-          stack: cap()
+          stack
         });
+      } catch (e) {}
+      // Silence: fake a 204 completion without touching the wire.
+      // The readystatechange dispatch mirrors what an HTTP 204
+      // response would look like from the page's perspective so
+      // callers that poll readyState don't hang.
+      try {
+        const origin = stackOriginHost(stack);
+        const match = findFilterMatch(origin, "hushSilence");
+        if (match) {
+          emitHit("silence", origin, match);
+          const xhr = this;
+          setTimeout(() => {
+            try {
+              Object.defineProperty(xhr, "readyState", { value: 4, configurable: true });
+              Object.defineProperty(xhr, "status", { value: 204, configurable: true });
+              Object.defineProperty(xhr, "statusText", { value: "No Content", configurable: true });
+              Object.defineProperty(xhr, "responseText", { value: "", configurable: true });
+              xhr.dispatchEvent(new Event("readystatechange"));
+              xhr.dispatchEvent(new Event("load"));
+              xhr.dispatchEvent(new Event("loadend"));
+            } catch (e) { /* XHR already finalized */ }
+          }, 0);
+          return;
+        }
       } catch (e) {}
       return _send.apply(this, arguments);
     };
@@ -159,13 +302,26 @@
       const _sendBeacon = navigator.sendBeacon.bind(navigator);
       orig["Navigator.sendBeacon"] = _sendBeacon;
       navigator.sendBeacon = function hushSendBeacon(url, body) {
+        const stack = cap();
         try {
           emit({
             kind: "beacon",
             url: typeof url === "string" ? url : String(url),
             bodyPreview: previewBody(body),
-            stack: cap()
+            stack
           });
+        } catch (e) {}
+        // Silence: per MDN, sendBeacon returns boolean indicating
+        // whether the UA queued the transfer. `true` is the "all
+        // good" answer the replay lib expects — we never send,
+        // they never know.
+        try {
+          const origin = stackOriginHost(stack);
+          const match = findFilterMatch(origin, "hushSilence");
+          if (match) {
+            emitHit("silence", origin, match);
+            return true;
+          }
         } catch (e) {}
         return _sendBeacon(url, body);
       };
@@ -296,12 +452,32 @@
       "scroll", "touchmove", "touchstart", "touchend"
     ]);
     EventTarget.prototype.addEventListener = function hushAddEventListener(type) {
+      const typeIsInteraction = typeof type === "string"
+        && (REPLAY_EVENT_TYPES.has(type) || NEUTER_EVENT_TYPES.has(type));
+      let stack = null;
       try {
-        if (typeof type === "string" && REPLAY_EVENT_TYPES.has(type)) {
+        if (typeIsInteraction) {
           const onDocLike = (this === document || this === window ||
                              (typeof document !== "undefined" && this === document.body));
           if (onDocLike) {
-            emit({ kind: "listener-added", eventType: type, stack: cap() });
+            stack = cap();
+            emit({ kind: "listener-added", eventType: type, stack });
+          }
+        }
+      } catch (e) {}
+      // Neuter: deny interaction-event registrations from matching
+      // script origins. Runs before the real addEventListener so
+      // the listener never binds — no CPU burn per interaction, no
+      // capture, no exfil. Legitimate site listeners from other
+      // origins pass through untouched.
+      try {
+        if (typeIsInteraction && NEUTER_EVENT_TYPES.has(type)) {
+          if (!stack) stack = cap();
+          const origin = stackOriginHost(stack);
+          const match = findFilterMatch(origin, "hushNeuter");
+          if (match) {
+            emitHit("neuter", origin, match);
+            return undefined;
           }
         }
       } catch (e) {}

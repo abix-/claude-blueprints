@@ -1884,11 +1884,15 @@ where
         SuggestionLayer::Block => "block",
         SuggestionLayer::Remove => "remove",
         SuggestionLayer::Hide => "hide",
+        SuggestionLayer::Neuter => "neuter",
+        SuggestionLayer::Silence => "silence",
     };
     let layer_color = match suggestion.layer {
         SuggestionLayer::Block => "#d85c4f",
         SuggestionLayer::Remove => "#d89a4f",
         SuggestionLayer::Hide => "#6b8ad4",
+        SuggestionLayer::Neuter => "#6b5cd4",
+        SuggestionLayer::Silence => "#4fa89a",
     };
 
     // Disable the row during an in-flight action so double-click
@@ -2106,6 +2110,8 @@ fn WhyPanel(diag: SuggestionDiag) -> impl IntoView {
         SuggestionLayer::Block => "block",
         SuggestionLayer::Remove => "remove",
         SuggestionLayer::Hide => "hide",
+        SuggestionLayer::Neuter => "neuter",
+        SuggestionLayer::Silence => "silence",
     };
     let tab_host = if diag.tab_hostname.is_empty() {
         "(unknown)".to_string()
