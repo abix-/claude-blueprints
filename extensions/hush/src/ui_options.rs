@@ -872,13 +872,13 @@ fn LayerSection(
     let rows = {
         let domain = domain.clone();
         move || {
-            let entries: Vec<(String, bool)> = config.with(|c| {
+            let entries: Vec<(String, bool, Vec<String>, Option<String>)> = config.with(|c| {
                 c.get(&domain)
                     .map(|cfg| {
                         layer
                             .read(cfg)
                             .iter()
-                            .map(|e| (e.value.clone(), e.disabled))
+                            .map(|e| (e.value.clone(), e.disabled, e.tags.clone(), e.comment.clone()))
                             .collect()
                     })
                     .unwrap_or_default()
@@ -889,10 +889,11 @@ fn LayerSection(
                 }
                 .into_any()
             } else {
+                let entries_len = entries.len();
                 entries
                     .into_iter()
                     .enumerate()
-                    .map(|(idx, (text, disabled))| {
+                    .map(|(idx, (text, disabled, tags, comment))| {
                         let d = domain.clone();
                         let title = text.clone();
                         let body = text.clone();
@@ -926,25 +927,146 @@ fn LayerSection(
                                 persist_config(config);
                             }
                         };
-                        let text_style = if disabled {
-                            "text-decoration: line-through; color: #999;"
-                        } else {
-                            ""
+                        // Reorder: swap idx with idx-1 (up) or idx+1
+                        // (down). First-match-wins ordering makes this
+                        // meaningful once Allow overrides land.
+                        let on_up = {
+                            let d = d.clone();
+                            move |_| {
+                                let d = d.clone();
+                                if idx == 0 {
+                                    return;
+                                }
+                                config.update(|c| {
+                                    if let Some(entry) = c.get_mut(&d) {
+                                        let arr = layer.modify(entry);
+                                        if idx < arr.len() {
+                                            arr.swap(idx, idx - 1);
+                                        }
+                                    }
+                                });
+                                persist_config(config);
+                            }
                         };
+                        let on_down = {
+                            let d = d.clone();
+                            move |_| {
+                                let d = d.clone();
+                                config.update(|c| {
+                                    if let Some(entry) = c.get_mut(&d) {
+                                        let arr = layer.modify(entry);
+                                        if idx + 1 < arr.len() {
+                                            arr.swap(idx, idx + 1);
+                                        }
+                                    }
+                                });
+                                persist_config(config);
+                            }
+                        };
+                        let on_tags_change = {
+                            let d = d.clone();
+                            move |ev: web_sys::Event| {
+                                let val = ev.target()
+                                    .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+                                    .map(|i| i.value())
+                                    .unwrap_or_default();
+                                let tags: Vec<String> = val
+                                    .split(',')
+                                    .map(|s| s.trim().to_string())
+                                    .filter(|s| !s.is_empty())
+                                    .collect();
+                                let d = d.clone();
+                                config.update(|c| {
+                                    if let Some(entry) = c.get_mut(&d) {
+                                        let arr = layer.modify(entry);
+                                        if let Some(row) = arr.get_mut(idx) {
+                                            row.tags = tags;
+                                        }
+                                    }
+                                });
+                                persist_config(config);
+                            }
+                        };
+                        let on_comment_change = {
+                            let d = d.clone();
+                            move |ev: web_sys::Event| {
+                                let val = ev.target()
+                                    .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+                                    .map(|i| i.value())
+                                    .unwrap_or_default();
+                                let trimmed = val.trim().to_string();
+                                let d = d.clone();
+                                config.update(|c| {
+                                    if let Some(entry) = c.get_mut(&d) {
+                                        let arr = layer.modify(entry);
+                                        if let Some(row) = arr.get_mut(idx) {
+                                            row.comment = if trimmed.is_empty() {
+                                                None
+                                            } else {
+                                                Some(trimmed.clone())
+                                            };
+                                        }
+                                    }
+                                });
+                                persist_config(config);
+                            }
+                        };
+                        let text_style = if disabled {
+                            "text-decoration: line-through; color: #999; flex: 1;"
+                        } else {
+                            "flex: 1;"
+                        };
+                        let tag_value = tags.join(", ");
+                        let comment_value = comment.unwrap_or_default();
+                        let btn_style = "border: 1px solid #ccc; background: #fff; \
+                                         color: #444; padding: 0 5px; line-height: 18px; \
+                                         border-radius: 3px; cursor: pointer; font-size: 11px;";
+                        let up_disabled = idx == 0;
+                        let down_disabled = idx + 1 >= entries_len;
+                        let meta_input_style = "font-size: 11px; padding: 1px 5px; \
+                                                border: 1px solid #e0e0e0; border-radius: 3px;";
                         view! {
-                            <li>
-                                <input type="checkbox"
-                                       class="rule-enable"
-                                       title=if disabled { "Enable" } else { "Disable" }
-                                       prop:checked=!disabled
-                                       on:change=on_toggle
-                                       style="margin-right: 6px;" />
-                                <span class="text" title=title style=text_style>{body}</span>
-                                <button class="del"
-                                        title="Delete"
-                                        on:click=on_del>
-                                    "\u{00d7}"
-                                </button>
+                            <li style="flex-direction: column; align-items: stretch; gap: 3px;">
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox"
+                                           class="rule-enable"
+                                           title=if disabled { "Enable" } else { "Disable" }
+                                           prop:checked=!disabled
+                                           on:change=on_toggle />
+                                    <span class="text" title=title style=text_style>{body}</span>
+                                    <button title="Move up"
+                                            prop:disabled=up_disabled
+                                            on:click=on_up
+                                            style=btn_style>
+                                        "\u{2191}"
+                                    </button>
+                                    <button title="Move down"
+                                            prop:disabled=down_disabled
+                                            on:click=on_down
+                                            style=btn_style>
+                                        "\u{2193}"
+                                    </button>
+                                    <button class="del"
+                                            title="Delete"
+                                            on:click=on_del>
+                                        "\u{00d7}"
+                                    </button>
+                                </div>
+                                <div style="display: flex; gap: 4px; font-size: 11px;
+                                            color: #666; padding-left: 22px;">
+                                    <input type="text"
+                                           spellcheck="false"
+                                           placeholder="tags (comma-separated)"
+                                           style=format!("{} width: 180px;", meta_input_style)
+                                           prop:value=tag_value
+                                           on:change=on_tags_change />
+                                    <input type="text"
+                                           spellcheck="false"
+                                           placeholder="comment"
+                                           style=format!("{} flex: 1;", meta_input_style)
+                                           prop:value=comment_value
+                                           on:change=on_comment_change />
+                                </div>
                             </li>
                         }
                     })

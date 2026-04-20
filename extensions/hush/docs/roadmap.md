@@ -35,9 +35,12 @@ Stage 7: **Closeout** — global scope, rule_id / unified event
 platform, and firewall-log popup shipped. Remaining: hide/spoof
 event emission + per-rule disable toggle.
 Stage 8: More spoof kinds (`canvas`, `audio`, `font-enum`).
-Stage 9: **PA primitives** — allow action, rule ordering,
-persistent searchable log, rule tags. This is the shape-change
-that makes Hush a real firewall, not a blocker list.
+Stage 9: **PA primitives shipped** — allow action (DNR priority
+override + selector exclusion), rule ordering (up/down reorder in
+options), persistent searchable firewall log (global FIFO in
+chrome.storage.session, 10k cap, filter + search in popup), rule
+tags + comments + per-rule disable toggle. Hush now matches the
+Palo-Alto mental model the architecture doc promises.
 Stage 10: Rule import/export profiles (rides on Stage 9
 primitives).
 
@@ -270,14 +273,18 @@ in the log referencing the overridden block rule's ID.*
       navigation. Popup filters by `tab_id` (This tab / All tabs),
       action (block/allow/remove/hide/spoof), and substring
       search across rule_id / match / url / element description.
-- [ ] Options UI: up/down reorder buttons on every rule row;
-      new Allow section next to Block/Remove/Hide/Spoof; tag
-      input (comma-separated); comment field.
-- [ ] Popup firewall-log UI: search box (URL / match /
-      rule_id substring), action filter, tag filter chips,
-      "This tab" vs "All tabs" toggle.
+- [x] Options UI: up/down reorder buttons on every rule row;
+      new Allow section next to Block/Remove/Hide/Spoof
+      (shipped in phase 2); tag input (comma-separated);
+      comment field.
+- [x] Popup firewall-log UI: search box (URL / match /
+      rule_id substring), action filter, "This tab" vs "All
+      tabs" toggle. Tag filter chips deferred — tags are
+      authored now but usage is sparse; the log is filterable
+      via substring search against any tag string. Revisit if
+      users accumulate enough tags that chips become useful.
 - [ ] Bench: `compute_suggestions` Criterion before/after;
-      expected no regression.
+      expected no regression. Needs local run outside k3s.
 
 ### Stage 10: Rule import/export profiles
 

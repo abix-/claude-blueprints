@@ -108,6 +108,21 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
   the detector keeps surfacing matches while a rule is parked.
   Regression test locks the dedup behaviour.
 
+### Stage 9 phase 5: rule reorder + tags + comments
+- Every rule row in the options editor now has up/down move
+  buttons. `Vec::swap` in place, persisted immediately.
+  `first` row's up-arrow and last row's down-arrow render
+  disabled so the UI telegraphs the bounds.
+- Second sub-line on every row: `tags` (comma-separated; parsed
+  on change into `Vec<String>`, empty entries trimmed) and
+  `comment` (free-form; stored as `Option<String>`, `None` when
+  the field is blank). Both use the `on:change` event so the
+  write doesn't fire on every keystroke.
+- Stored shape on disk stays identical — `skip_serializing_if`
+  on the new `tags` + `comment` fields means a rule without
+  metadata still serializes as `{"value": "..."}` and a rule
+  with metadata adds only the fields in use. No migration.
+
 ### Stage 4 progress: popup UI porting to Leptos
 - Iter 1 scaffold: Leptos 0.8 + `src/ui_popup.rs` + `mountPopup`
   wasm-bindgen export + `popup.js` bootstrap + `<div
