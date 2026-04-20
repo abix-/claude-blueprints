@@ -105,6 +105,40 @@ changes expected).
   from 148 LOC to 20. Stage 5 bootstrap-LOC goal met: popup 20 +
   options 34 + content 32 = 86 across the three shims.
 
+### Stage 7: Firewall-style rule engine (in progress)
+- Iter 1: global scope. Reserved `__global__` key in the existing
+  `Config` map; rules under it apply to every tab alongside
+  site-scoped rules. Content script merges global + site at
+  evaluation time; options UI pins "Global (all sites)" at the top
+  of the site list with a locked header (no rename, no delete).
+  New `types::merged_site_config` helper; `types::GLOBAL_SCOPE_KEY`
+  constant.
+- Iter 2: unified firewall-event platform. `FirewallEvent` type
+  (`{t, rule_id, action, scope, match, evidence}`) with
+  action-tagged `FirewallEvidence` (Block / Remove / None). Stable
+  `rule_id` format: `"{action}::{scope}::{match}"` — matches
+  suggestion-key format. Per-tab ring buffer (cap 500) in
+  `BackgroundState.tab_events`; wired into DNR `onRuleMatchedDebug`
+  and `hush:stats.newRemovedElements` so block + remove hits both
+  emit events. `hush:get-firewall-events` message handler +
+  `chrome_bridge::get_firewall_events` helper.
+- Iter 3: popup Firewall Log section. `FirewallLog` +
+  `FirewallLogRow` + `FirewallEvidence` Leptos components at the
+  top of the diagnostic sections. Aggregates events by `rule_id`;
+  one row per rule with BLOCK/REMOVE/HIDE/SPOOF badge, scope tag
+  (`global` vs hostname), match string, hit count, last-hit
+  timestamp, click-to-expand recent-evidence panel.
+- Fix: `compute_suggestions` dedup now merges global + site
+  scopes. Without the merge, a global block rule wouldn't suppress
+  a matching suggestion (the suggestion kept re-firing every
+  scan). Regression test
+  (`global_scope_block_rule_suppresses_suggestion`) locks it.
+- Fix: remove events now carry their originating scope so the
+  firewall log attributes hits to the same row the rule
+  enumeration shows. Previously a rule authored under `__global__`
+  showed a zero-hit row and the events landed on the matched-site
+  scope, producing confusing double entries.
+
 ### Service worker port (background.js -> Rust)
 - `src/background.rs` ports the 988-line background service worker
   to Rust. The new module owns every listener (onInstalled,

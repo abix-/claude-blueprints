@@ -30,12 +30,19 @@ and [history.md](history.md) for retired rollout notes.
 
 ## Stages
 
-Stages 1, 2, and 3: [x] Complete (see [history.md](history.md))
+Stages 1-6: [x] Complete (see [history.md](history.md))
+Stage 7: **In progress** — global scope, rule_id / unified event
+platform, and firewall-log popup shipped. Remaining: per-rule
+disable toggle, import/export profiles, spoof/hide event emission
+to cover every action uniformly.
 
-**Current Sprint (priority order):**
+## Next up (priority order)
 
-1. Stage 4 popup UI in Leptos
-2. Then Stage 5 options UI + content script cleanup
+1. **Stage 7 remainder** — per-rule disable toggle (options editor
+   + evaluator skip), then spoof/hide event emission so every
+   action shows up in the firewall log uniformly.
+2. **Stage 8** — more spoof kinds: `canvas`, `audio`, `font-enum`.
+3. **Rule import/export profiles** — named bundles users can merge.
 
 ### Stage 3: Main-world hooks in Rust [x] Complete
 
@@ -159,25 +166,46 @@ history. The Palo-Alto-style "firewall log" mental model is the
 user-visible interface shape; see [architecture.md](architecture.md)
 for the background and rationale.*
 
-- [ ] Add a `global` scope to the config schema. Probably a
-      top-level `global: SiteConfig` field in the stored JSON
-      (IndexMap key collision-safe because domains can't start
-      with an underscore). Site-scoped rules layer on top.
-- [ ] Assign every stored rule a stable `rule_id`. Migration:
-      generate IDs on first load post-upgrade and persist them.
-- [ ] Unified firewall-log event shape. Extend the per-tab state
-      to hold a ring buffer of hit events per rule. Replace the
-      ad-hoc `blockedUrls` / `removedElements` / `hide` count
-      surfaces with views over the unified log.
-- [ ] New popup tab: "Firewall log". Each row: rule ID, scope,
-      action, match, hit count, most-recent match timestamp.
-      Click-to-expand shows the last 50 events with full evidence.
-- [ ] Per-rule disable toggle in the options editor. Implementation:
-      a boolean field on every rule row; rules whose `disabled =
-      true` are skipped at evaluation time (DNR sync excludes them,
-      content-script applier skips them).
-- [ ] Rule import/export profiles (later). Named bundles users can
-      merge into their config — e.g. "news-site baseline".
+- [x] Add a `global` scope to the config schema. Shipped as the
+      reserved `__global__` hostname key in the existing
+      `IndexMap<String, SiteConfig>` (no schema migration needed;
+      underscore-prefixed domains can't collide with real
+      hostnames). Content script merges global + site-scoped rules
+      at evaluation time; dedup in `compute_suggestions` checks
+      both scopes (`src/types.rs::merged_site_config`).
+- [x] Stable `rule_id` for every rule: deterministic
+      `"{action}::{scope}::{match}"` format
+      (`src/types.rs::rule_id`). Matches the suggestion-key
+      format so accepted suggestions and their resulting
+      firewall-log rows cross-reference cleanly. No persisted
+      ID migration because the format is purely derived.
+- [x] Unified firewall-log event shape
+      (`src/types.rs::FirewallEvent` with action-tagged
+      `FirewallEvidence` variants) + per-tab ring buffer (cap
+      500 events/tab) in `BackgroundState.tab_events`. Block hits
+      (DNR `onRuleMatchedDebug`) and Remove hits (`hush:stats`
+      `newRemovedElements`) both emit into the buffer; Remove
+      events carry their originating scope so the log row
+      matches the rule row.
+- [x] Popup Firewall Log section (`FirewallLog` + `FirewallLogRow`
+      + `FirewallEvidence` components in `src/ui_popup.rs`).
+      Aggregates events by `rule_id`; one row per rule with
+      action badge, scope tag, match, hit count, last-hit time;
+      click-to-expand recent evidence (last 20 events per rule).
+- [ ] **Next:** spoof/hide event emission. Today hide produces
+      no events (count-based, not event-based) and spoof is
+      silent in the log. Wire a main-world → content → bg
+      event path so both actions appear in the firewall log
+      alongside block/remove. Start with spoof (already has a
+      `__hush_call__` path we can piggyback on).
+- [ ] **Then:** per-rule disable toggle in the options editor.
+      Implementation: a boolean field on every rule row; rules
+      whose `disabled = true` are skipped at evaluation time
+      (DNR sync excludes them, content-script applier skips
+      them, compute_suggestions ignores them for dedup).
+- [ ] **Then:** rule import/export profiles. Named bundles users
+      can merge into their config — e.g. "news-site baseline",
+      "developer baseline".
 
 ### Stage 8: More spoof kinds
 

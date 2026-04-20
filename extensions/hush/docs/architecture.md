@@ -97,21 +97,23 @@ A Hush rule is a **(scope, action, match)** triple:
 
 ### The rule-hit event
 
-Every rule match is an event — Palo-Alto-style firewall log
-material. Today's implementation captures some of this, but the
-surface isn't uniform yet:
+Every rule match emits one [`FirewallEvent`](../src/types.rs)
+(`{t, rule_id, action, scope, match, evidence}`) into the
+per-tab ring buffer. The popup's **Firewall log** section reads
+the buffer and aggregates by `rule_id`, showing each rule's hit
+count + last-hit timestamp + expandable recent-evidence list.
 
-| Action | What's captured today | Where it surfaces |
-|---|---|---|
-| Block | URL, timestamp, pattern, resource type | Popup "Blocked (network)" section, per-URL evidence list |
-| Remove | Selector, timestamp, element description (tag + distinguishing attrs + text snippet) | Popup "Removed (DOM)" section, evidence list |
-| Hide | Selector, match count | Popup "Hidden (CSS)" section |
-| Spoof | — (not yet logged) | — |
+| Action | Event shape | Evidence | Status |
+|---|---|---|---|
+| Block | `FirewallEvent` | `{url, resourceType}` | ✅ shipped |
+| Remove | `FirewallEvent` | `{el}` (element description) | ✅ shipped |
+| Hide | `FirewallEvent` | `None` (count-only, no per-element events) | ⏳ next |
+| Spoof | `FirewallEvent` | `None` / kind-specific | ⏳ next |
 
-Planned unification: one firewall-log event shape `{rule_id,
-action, scope, match, observed_at, evidence}` written per hit, with
-a dedicated **Firewall log** tab in the popup and options UI showing
-per-rule hit counts and sortable/filterable event history.
+`rule_id` is derived as `"{action}::{scope}::{match}"` (see
+`src/types.rs::rule_id`) — the same format as suggestion keys, so
+an accepted suggestion's key matches the resulting rule's ID in
+the log.
 
 ## Runtime data flow
 
@@ -262,30 +264,31 @@ extensions/hush/
 
 ## Future stages
 
-These are the additions that round out the firewall-style
-interface; none are shipped yet. Tracked in [roadmap.md](roadmap.md).
+Tracked in [roadmap.md](roadmap.md).
 
-- **Global rules**. A `__global__` entry (or top-level `global`
-  field) in the config whose rules apply to every tab regardless
-  of hostname. Site-scoped rules still merge on top. Mental
-  model: site-specific overrides layered over a global default
-  policy.
-- **Unified firewall log**. Single event shape per rule hit
-  (`rule_id`, `action`, `scope`, `match`, `observed_at`,
-  `evidence`), indexed by rule. New popup tab + options section
-  listing each rule with hit count + most-recent-hits preview +
-  sortable/filterable event history, the way Palo Alto's
-  "Monitor → Traffic" view lists per-rule session counts.
-- **Per-rule disable toggle**. Each rule row gets a switch so the
+**Shipped**: global scope (reserved `__global__` key), stable
+per-rule IDs, unified `FirewallEvent` ring buffer, Palo-Alto-style
+firewall-log popup section aggregating by `rule_id`.
+
+**Next up** (in priority order):
+
+- **Hide + Spoof event emission.** Hide is count-based today
+  (CSS selector hit counts, not per-element events); Spoof is
+  silent. Wire a main-world → content → bg event path so both
+  actions show up in the firewall log uniformly alongside
+  block/remove.
+- **Per-rule disable toggle.** Each rule row gets a switch so the
   user can mute a rule temporarily without deleting it (useful
   for "let me see what the site does without this rule for a
-  moment").
-- **Rule import/export profiles**. Named rule bundles — e.g.
+  moment"). DNR sync excludes disabled rules; content-script
+  applier skips them; `compute_suggestions` ignores them for
+  dedup.
+- **Rule import/export profiles.** Named rule bundles — e.g.
   "news-site baseline" (telemetry beacons + generic overlay
   killers), "developer baseline" (session-replay vendors + GPU
   fingerprint spoof) — users can merge in on a per-machine basis.
-- **More spoof kinds**. `canvas` (return a fixed hash from
-  `toDataURL` / `getImageData`), `audio` (stub
+- **More spoof kinds** (Stage 8). `canvas` (return a fixed hash
+  from `toDataURL` / `getImageData`), `audio` (stub
   `OfflineAudioContext`), `font-enum` (return a fixed allowlist
   from `measureText`). Each follows the same content-script →
   dataset → main-world-hook pattern the WebGL spoof uses.
