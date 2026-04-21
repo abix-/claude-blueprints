@@ -24,6 +24,7 @@ pub enum LearnKind {
     FontFp,
     ReplayVendor,
     ReplayListener,
+    AttentionTracking,
     RafWaste,
 }
 
@@ -45,6 +46,7 @@ impl LearnKind {
             "font-fp" | "fontFp" => Self::FontFp,
             "replay-vendor" | "replayVendor" => Self::ReplayVendor,
             "listener-density" | "replay-listener" | "replayListener" => Self::ReplayListener,
+            "attention-tracking" | "attentionTracking" => Self::AttentionTracking,
             "raf-waste" | "rafWaste" => Self::RafWaste,
             _ => return None,
         })
@@ -70,6 +72,7 @@ impl LearnKind {
             Self::FontFp => "font-fp",
             Self::ReplayVendor => "replay-vendor",
             Self::ReplayListener => "listener-density",
+            Self::AttentionTracking => "attention-tracking",
             Self::RafWaste => "raf-waste",
         }
     }
@@ -89,6 +92,7 @@ impl LearnKind {
             Self::FontFp => TEXT_FONT_FP,
             Self::ReplayVendor => TEXT_REPLAY_VENDOR,
             Self::ReplayListener => TEXT_REPLAY_LISTENER,
+            Self::AttentionTracking => TEXT_ATTENTION_TRACKING,
             Self::RafWaste => TEXT_RAF_WASTE,
         }
     }
@@ -205,6 +209,17 @@ const TEXT_REPLAY_LISTENER: &str = concat!(
     "even when the vendor's global name is unknown or custom-built."
 );
 
+const TEXT_ATTENTION_TRACKING: &str = concat!(
+    "4+ page-lifecycle / visibility listeners (visibilitychange, focus, ",
+    "blur, pagehide, pageshow, beforeunload) attached to document / ",
+    "window / body from one script origin, shortly after page load. ",
+    "This is how session-replay vendors, engagement analytics, and A/B ",
+    "test frameworks measure dwell time, tab-aways, and exit timing. ",
+    "Legitimate sites rarely attach more than one or two of these, and ",
+    "usually not clustered. Neutering these listeners stops the capture ",
+    "without blocking the rest of the site's script."
+);
+
 const TEXT_RAF_WASTE: &str = concat!(
     "A script is continuously painting to a canvas that is hidden ",
     "(display:none, offscreen, sub-2px, or opacity 0). Burns CPU and ",
@@ -235,6 +250,7 @@ mod tests {
             ("font-fp", LearnKind::FontFp),
             ("replay-vendor", LearnKind::ReplayVendor),
             ("listener-density", LearnKind::ReplayListener),
+            ("attention-tracking", LearnKind::AttentionTracking),
             ("raf-waste", LearnKind::RafWaste),
         ];
         for (tag, expected) in kinds {
@@ -268,6 +284,7 @@ mod tests {
             LearnKind::FontFp,
             LearnKind::ReplayVendor,
             LearnKind::ReplayListener,
+            LearnKind::AttentionTracking,
             LearnKind::RafWaste,
         ] {
             let t = kind.text();

@@ -148,6 +148,16 @@ Signals currently emitted:
   listeners from one origin within 60s) → suggests **Neuter**
   rather than URL block — confidence 80
 
+**Attention tracking**:
+
+- Attention / page-lifecycle listener density (4+
+  `visibilitychange` / `focus` / `blur` / `pagehide` /
+  `pageshow` / `beforeunload` listeners across 3+ distinct
+  types from one origin within 60s) → suggests **Neuter** —
+  confidence 75. Catches engagement analytics and
+  session-replay dwell-time hooks that Brave Shields doesn't
+  specifically target.
+
 **Invisible animation loop**:
 
 - Hot 2D canvas draw ops sample target-canvas visibility once

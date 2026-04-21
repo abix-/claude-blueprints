@@ -7,6 +7,34 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+### Attention-tracking detector (Neuter)
+- New main-world hook coverage: `addEventListener` now also
+  tracks attention / page-lifecycle events alongside the
+  existing interaction-event set. Tracked types:
+  `visibilitychange`, `focus`, `blur`, `pagehide`, `pageshow`,
+  `beforeunload`.
+- Neuter enforcement extended — when the user has a Neuter rule
+  matching the calling script origin, attention-event listener
+  registrations are denied the same way interaction-event
+  registrations already were.
+- New detector (`detectors.rs`): 4+ attention listeners with 3+
+  distinct types from one script origin within 60s emits a
+  Neuter suggestion keyed on the origin. Confidence 75.
+- Separate `attention_types_by_origin` aggregation so attention
+  events don't bleed into the interaction-density
+  replay-listener detector (regression test locks this).
+- New `LearnKind::AttentionTracking` with teaching text
+  explaining the pattern.
+- Three regression tests:
+  `attention_tracking_fires_at_4_listeners_3_types_within_60s`,
+  `attention_tracking_below_threshold_no_suggestion`,
+  `attention_listeners_dont_also_fire_replay_listener`.
+- Motivation: Brave Shields doesn't specifically target this
+  pattern. Engagement-analytics / session-replay dwell-time
+  hooks slip through Brave's defenses; Hush catches them
+  behaviorally and proposes a Neuter rule that denies the
+  capture surface upstream of any exfil.
+
 ### Stage 12 phase B: options-editor per-row health dot
 - New `RuleHealth` enum in `src/ui_options.rs`:
   `Disabled | Broken | Shadowed | Firing | NoHits`. Covers

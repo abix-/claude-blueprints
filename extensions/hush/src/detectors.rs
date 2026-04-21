@@ -792,6 +792,7 @@ struct JsCallSummary {
     hot_params_by_origin: FastMap<String, u32>,
     distinct_fonts_by_origin: FastMap<String, std::collections::BTreeSet<String>>,
     listener_types_by_origin: FastMap<String, ListenerInfo>,
+    attention_types_by_origin: FastMap<String, ListenerInfo>,
     replay_vendors: FastMap<String, u32>,
     raf_waste_by_key: FastMap<String, RafWasteEntry>,
 }
@@ -799,6 +800,22 @@ struct JsCallSummary {
 struct ListenerInfo {
     count: u32,
     types: std::collections::BTreeSet<String>,
+}
+
+/// Page-lifecycle / visibility event names tracked by the
+/// attention-tracking detector. Must match `ATTENTION_EVENT_TYPES`
+/// in `mainworld.js`.
+const ATTENTION_EVENT_NAMES: &[&str] = &[
+    "visibilitychange",
+    "focus",
+    "blur",
+    "pagehide",
+    "pageshow",
+    "beforeunload",
+];
+
+fn is_attention_event(t: &str) -> bool {
+    ATTENTION_EVENT_NAMES.iter().any(|n| *n == t)
 }
 
 struct RafWasteEntry {
@@ -831,6 +848,7 @@ fn summarize_js_calls(js_calls: &[JsCall]) -> JsCallSummary {
     let mut distinct_fonts_by_origin: FastMap<String, std::collections::BTreeSet<String>> =
         agg_map();
     let mut listener_types_by_origin: FastMap<String, ListenerInfo> = agg_map();
+    let mut attention_types_by_origin: FastMap<String, ListenerInfo> = agg_map();
     let mut replay_vendors: FastMap<String, u32> = agg_map();
     let mut raf_waste_by_key: FastMap<String, RafWasteEntry> = agg_map();
 
@@ -867,7 +885,17 @@ fn summarize_js_calls(js_calls: &[JsCall]) -> JsCallSummary {
             "listener-added" => {
                 if let Some(t) = c.event_type.as_deref() {
                     if !t.is_empty() {
-                        let entry = listener_types_by_origin
+                        // Attention events (visibilitychange / focus /
+                        // blur / pagehide / pageshow / beforeunload)
+                        // feed the attention-tracking detector;
+                        // everything else feeds the interaction-
+                        // density replay-listener detector.
+                        let bucket = if is_attention_event(t) {
+                            &mut attention_types_by_origin
+                        } else {
+                            &mut listener_types_by_origin
+                        };
+                        let entry = bucket
                             .entry(origin.clone())
                             .or_insert_with(|| ListenerInfo {
                                 count: 0,
@@ -914,6 +942,7 @@ fn summarize_js_calls(js_calls: &[JsCall]) -> JsCallSummary {
         hot_params_by_origin,
         distinct_fonts_by_origin,
         listener_types_by_origin,
+        attention_types_by_origin,
         replay_vendors,
         raf_waste_by_key,
     }
@@ -1070,6 +1099,47 @@ pub(crate) fn detect_from_js_calls(
             ..ctx.ctx_fields()
         }) {
             out.push(s);
+        }
+    }
+
+    // Attention-tracking: 4+ page-lifecycle / visibility listeners
+    // from one origin with 3+ distinct event types in <60s. Threshold
+    // tighter than the interaction-density detector because attention
+    // events are much rarer — a legit site attaches maybe one
+    // `visibilitychange` to resume a video and one `beforeunload` to
+    // warn on unsaved data. 4+ across 3+ types is session-replay /
+    // engagement-analytics density, not normal page code.
+    //
+    // Emits Neuter (same primitive as replay-listener) — the
+    // main-world hook denies the registration so the capture path
+    // never runs. Dedup against existing neuter or block rules for
+    // the origin, mirroring replay-listener's is_covered check.
+    for (origin, info) in &s.attention_types_by_origin {
+        if info.count >= 4 && info.types.len() >= 3 && s.seconds_since_first < 60 {
+            if origin.is_empty() {
+                continue;
+            }
+            let value = block_value(origin);
+            let types: Vec<&str> = info.types.iter().map(String::as_str).collect();
+            if let Some(sg) = ctx.try_finish(BuildSuggestionInput {
+                key: format!("neuter::{value}::attention-tracking"),
+                layer: SuggestionLayer::Neuter,
+                value: value.clone(),
+                reason: format!(
+                    "attention-tracking pattern ({} page-lifecycle listeners: {})",
+                    info.count,
+                    types.join(", ")
+                ),
+                confidence: 75,
+                count: info.count,
+                evidence: vec![],
+                from_frame: None,
+                learn: LearnKind::AttentionTracking.text().to_string(),
+                kind: LearnKind::AttentionTracking.tag().to_string(),
+                ..ctx.ctx_fields()
+            }) {
+                out.push(sg);
+            }
         }
     }
 
@@ -1537,6 +1607,73 @@ mod tests {
         let out = detect_from_js_calls(&ctx("site.test"), &calls);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].confidence, 80);
+    }
+
+    #[test]
+    fn attention_tracking_fires_at_4_listeners_3_types_within_60s() {
+        let calls: Vec<JsCall> = ["visibilitychange", "focus", "blur", "pagehide"]
+            .iter()
+            .map(|t| JsCall {
+                kind: "listener-added".into(),
+                t: "2026-04-19T12:00:00.000Z".into(),
+                stack: vec!["at init (https://attn.test/a.js:1:1)".into()],
+                event_type: Some(t.to_string()),
+                ..Default::default()
+            })
+            .collect();
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert_eq!(out.len(), 1, "attention-tracking should fire");
+        assert_eq!(out[0].layer, SuggestionLayer::Neuter);
+        assert_eq!(out[0].kind, "attention-tracking");
+        assert!(
+            out[0].reason.contains("attention-tracking pattern"),
+            "reason: {}",
+            out[0].reason
+        );
+    }
+
+    #[test]
+    fn attention_tracking_below_threshold_no_suggestion() {
+        // Only 3 listeners across 3 types — one short of the count
+        // threshold. Should not fire.
+        let calls: Vec<JsCall> = ["visibilitychange", "focus", "blur"]
+            .iter()
+            .map(|t| JsCall {
+                kind: "listener-added".into(),
+                t: "2026-04-19T12:00:00.000Z".into(),
+                stack: vec!["at init (https://attn.test/a.js:1:1)".into()],
+                event_type: Some(t.to_string()),
+                ..Default::default()
+            })
+            .collect();
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert!(
+            out.iter().all(|s| s.kind != "attention-tracking"),
+            "should not suggest attention-tracking below threshold"
+        );
+    }
+
+    #[test]
+    fn attention_listeners_dont_also_fire_replay_listener() {
+        // Attention listeners must feed the attention-tracking
+        // detector ONLY, not also the interaction-density
+        // replay-listener detector. Otherwise a site that attaches
+        // 12 visibilitychange listeners would (incorrectly) trip
+        // the replay-listener heuristic.
+        let calls: Vec<JsCall> = (0..12)
+            .map(|_| JsCall {
+                kind: "listener-added".into(),
+                t: "2026-04-19T12:00:00.000Z".into(),
+                stack: vec!["at init (https://attn.test/a.js:1:1)".into()],
+                event_type: Some("visibilitychange".into()),
+                ..Default::default()
+            })
+            .collect();
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert!(
+            out.iter().all(|s| s.kind != "listener-density"),
+            "replay-listener must not fire on pure-attention events"
+        );
     }
 
     #[test]

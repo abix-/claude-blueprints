@@ -39,28 +39,19 @@ global decisions (strip, referrer, redirector detection) are
 useful but not priority — they cover edge cases a default-on
 Brave install already handles.
 
+Recently shipped under this framing: **attention-tracking
+detector** (4+ `visibilitychange` / `focus` / `blur` / `pagehide`
+/ `pageshow` / `beforeunload` listeners from one origin → Neuter
+suggestion). Brave doesn't target this pattern; it catches
+engagement analytics + session-replay dwell-time hooks upstream
+of exfil.
+
 ## Priority 1 — pure detection gaps Brave doesn't cover
 
 These are behavioral signals Brave doesn't specifically target.
 They're the cleanest fit for Hush's thesis (per-tab behavioral
 observation with evidence-first suggestions) and add value that
 no amount of Brave-tuning replicates.
-
-### Attention-tracking detector
-
-Session-replay vendors, A/B-test frameworks, and "engagement
-analytics" hook the Page Visibility API + `focus` / `blur` /
-`pagehide` / `beforeunload` to measure how long your attention is
-on the tab. Brave doesn't neutralize this.
-
-**Detection**: main-world hook on `addEventListener`. Count
-registrations for `visibilitychange`, `focus`, `blur`, `pagehide`,
-`pageshow`, `beforeunload` per script origin. Flag at 4+ on the
-same origin within the first 3 seconds of load.
-
-**Output**: Neuter suggestion (deny the listener registration)
-rather than URL block — same pattern as the existing replay-
-listener detector.
 
 ### Clipboard API monitoring
 

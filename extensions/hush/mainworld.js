@@ -182,6 +182,18 @@
     "touchmove", "touchstart", "touchend"
   ]);
 
+  // Attention / page-lifecycle event types. Hooked by session-
+  // replay vendors, A/B-test frameworks, and "engagement
+  // analytics" to measure how long you keep the tab visible,
+  // whether you tabbed away, and when you were about to leave.
+  // Tracked for detection and neuterable at the same layer as
+  // interaction listeners since the enforcement mechanism (deny
+  // addEventListener) is identical.
+  const ATTENTION_EVENT_TYPES = new Set([
+    "visibilitychange", "focus", "blur",
+    "pagehide", "pageshow", "beforeunload"
+  ]);
+
   function cap() {
     try {
       const s = new Error().stack || "";
@@ -566,11 +578,14 @@
       "scroll", "touchmove", "touchstart", "touchend"
     ]);
     EventTarget.prototype.addEventListener = function hushAddEventListener(type) {
-      const typeIsInteraction = typeof type === "string"
+      const typeIsString = typeof type === "string";
+      const typeIsInteraction = typeIsString
         && (REPLAY_EVENT_TYPES.has(type) || NEUTER_EVENT_TYPES.has(type));
+      const typeIsAttention = typeIsString && ATTENTION_EVENT_TYPES.has(type);
+      const typeIsTracked = typeIsInteraction || typeIsAttention;
       let stack = null;
       try {
-        if (typeIsInteraction) {
+        if (typeIsTracked) {
           const onDocLike = (this === document || this === window ||
                              (typeof document !== "undefined" && this === document.body));
           if (onDocLike) {
@@ -579,13 +594,16 @@
           }
         }
       } catch (e) {}
-      // Neuter: deny interaction-event registrations from matching
-      // script origins. Runs before the real addEventListener so
-      // the listener never binds — no CPU burn per interaction, no
-      // capture, no exfil. Legitimate site listeners from other
-      // origins pass through untouched.
+      // Neuter: deny listener registrations from matching script
+      // origins. Runs before the real addEventListener so the
+      // listener never binds — no CPU burn, no capture, no exfil.
+      // Applies to both interaction events (session-replay capture
+      // surface) and attention events (engagement analytics /
+      // session-replay dwell-time signals).
       try {
-        if (typeIsInteraction && NEUTER_EVENT_TYPES.has(type)) {
+        const typeIsNeuterable = typeIsString
+          && (NEUTER_EVENT_TYPES.has(type) || ATTENTION_EVENT_TYPES.has(type));
+        if (typeIsNeuterable) {
           if (!stack) stack = cap();
           const origin = stackOriginHost(stack);
           const match = findFilterMatch(origin, "hushNeuter");
