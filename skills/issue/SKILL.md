@@ -21,6 +21,8 @@ When `$ARGUMENTS` is freeform text (not a bare number), create issues. Determine
 
 Use `gh issue create -R <owner/repo>` with `--title` and `--body`. The `-R` flag means you can run this from any directory -- do NOT cd to the target repo. Include acceptance criteria as `- [ ]` checkboxes when the scope is clear. Add labels if obvious (bug, feature, etc.).
 
+**Always add `--label ready`** so the k3sc operator can dispatch the issue to agents.
+
 For batch creation (multiple issues at once), create them sequentially and report all URLs at the end.
 
 ### 2. Claim/work mode (`/issue [repo] <number>` or `/issue` with no args)
@@ -165,107 +167,9 @@ Agents NEVER merge PRs, close issues, or delete remote branches. Only the human 
 - Default branch is `master` (not `dev`). Branch from `origin/master`, rebase onto `origin/master`.
 - After code changes, cross-compile the linux binary: `GOOS=linux GOARCH=amd64 go build -o image/k3sc .`
 
-## Performance issue standards
+## Review gates
 
-When creating or working on performance-related issues (Stage 16, perf labels, optimization work):
-
-1. **Issue body must reference critical docs**: include a "Critical Docs" section linking `docs/performance.md` and `docs/k8s.md` as mandatory reading.
-2. **Acceptance criteria must include compliance**: every perf issue must have `- [ ] Compliance verified against docs/performance.md, docs/k8s.md, docs/authority.md` as a checkbox.
-3. **Before/after metrics**: perf issues should document the measurable improvement (timing, allocation count, or complexity reduction).
-4. **No new hot-path violations**: any change touching hot paths must be verified against the anti-patterns list in performance.md.
-
-## Feature spec gate (mandatory for feature issues)
-
-Every `feature` issue must have a spec doc before implementation begins. See the "Feature Spec Requirement" section in the workflow doc for full rules.
-
-When **creating** a new feature issue:
-- Write a spec doc in `docs/{feature-name}.md` with: Goal, Behavior, Data model, Edge cases, UI, Integration, Acceptance criteria
-- Link it from the issue body under `## Spec Doc`
-- Exception: if the issue body fully specifies behavior with no ambiguity, add "Spec: self-contained in issue body" instead
-
-When **implementing** a feature:
-- Read the spec doc before writing code
-- If the spec needs changing, update the spec first, then code
-- Do not deviate from the spec without updating it
-
-When **reviewing** a feature:
-- Read the spec doc and verify the PR matches it 100%
-- Approval without spec verification is invalid
-- If the spec says X and the code does Y, that is a blocker
-
-When **approving** a feature:
-- Closing/approving means the implementation matches the spec 100%
-- Any unmet spec item is a blocker, not a "nice to have"
-
-Bug and test issues are exempt -- the issue body is the spec.
-
-## Compliance gate (mandatory before PR or handoff)
-
-Every implementation and every review must verify compliance with the three critical docs before creating a PR, handing off to `needs-review`, or approving a merge. This is not optional.
-
-1. **Read all three docs** at the start of each implementation or review step:
-   - `docs/k8s.md` -- Def/Instance/Controller architecture
-   - `docs/authority.md` -- data ownership and source-of-truth rules
-   - `docs/performance.md` -- hot-path patterns, anti-patterns, review procedure
-
-2. **Check every changed file** against these rules:
-   - **k8s.md**: base values come from registry Defs, never cached on instances. Adding a new variant = 1 enum + 1 registry entry. Systems read Def at spawn/reconcile time.
-   - **authority.md**: GPU-authoritative data is never used as hard gameplay gates. ECS wins over GPU readback for identity/ownership. Throttled readback fields are heuristic-only.
-   - **performance.md**: no O(n^2) in hot paths, no repeated scans, no nested membership checks, no unbounded debug cost. Follow the PR Review Procedure (section in performance.md) for every PR.
-
-3. **Include compliance findings in the handoff comment**. If all three docs are satisfied, say so explicitly. If a violation is found, fix it before handoff (fix-forward) or document it as a blocker.
-
-4. **Reviewers must independently verify compliance** -- do not trust the implementer's self-assessment. Re-read the three docs and check the diff yourself.
-
-A PR that has not been checked against all three docs is not ready for merge, regardless of whether clippy and tests pass.
-
-## DRY and generalization check (mandatory for review)
-
-Every review must check for DRY violations and missed generalization opportunities. This is not optional.
-
-1. **DRY check**: look for duplicated logic, hardcoded lists of variants, or copy-pasted code paths that should be consolidated. If a PR adds a new variant by copying an existing block and changing names, flag it -- the shared logic should be extracted first.
-
-2. **Generalization check**: prefer extending specific systems into generic ones following k8s.md patterns. When a PR adds behavior for one specific BuildingKind, tower type, NPC job, etc., ask whether the logic should use `def.is_tower`, `def.some_field`, or a registry lookup instead of matching on specific enum variants. The goal: adding a new variant should require only 1 enum variant + 1 registry entry, not touching N match arms across the codebase.
-
-3. **Examples of violations to flag**:
-   - `match kind { BowTower => ..., CrossbowTower => ..., CatapultTower => ... }` when `def.tower_stats` already distinguishes them
-   - Hardcoded `iter_kind(A).chain(iter_kind(B)).chain(iter_kind(C))` when a `def.is_X` flag or registry filter would future-proof it
-   - A new system that duplicates logic from an existing system instead of parameterizing the existing one
-   - Copy-pasting a function with minor tweaks instead of adding a parameter
-
-4. **Fix-forward when possible**: if the DRY/generalization fix is small and clear, make the fix in the same review turn. If it's large or design-ambiguous, document it as a finding in the handoff comment.
-
-## Regression test gate (mandatory for ALL code changes)
-
-Every code change MUST have regression tests before merge. No exceptions. No "will add later". No "it's too simple to test".
-
-1. **Every PR with code changes** must include at least one test that would FAIL if the change were reverted. This proves the change is actually tested, not just that the code compiles.
-2. **Bug fixes**: the test must reproduce the exact bug scenario and verify the fix. A test that only checks the happy path is NOT a regression test.
-3. **New features**: tests must cover the core behavior described in acceptance criteria.
-4. **Refactors**: tests must verify the refactored behavior matches the original.
-5. **What counts**: a unit test, integration test, or ECS world test that sets up specific conditions and asserts the correct outcome.
-6. **What does NOT count**: existing tests merely updated to compile with new API names. Renaming `set_occupancy` -> `set_present` in existing tests is mechanical, not a regression test.
-7. **Review check**: reviewers must verify regression tests exist for every code change. If missing, this is a BLOCKER -- fix-forward by writing the test, or hand off as blocked.
-
-## Acceptance criteria gate (mandatory before approval or handoff)
-
-NEVER approve, hand off to `needs-review`, or recommend merge unless ALL acceptance criteria checkboxes are checked. This is the single hardest gate in the workflow. Agents that skip this gate are broken.
-
-1. **Read the issue body** and find every `- [ ]` checkbox. These are the acceptance criteria.
-2. **Verify every single item** against the actual code on the branch. Do not trust the implementer's self-assessment. Read the code, run the tests, confirm the behavior.
-3. **Check the boxes on GitHub** as you verify each one. Use `gh issue edit` to update the issue body, replacing `- [ ]` with `- [x]` for each verified criterion. This is mandatory -- unchecked boxes mean unverified work.
-4. **If ANY criterion is unmet**, the issue is NOT done:
-   - Fix-forward if the missing item is small and in scope.
-   - Otherwise, document it as a blocker in the handoff comment and hand off to `needs-review` with the blocker listed in `Open:`.
-   - NEVER approve with unmet criteria. NEVER recommend merge with unmet criteria.
-5. **If ALL boxes are checked**, include "Acceptance: all N/N criteria verified and checked" in the handoff comment.
-6. **If the issue has no checkboxes**, state "Acceptance: no checkboxes in issue body" in the handoff comment.
-
-A handoff comment without an explicit Acceptance line is invalid. An approval or close transition with unchecked boxes is invalid.
-4. **Include a pass/fail table** in the handoff comment showing each acceptance criterion and its status.
-5. An issue with 11/12 acceptance criteria met is NOT ready for merge. 100% or nothing.
-
-This applies equally to implementations handing off for review and reviewers approving for merge.
+Review gates (compliance, feature spec, DRY, regression tests, acceptance criteria, performance standards) are enforced by `/review`, not `/issue`. See the `/review` skill for all gate definitions.
 
 ## Branch cleanup
 

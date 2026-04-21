@@ -1,11 +1,11 @@
 ---
-description: "Review a PR against hard merge gates: linked issue acceptance checklist, PR checklist coverage, required docs, regression tests, benchmarks for perf work, authority/k8s/performance doc compliance, build/test/BRP verification, post findings, optionally merge"
-argument-hint: "[repo] [PR-number]"
-disable-model-invocation: true
+description: "Review a PR or issue against hard merge gates: acceptance checklist, compliance, docs, regression tests, benchmarks, DRY, spec verification. Works for both PRs and standalone issues."
+argument-hint: "[issue N | PR-number | repo PR-number]"
+disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
-version: "4.8"
+version: "5.0"
 ---
-Automated human-review workflow for agent PRs. Multi-repo, workspace-aware.
+Automated human-review workflow for agent PRs and issues. Multi-repo, workspace-aware.
 
 Uses `endless-cli` for all BRP interaction.
 
@@ -13,22 +13,26 @@ Uses `endless-cli` for all BRP interaction.
 
 Invoke with one of these forms:
 
-- `/review` -- auto-pick via `k3sc take`
+- `/review` -- auto-pick PR via `k3sc take`
 - `/review 194` -- review PR `#194` in `endless`
-- `/review k3sc` -- auto-pick via `k3sc take` for `k3sc` repo
 - `/review k3sc 38` -- review PR `#38` in `k3sc`
+- `/review issue 247` -- review issue `#247` in `endless` (no PR required)
+- `/review issue k3sc 15` -- review issue `#15` in `k3sc`
 
-## PR selection
+### PR mode vs Issue mode
 
-`k3sc take` is the ONLY way to select PRs for review when no PR number is given. Do NOT manually pick from `gh pr list`.
+**PR mode** (default): review a PR with its linked issue. Checks out the branch, builds, runs tests, posts findings on the PR.
 
-- `k3sc take --worker claude-a` -- take next PR for worker `claude-a`
-- `k3sc take --worker codex-a` -- take next PR for worker `codex-a`
-- `k3sc release --repo endless --pr 194` -- release the reservation when the review is finished or abandoned
+**Issue mode** (`/review issue N`): review a standalone issue that has no PR (e.g., audits, spec reviews, research tasks). Reads the issue body and comments, verifies acceptance criteria against the codebase, posts findings on the issue. Skips checkout/build/test steps.
 
-Worker names must start with `claude-` or `codex-`. Use the repo arg to filter by repo if provided.
+## Selection
 
-`/review` is not read-only. It may update docs on the PR branch, commit review-only doc changes, post a PR findings comment, and then ask `Merge or skip?`.
+For PR auto-pick: `k3sc take` is the ONLY method. Do NOT manually pick from `gh pr list`.
+
+- `k3sc take --worker claude-a` -- reserve next PR for worker `claude-a`
+- `k3sc release --repo endless --pr 194` -- release reservation when done
+
+`/review` is not read-only. It may update docs on the PR branch, commit review-only doc changes, post findings, and ask `Merge or skip?`.
 
 ## Standard
 
@@ -61,20 +65,39 @@ Prefer the mixed scenario when the changed system interacts with more than one o
 
 If the linked issue has no acceptance checklist, that is itself a review finding and the PR cannot pass `/review`.
 
+### Acceptance criteria gate
+
+NEVER recommend merge unless ALL acceptance criteria checkboxes are satisfied. This is the single hardest gate.
+
+1. **Read the issue body** and find every `- [ ]` checkbox. These are the acceptance criteria.
+2. **Verify every single item** against the actual code on the branch. Do not trust the implementer's self-assessment. Read the code, run the tests, confirm the behavior.
+3. **If ANY criterion is unmet**, the PR is NOT ready:
+   - Fix-forward if the missing item is small and in scope.
+   - Otherwise, document it as a blocker and fail the review.
+   - NEVER recommend merge with unmet criteria.
+4. An issue with 11/12 acceptance criteria met is NOT ready for merge. 100% or nothing.
+5. **If the issue has no checkboxes**, state this as a finding -- the PR cannot pass.
+
 ## Step 0: Parse arguments
 
-`$ARGUMENTS` format: `[repo] [PR-number]` or just `[PR-number]`.
+`$ARGUMENTS` formats:
 
-- If two args: `$0` is the repo short name, `$1` is the PR number
-- If one arg and numeric: PR number, repo defaults to `endless`
-- If one arg and not numeric: repo name, auto-pick via `k3sc take`
-- If no args: repo `endless`, auto-pick via `k3sc take`
+**PR mode** (default):
+- No args: auto-pick via `k3sc take`, repo = all
+- `N`: PR number, repo = `endless`
+- `repo N`: PR number in specified repo
+
+**Issue mode** (starts with `issue`):
+- `issue N`: issue number, repo = `endless`
+- `issue repo N`: issue number in specified repo
 
 Repo mapping:
 - `endless` -> `abix-/endless`
 - `k3sc` -> `abix-/k3sc`
 
 All `gh` commands must use `--repo {owner/repo}`.
+
+Set `review_mode` to `pr` or `issue` based on parsing. This controls which steps run.
 
 ## Step 0.5: Print execution plan and wait for approval
 
@@ -113,14 +136,9 @@ Print the plan in this exact format:
                                             OR go test ./... for k3sc
  10     build                               k3sc cargo-lock build --release 2>&1
                                             OR go build ./... for k3sc
- 11     launch game (endless only)          endless.exe --autostart --no-raiders --farms=4
- 12     baseline BRP (endless only)         endless-cli test
- 13     GPU log (endless only)              check wgpu_errors.log
- 14     issue-aware BRP (endless only)      endless-cli commands based on issue type
- 15     perf verification (if perf PR)      capture numbers, compare to PR claims
- 16     update performance.md (if perf PR)  add before/after Criterion numbers
- 17     BRP gaps (endless only)             add BRP support if missing
- 18     leave game running (endless only)   do not kill endless.exe
+ 11     in-game verification (optional)     launch game, BRP, GPU log -- only when relevant
+ 12     perf verification (if perf PR)      Criterion bench or BRP get_perf
+ 13     update performance.md (if perf PR)  add before/after Criterion numbers
  19     verdict                             ready to merge / needs work
  20     post PR comment                     gh pr comment with findings table
  21     print local verdict                 rich terminal summary
@@ -141,23 +159,17 @@ Print the plan in this exact format:
  - regression tests          if behavior changed / bug fix / logic change
  - benchmark coverage        if perf-related (title, labels, diff, claims)
  - performance.md review     if perf-related
- - BRP verification          if endless repo
- - scale benchmarks (50k)    if perf claims exist
-
- STEPS SKIPPED FOR NON-ENDLESS
- ──────────────────────────────────────
- - steps 8-15 (game launch, BRP, GPU log, perf verification)
+ - in-game verification      only when change affects runtime behavior (rendering, GPU, gameplay)
+ - scale benchmarks (50k)    if perf claims exist (prefer Criterion over BRP)
 ```
 
-After printing the plan, ask: `proceed?`
+After printing the plan, immediately proceed to Step 1. Do NOT wait for confirmation.
 
-Do NOT continue until the human responds. If the human says no or requests changes, adjust and reprint the plan.
+## Step 1: Resolve target
 
-## Step 1: Resolve PR
+**Issue mode**: use the issue number directly. Print `Reviewing issue #{N}: {title}`.
 
-If PR number given, use it directly.
-
-If no PR number given, use `k3sc take` to select the next PR. The worker name is the basename of the current working directory (e.g., if you are in `C:\code\claude-4`, the worker name is `claude-4`):
+**PR mode**: if PR number given, use it directly. If no PR number, use `k3sc take`:
 
 ```bash
 k3sc take --worker $(basename "$(pwd)")
@@ -165,41 +177,44 @@ k3sc take --worker $(basename "$(pwd)")
 
 If a repo arg was provided, add `--repo {repo-short-name}` to the command.
 
-Parse the PR number and repo from `k3sc take` output and remember them for `k3sc release` at the end of the review. If `k3sc take` returns nothing, stop and report `no PRs available`.
+Parse the PR number and repo from `k3sc take` output and remember them for `k3sc release` at the end. If `k3sc take` returns nothing, stop and report `no PRs available`.
 
 Do NOT fall back to `gh pr list` or manual priority ordering. `k3sc take` is the only selection method.
 
 Print `Reviewing PR #{N}: {title}`.
 
-## Step 2: Read PR, issue, and checklists
+## Step 2: Read metadata and checklists
 
-Read PR metadata, including body and labels:
+**PR mode**: Read PR metadata, extract linked issue from branch name `issue-{N}`, read the linked issue with comments.
 
 ```bash
 gh pr view {N} --repo {owner/repo} --json headRefName,title,body,labels
-```
-
-Extract the linked issue number from the branch name using `issue-{N}`. If the branch name does not link to an issue, record a finding and fail the review.
-
-Read the linked issue including comments:
-
-```bash
 gh issue view {issue_N} --repo {owner/repo} --comments
 ```
 
-Collect:
-- Issue acceptance checklist items: all `- [ ]` and `- [x]` lines from the issue body and issue comments
-- PR checklist items: all `- [ ]` and `- [x]` lines from the PR body
+If the branch name does not link to an issue, record a finding and fail the review.
+
+**Issue mode**: Read the issue directly with comments.
+
+```bash
+gh issue view {N} --repo {owner/repo} --json title,body,labels --comments
+```
+
+Check if a PR exists for this issue: `gh pr list --repo {owner/repo} --head issue-{N} --state open`. If a PR exists, suggest switching to PR mode instead.
+
+**Both modes**: Collect:
+- Issue acceptance checklist items: all `- [ ]` and `- [x]` lines from issue body and comments
+- PR checklist items (PR mode only): all `- [ ]` and `- [x]` lines from PR body
 - Issue title, labels, and any explicit perf/test requirements
 
-For `endless`, load these reference docs before code review:
+For `endless`, load these reference docs before review:
 - `docs/authority.md`
 - `docs/k8s.md`
-- `docs/performance.md` for perf PRs
+- `docs/performance.md` for perf-related work
 
 Treat those docs as review authority, not optional reading.
 
-If the issue has no acceptance checklist items, record a finding: `linked issue lacks acceptance checklist`. The PR cannot pass.
+If the issue has no acceptance checklist items, record a finding: `issue lacks acceptance checklist`. Cannot pass.
 
 ## Step 3: Build the review gate checklist
 
@@ -239,9 +254,24 @@ Examples of immediate findings:
 - perf PR has no before/after benchmark numbers
 - perf PR only has small synthetic benchmarks and no game-scale benchmark
 
-## Step 4: Fetch and checkout branch
+## k3s agent mode
 
-Each agent works in its own repo clone (the current working directory). Never cd elsewhere, never clone a new copy.
+Detect k3s environment: cwd starts with `/workspaces/` or `JOB_KIND` env var is set.
+
+In k3s mode, skip these steps (no GPU, no display, no shared target dir):
+- Step 6: build and test (slow, no GPU for compute shaders)
+- Steps 8-15: in-game verification (no display)
+- Step 13: Criterion benchmarks (no valid baseline hardware)
+
+k3s agents CAN do: read PR/issue metadata, read diffs, check compliance docs, verify acceptance criteria, check DRY/generalization, verify spec, check docs/changelog, post structured findings.
+
+Note in the execution plan output which steps are skipped and why: "k3s mode: no build/test/BRP (no GPU/display)".
+
+## Step 4: Fetch and checkout branch (PR mode only)
+
+**Issue mode**: skip this step. Work against the current codebase on the base branch.
+
+**PR mode**: each agent works in its own repo clone. Never cd elsewhere, never clone a new copy.
 
 ```bash
 git fetch origin && git checkout {headRefName} && git pull
@@ -265,29 +295,101 @@ Check associated docs before approving:
 
 If docs are clearly missing or stale and the update is small and unambiguous, make the doc update on the PR branch, re-read the diff, and include that change in the review.
 
+### Doc and changelog update (/done checklist)
+
+If the PR is missing doc updates, changelog entry, or has stale docs:
+1. Identify which docs in docs/ cover the changed systems (use docs/README.md file map)
+2. Update affected architecture docs to match the new code
+3. Add CHANGELOG.md entry if missing
+4. Commit doc updates on the PR branch before continuing review
+
+This is the same checklist as `/done` -- the reviewer applies it when the implementer missed it.
+
 If you cannot map a changed code path to an acceptance item, required doc update, regression test, benchmark, or authority-doc requirement where required, record a finding.
 
-Review findings are the primary output. Prioritize:
+### Compliance gate
+
+**Read all three docs** at the start of every review:
+- `docs/k8s.md` -- Def/Instance/Controller architecture
+- `docs/authority.md` -- data ownership and source-of-truth rules
+- `docs/performance.md` -- hot-path patterns, anti-patterns, review procedure
+
+**Check every changed file** against these rules:
+- **k8s.md**: base values come from registry Defs, never cached on instances. Adding a new variant = 1 enum + 1 registry entry. Systems read Def at spawn/reconcile time.
+- **authority.md**: GPU-authoritative data is never used as hard gameplay gates. ECS wins over GPU readback for identity/ownership. Throttled readback fields are heuristic-only.
+- **performance.md**: no O(n^2) in hot paths, no repeated scans, no nested membership checks, no unbounded debug cost. Follow the PR Review Procedure (section in performance.md) for every PR.
+
+A PR that has not been checked against all three docs is not ready for merge, regardless of whether clippy and tests pass. If a violation is found, fix-forward or document as a blocker.
+
+### Feature spec gate
+
+If the issue is labeled `feature`:
+- A spec doc must exist (linked from issue body under `## Spec Doc`), or the issue body must say "Spec: self-contained in issue body"
+- Read the spec doc and verify the PR matches it 100%
+- Approval without spec verification is invalid
+- If the spec says X and the code does Y, that is a blocker
+- Any unmet spec item is a blocker, not a "nice to have"
+
+Bug and test issues are exempt -- the issue body is the spec.
+
+### DRY and generalization check
+
+Every review must check for DRY violations and missed generalization:
+
+1. **DRY check**: look for duplicated logic, hardcoded lists of variants, or copy-pasted code paths that should be consolidated. If a PR adds a new variant by copying an existing block and changing names, flag it.
+2. **Generalization check**: prefer extending specific systems into generic ones following k8s.md patterns. When a PR adds behavior for one specific BuildingKind, tower type, NPC job, etc., ask whether the logic should use `def.is_tower`, `def.some_field`, or a registry lookup instead of matching on specific enum variants. Goal: adding a new variant = 1 enum + 1 registry entry, not N match arms.
+3. **Examples of violations**:
+   - `match kind { BowTower => ..., CrossbowTower => ..., CatapultTower => ... }` when `def.tower_stats` already distinguishes them
+   - Hardcoded `iter_kind(A).chain(iter_kind(B)).chain(iter_kind(C))` when a `def.is_X` flag or registry filter would future-proof it
+   - A new system that duplicates logic from an existing system instead of parameterizing it
+   - Copy-pasting a function with minor tweaks instead of adding a parameter
+4. **Fix-forward when possible**: if the fix is small and clear, make it in the review. If large or design-ambiguous, document as a finding.
+
+### Performance issue standards
+
+For perf-related PRs (title, labels, or diff indicate optimization work):
+1. Issue body must reference `docs/performance.md` and `docs/k8s.md` as mandatory reading
+2. Acceptance criteria must include compliance verification against all three docs
+3. Before/after metrics must document measurable improvement (timing, allocation count, or complexity reduction)
+4. No new hot-path violations: any change touching hot paths must be verified against the anti-patterns list in performance.md
+
+### Review findings priorities
+
+Findings are the primary output. Prioritize:
 - bugs
 - regressions
 - stale or missing docs
 - violations of `authority.md`
 - violations of `k8s.md`
 - violations of `performance.md` for perf PRs
+- DRY violations and missed generalization
 - missing tests
 - unsupported perf claims
 - unchecked issue/PR checklist items
 
-## Step 6: Run tests
+## Step 6: Run tests + regression test gate (PR mode only)
 
-Detect project type:
+**Issue mode**: skip build and test steps. Verify acceptance criteria against the existing codebase instead.
+
+**PR mode**: detect project type:
 - Rust/Bevy: `k3sc cargo-lock test --release 2>&1`
 - Go: `go test ./... 2>&1`
 - Other: note `no test framework detected`
 
 Record pass/fail and the relevant failing tests.
 
-If behavior changed and no regression tests exist in the diff, record a finding even if the existing suite passes.
+### Regression test gate
+
+Every code change MUST have regression tests. No exceptions. No "will add later". No "it's too simple to test".
+
+1. Every PR with code changes must include at least one test that would **FAIL if the change were reverted**. This proves the change is actually tested, not just that the code compiles.
+2. **Bug fixes**: the test must reproduce the exact bug scenario and verify the fix. A test that only checks the happy path is NOT a regression test.
+3. **New features**: tests must cover the core behavior described in acceptance criteria.
+4. **Refactors**: tests must verify the refactored behavior matches the original.
+5. **What counts**: a unit test, integration test, or ECS world test that sets up specific conditions and asserts the correct outcome.
+6. **What does NOT count**: existing tests merely updated to compile with new API names. Renaming `set_occupancy` -> `set_present` in existing tests is mechanical, not a regression test.
+
+If behavior changed and no regression tests exist in the diff, record a finding even if the existing suite passes. This is a **BLOCKER** -- fix-forward by writing the test, or fail the review.
 
 ## Step 7: Build
 
@@ -297,74 +399,42 @@ If behavior changed and no regression tests exist in the diff, record a finding 
 
 If build fails, skip BRP steps, post findings, and stop.
 
-## Step 8: Launch game (endless only)
+## Steps 8-15: In-game verification (optional)
 
-Skip steps 8-13 for non-`endless` repos.
+BRP launch, GPU log, perf verification, and in-game benchmarks are **optional**. Only run them when the change is relevant to runtime behavior that cannot be verified by tests alone.
+
+**Run in-game verification when:**
+- the PR changes rendering, GPU shaders, or visual output
+- the PR claims FPS or in-game timing improvements that need live measurement
+- the PR changes gameplay behavior that BRP can verify (combat, building, NPC state)
+- the human explicitly requests it
+
+**Skip in-game verification when:**
+- the change is dead code removal, refactoring, or code cleanup
+- the change is test-only, doc-only, or CI/tooling
+- the change is a scheduling/policy fix verified by unit tests
+- the branch is far behind dev and BRP endpoints may not exist
+
+When running in-game verification:
 
 ```bash
 taskkill //F //IM endless.exe 2>/dev/null
 k3sc cargo-lock run --release -- --autostart --no-raiders --farms=4 &
-GAME_PID=$!
-echo "Game PID: $GAME_PID"
 ```
 
-## Step 9: Baseline BRP
+- `endless-cli test` for baseline BRP
+- `endless-cli get_perf` for perf PRs
+- Check `rust/target/release/wgpu_errors.log` for GPU errors
+- Leave game running after review
 
-```bash
-endless-cli test
-```
+For perf PRs with scale claims, run Criterion benchmarks locally (`k3sc cargo-lock bench`) rather than relying on in-game BRP with a tiny dev scene.
 
-Record FPS, NPC count, town state, and PASS/FAIL.
-
-## Step 10: GPU log
-
-```bash
-cat rust/target/release/wgpu_errors.log 2>/dev/null | tail -20
-```
-
-Any GPU validation error is a finding.
-
-## Step 11: Issue-aware BRP checks
-
-Use `endless-cli` based on the issue/PR:
-- combat/squad/damage/health: `endless-cli get_perf`, `endless-cli get_squad index:0`
-- build/building/farm/mine: create a building, then `endless-cli get_summary`
-- perf/performance/timing: `endless-cli get_perf`
-- default: baseline BRP is the minimum
-
-For perf PRs, run these checks against a scale world, not a tiny dev scene.
-
-## Step 12: Perf verification
-
-For perf PRs, do not accept vague improvement claims.
-
-You must capture concrete numbers and compare them to the PR claim:
-- system timing
-- query count / entity count / work size if relevant
-- FPS if that is the claim
-
-Required scale target for perf verification:
-- use a workload with 50k NPCs, or 50k buildings, or 50k trees/rocks, or a mixed world that includes all of them
-- choose the scale dimension that matches the changed system
-- if the changed system is broad or interacts with multiple populations, require the mixed-world scenario
-- if the existing perf harness cannot exercise the relevant 50k-scale case, that is a finding and the PR cannot pass
-
-If the PR does not include before/after benchmark numbers, record a finding even if your spot-check looks better. Reviewer-collected numbers supplement the PR; they do not replace required PR benchmark evidence.
-
-## Step 13: Update performance.md
+## Step 13: Update performance.md (perf PRs only)
 
 For perf PRs, record benchmark results in `docs/performance.md` on the PR branch:
 - Add or update the relevant system entry with before/after Criterion numbers
 - Record the scale scenario explicitly, including counts used: NPCs, buildings, trees/rocks, or mixed-world counts
 - Commit the update to the PR branch before posting the review comment
-
-## Step 14: BRP gaps
-
-All functionality needed for verification must be testable through BRP. If missing BRP support blocks verification, add it on the branch, rebuild, and re-test.
-
-## Step 15: Leave game running
-
-For `endless`, leave the game running after review.
 
 ## Step 16: Verdict rules
 
@@ -372,11 +442,13 @@ For `endless`, leave the game running after review.
 
 Hard failures:
 - any unmet required gate from the Standard section
-- failed `endless` BRP verification where BRP is required
+- failed `endless` BRP verification when BRP was run
 
 If any hard failure exists, verdict is `needs work`.
 
-## Step 17: Post PR comment
+## Step 17: Post review comment
+
+**PR mode**: post on the PR. **Issue mode**: post on the issue.
 
 Post a structured comment:
 
@@ -437,6 +509,18 @@ Print a rich, colorful summary to the terminal (wezterm). Use this format:
 
 ```
 ## /review PR #{N}: {short title}
+ repo: {owner/repo}
+
+ WHAT THIS PR DOES
+ ──────────────────────────────────────
+ {1-3 sentence plain-english summary of what changed and why}
+
+ BEFORE -> AFTER
+ ──────────────────────────────────────
+ {concrete before/after description of the change -- what existed before, what exists after}
+ {for code changes: old behavior -> new behavior}
+ {for docs/assets: file didn't exist -> file added, or old content -> new content}
+ {for perf PRs: old timing -> new timing with numbers}
 
  CHECK                        RESULT
  ─────────────────────────────────────
@@ -459,51 +543,46 @@ Use ✅ for pass, ❌ for fail, ⏭️ for skipped/not run.
 
 **VERDICT: READY TO MERGE** or **VERDICT: NEEDS WORK**
 
-For perf PRs, always include a before/after benchmark block:
+For perf PRs, expand the BEFORE -> AFTER block with benchmark numbers:
 
 ```
-BEFORE ({source}):
-  scenario: 50k NPCs / 50k buildings / 50k trees-rocks / mixed
-  avg:  Xus
-  peak: Xus
+ BEFORE -> AFTER
+ ──────────────────────────────────────
+ BEFORE ({source}):
+   scenario: 50k NPCs / 50k buildings / 50k trees-rocks / mixed
+   avg:  Xus
+   peak: Xus
 
-AFTER (Criterion, reviewer-collected):
-  scenario: 50k NPCs / 50k buildings / 50k trees-rocks / mixed
-  scenario_1 .... Xus    (Nx faster)
-  scenario_2 .... Xus
+ AFTER (Criterion, reviewer-collected):
+   scenario: 50k NPCs / 50k buildings / 50k trees-rocks / mixed
+   scenario_1 .... Xus    (Nx faster)
+   scenario_2 .... Xus
 ```
 
 List regression tests with one-line descriptions of what they verify.
 End with "Merge or skip?"
 
-## Step 19: Ask human -- merge or skip?
+## Step 19: Ask human -- merge/close or skip?
 
 Ask only after posting the review comment.
 
-### If merge
+### PR mode
 
+**If merge**:
 ```bash
 gh pr merge {N} --repo {owner/repo} --squash --delete-branch
 gh issue close {issue_N} --repo {owner/repo}
 ```
-
-If this review started with `k3sc take`, release the reservation:
-
-```bash
-k3sc release --repo {repo-short-name} --pr {N}
-```
-
+If started with `k3sc take`: `k3sc release --repo {repo-short} --pr {N}`
 Print `Merged PR #{N}, closed issue #{issue_N}`.
 
-### If skip
+**If skip**: release reservation if any. Print `Skipped PR #{N} -- left as-is`.
 
-If this review started with `k3sc take`, release the reservation:
+### Issue mode
 
-```bash
-k3sc release --repo {repo-short-name} --pr {N}
-```
+**If close**: `gh issue close {N} --repo {owner/repo}`. Print `Closed issue #{N}`.
 
-Print `Skipped PR #{N} -- left as-is`.
+**If skip**: Print `Skipped issue #{N} -- left as-is`.
 
 ## Rules
 
