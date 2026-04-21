@@ -58,6 +58,14 @@ Recently shipped under this framing:
   pages calling these are probes. Brave doesn't hook these.
   `navigator.share` deliberately excluded — legit share-button
   use is common enough that it would false-positive.
+- **navigator-fp detector (Tier 3)** — 10+ distinct
+  `Navigator.*` / `Screen.*` accessor reads from one origin
+  within 60s → Block suggestion (confidence 80). Layout-noisy
+  accessors (innerWidth / innerHeight / devicePixelRatio /
+  screen.width / screen.height) deliberately excluded to keep
+  the signal specific to fingerprint density. Brave farbles
+  the values but silently; this detector is the transparency
+  layer over that defense.
 
 ## Priority 1 — pure detection gaps Brave doesn't cover
 
@@ -65,35 +73,6 @@ These are behavioral signals Brave doesn't specifically target.
 They're the cleanest fit for Hush's thesis (per-tab behavioral
 observation with evidence-first suggestions) and add value that
 no amount of Brave-tuning replicates.
-
-### Tier 3 navigator/screen property fingerprint **detection**
-
-Fingerprinters read 15-30 property accessors on `navigator`,
-`screen`, and `window` in rapid succession. Brave **farbles** the
-values (defense), but silently — the user never learns which
-sites attempted. Hush's value here is the **transparency layer**.
-
-**Detection strategy**: monkey-patch property getters on
-`navigator` / `screen` prototypes via `Object.defineProperty`.
-Count reads per-origin from stack traces. Flag when a single
-origin reads 10+ properties within 3 seconds of load.
-
-**Properties to monitor**:
-
-- `navigator`: userAgent, platform, language, languages,
-  hardwareConcurrency, deviceMemory, maxTouchPoints,
-  cookieEnabled, doNotTrack, plugins, mimeTypes, vendor,
-  webdriver, connection, onLine
-- `screen`: width, height, availWidth, availHeight, colorDepth,
-  pixelDepth
-- `window`: devicePixelRatio, innerWidth, innerHeight, screenX,
-  screenY
-
-**Tricky bits**: legit code reads `navigator.userAgent` for
-browser detection. A 10+ DIFFERENT-property threshold screens
-most single-purpose sniffs. Output: informational firewall-log
-entry (since Brave already farbles, a Block suggestion is
-redundant).
 
 ### Seeded profiles + brave-supplement.json
 

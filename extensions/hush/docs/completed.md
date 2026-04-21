@@ -180,6 +180,24 @@ Signals currently emitted:
   of these APIs. `navigator.share` is excluded because legit
   share-button use is common.
 
+**Navigator / screen property fingerprint** (Tier 3):
+
+- 10+ distinct `Navigator.*` / `Screen.*` accessor reads from
+  one origin within 60s → suggests **Block** for the calling
+  origin — confidence 80. Monkey-patches the property getters
+  at document_start; emits per-read observation; detector
+  counts distinct params (repeat reads of one property don't
+  inflate). Layout-noisy properties (innerWidth / innerHeight
+  / devicePixelRatio / screen.width / screen.height) are
+  deliberately excluded so the signal stays fingerprint-
+  specific. Tracked properties include userAgent / platform /
+  language / languages / hardwareConcurrency / deviceMemory /
+  maxTouchPoints / cookieEnabled / doNotTrack / plugins /
+  mimeTypes / vendor / webdriver / connection / onLine /
+  screen.colorDepth / screen.pixelDepth. Brave farbles the
+  values; this detector surfaces the attempt so the user
+  knows which sites tried.
+
 **Invisible animation loop**:
 
 - Hot 2D canvas draw ops sample target-canvas visibility once

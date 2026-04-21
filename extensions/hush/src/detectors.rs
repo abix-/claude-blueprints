@@ -793,6 +793,7 @@ struct JsCallSummary {
     distinct_fonts_by_origin: FastMap<String, std::collections::BTreeSet<String>>,
     listener_types_by_origin: FastMap<String, ListenerInfo>,
     attention_types_by_origin: FastMap<String, ListenerInfo>,
+    nav_fp_params_by_origin: FastMap<String, std::collections::BTreeSet<String>>,
     replay_vendors: FastMap<String, u32>,
     raf_waste_by_key: FastMap<String, RafWasteEntry>,
 }
@@ -849,6 +850,8 @@ fn summarize_js_calls(js_calls: &[JsCall]) -> JsCallSummary {
         agg_map();
     let mut listener_types_by_origin: FastMap<String, ListenerInfo> = agg_map();
     let mut attention_types_by_origin: FastMap<String, ListenerInfo> = agg_map();
+    let mut nav_fp_params_by_origin: FastMap<String, std::collections::BTreeSet<String>> =
+        agg_map();
     let mut replay_vendors: FastMap<String, u32> = agg_map();
     let mut raf_waste_by_key: FastMap<String, RafWasteEntry> = agg_map();
 
@@ -913,6 +916,16 @@ fn summarize_js_calls(js_calls: &[JsCall]) -> JsCallSummary {
                     }
                 }
             }
+            "nav-fp" => {
+                if let Some(param) = c.param.as_deref() {
+                    if !param.is_empty() {
+                        nav_fp_params_by_origin
+                            .entry(origin.clone())
+                            .or_default()
+                            .insert(param.to_string());
+                    }
+                }
+            }
             "canvas-draw" => {
                 let sel = c.canvas_sel.clone().unwrap_or_else(|| "canvas".to_string());
                 let key = format!("{origin}|{sel}");
@@ -943,6 +956,7 @@ fn summarize_js_calls(js_calls: &[JsCall]) -> JsCallSummary {
         distinct_fonts_by_origin,
         listener_types_by_origin,
         attention_types_by_origin,
+        nav_fp_params_by_origin,
         replay_vendors,
         raf_waste_by_key,
     }
@@ -1099,6 +1113,38 @@ pub(crate) fn detect_from_js_calls(
             ..ctx.ctx_fields()
         }) {
             out.push(s);
+        }
+    }
+
+    // Navigator / screen property fingerprint detection (Tier 3).
+    // 10+ distinct properties read from one origin within 60s is
+    // the "boring fingerprint" pattern. Legit browser-sniff code
+    // reads 1-2 (userAgent + maybe language). Combining 10+
+    // properties is fingerprint density.
+    //
+    // For Brave users the values are farbled (so blocking isn't
+    // strictly necessary for defense), but surfacing the attempt
+    // still matters — the user learns which sites tried. For
+    // non-Brave users the block is real defense. Either way, the
+    // suggestion shape is the same: Block the origin at confidence
+    // 80.
+    for (origin, params) in &s.nav_fp_params_by_origin {
+        if params.len() >= 10 && s.seconds_since_first < 60 {
+            if origin.is_empty() {
+                continue;
+            }
+            emit_origin_block(
+                ctx,
+                &mut out,
+                origin,
+                format!(
+                    "navigator / screen fingerprint ({} distinct properties)",
+                    params.len()
+                ),
+                80,
+                "navigator-fp",
+                LearnKind::NavigatorFp,
+            );
         }
     }
 
@@ -1658,6 +1704,80 @@ mod tests {
         let out = detect_from_js_calls(&ctx("site.test"), &calls);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].confidence, 80);
+    }
+
+    #[test]
+    fn navigator_fp_fires_at_10_distinct_properties() {
+        let props = [
+            "Navigator.userAgent", "Navigator.platform",
+            "Navigator.language", "Navigator.languages",
+            "Navigator.hardwareConcurrency", "Navigator.deviceMemory",
+            "Navigator.maxTouchPoints", "Navigator.vendor",
+            "Navigator.webdriver", "Screen.colorDepth",
+        ];
+        let calls: Vec<JsCall> = props
+            .iter()
+            .map(|p| JsCall {
+                kind: "nav-fp".into(),
+                t: "2026-04-19T12:00:00.000Z".into(),
+                stack: vec!["at fp (https://nav.test/f.js:1:1)".into()],
+                param: Some(p.to_string()),
+                ..Default::default()
+            })
+            .collect();
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert_eq!(out.len(), 1, "navigator-fp should fire at 10 distinct props");
+        assert_eq!(out[0].kind, "navigator-fp");
+        assert_eq!(out[0].confidence, 80);
+        assert_eq!(out[0].layer, SuggestionLayer::Block);
+    }
+
+    #[test]
+    fn navigator_fp_below_threshold_no_suggestion() {
+        // 9 distinct properties — one below threshold.
+        let props = [
+            "Navigator.userAgent", "Navigator.platform",
+            "Navigator.language", "Navigator.languages",
+            "Navigator.hardwareConcurrency", "Navigator.deviceMemory",
+            "Navigator.maxTouchPoints", "Navigator.vendor",
+            "Navigator.webdriver",
+        ];
+        let calls: Vec<JsCall> = props
+            .iter()
+            .map(|p| JsCall {
+                kind: "nav-fp".into(),
+                t: "2026-04-19T12:00:00.000Z".into(),
+                stack: vec!["at sniff (https://ua.test/u.js:1:1)".into()],
+                param: Some(p.to_string()),
+                ..Default::default()
+            })
+            .collect();
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert!(
+            out.iter().all(|s| s.kind != "navigator-fp"),
+            "navigator-fp should not fire below 10 distinct properties"
+        );
+    }
+
+    #[test]
+    fn navigator_fp_repeat_reads_dont_inflate_count() {
+        // Same property read 100 times from one origin is NOT
+        // fingerprinting (could be a layout loop reading UA).
+        // The detector counts DISTINCT properties.
+        let calls: Vec<JsCall> = (0..100)
+            .map(|_| JsCall {
+                kind: "nav-fp".into(),
+                t: "2026-04-19T12:00:00.000Z".into(),
+                stack: vec!["at layout (https://resp.test/l.js:1:1)".into()],
+                param: Some("Navigator.userAgent".into()),
+                ..Default::default()
+            })
+            .collect();
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert!(
+            out.iter().all(|s| s.kind != "navigator-fp"),
+            "repeat reads of one property should not trip the detector"
+        );
     }
 
     #[test]

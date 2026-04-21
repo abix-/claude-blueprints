@@ -569,6 +569,78 @@
     }
   } catch (e) {}
 
+  // Tier 3 navigator/screen property fingerprint detection.
+  //
+  // Fingerprinters read many `navigator` / `screen` property
+  // accessors in rapid succession; the combination uniquely
+  // identifies 90%+ of browsers. Brave farbles the values (so
+  // they're safe) but silently — the user never learns which
+  // sites attempted to fingerprint them. Hush's value here is
+  // the transparency layer: detect the reads, surface the
+  // attempt, propose a block rule.
+  //
+  // Properties list is surgical — layout-noisy accessors that
+  // responsive-design code reads constantly (innerWidth /
+  // innerHeight / devicePixelRatio / screen.width /
+  // screen.height) are deliberately omitted. What stays is
+  // fingerprint-signal-dominant (hardware concurrency, memory
+  // bucket, plugins list, webdriver flag, etc).
+  //
+  // Implementation: replace the accessor's getter with a
+  // wrapping getter that emits an observation then forwards
+  // to the original. Preserves `this` with `.call(this)`.
+  // Pulls the original descriptor with
+  // `Object.getOwnPropertyDescriptor(proto, prop)`; skips
+  // silently when the property isn't an accessor (some
+  // properties are instance-level on Chromium; if the getter
+  // isn't on the prototype we can't wrap it here without
+  // heavy-weight per-instance patching).
+  function wrapPropertyGetter(proto, propName, protoName) {
+    try {
+      const desc = Object.getOwnPropertyDescriptor(proto, propName);
+      if (!desc || typeof desc.get !== "function") return;
+      const origGetter = desc.get;
+      Object.defineProperty(proto, propName, {
+        configurable: desc.configurable,
+        enumerable: desc.enumerable,
+        get: function hushNavFpGetter() {
+          try {
+            emit({
+              kind: "nav-fp",
+              param: `${protoName}.${propName}`,
+              stack: cap()
+            });
+          } catch (e) {}
+          return origGetter.call(this);
+        }
+      });
+    } catch (e) {}
+  }
+  try {
+    if (typeof Navigator !== "undefined" && Navigator.prototype) {
+      const navProps = [
+        "userAgent", "platform", "language", "languages",
+        "hardwareConcurrency", "deviceMemory", "maxTouchPoints",
+        "cookieEnabled", "doNotTrack", "plugins", "mimeTypes",
+        "vendor", "webdriver", "connection", "onLine"
+      ];
+      for (const p of navProps) {
+        wrapPropertyGetter(Navigator.prototype, p, "Navigator");
+      }
+    }
+  } catch (e) {}
+  try {
+    if (typeof Screen !== "undefined" && Screen.prototype) {
+      // Skip width/height/availWidth/availHeight — legit
+      // layout code reads these. Keep the bits-per-channel
+      // accessors which are pure fingerprint entropy.
+      const screenProps = ["colorDepth", "pixelDepth"];
+      for (const p of screenProps) {
+        wrapPropertyGetter(Screen.prototype, p, "Screen");
+      }
+    }
+  } catch (e) {}
+
   // Clipboard API (navigator.clipboard.readText / writeText).
   //
   // readText() is gesture-gated by Chrome but sites probe for it

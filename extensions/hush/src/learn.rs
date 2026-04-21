@@ -27,6 +27,7 @@ pub enum LearnKind {
     AttentionTracking,
     ClipboardRead,
     DeviceApiProbe,
+    NavigatorFp,
     RafWaste,
 }
 
@@ -53,6 +54,7 @@ impl LearnKind {
             "device-api-probe" | "deviceApiProbe" | "new-api-probe" => {
                 Self::DeviceApiProbe
             }
+            "navigator-fp" | "navigatorFp" | "nav-fp" => Self::NavigatorFp,
             "raf-waste" | "rafWaste" => Self::RafWaste,
             _ => return None,
         })
@@ -81,6 +83,7 @@ impl LearnKind {
             Self::AttentionTracking => "attention-tracking",
             Self::ClipboardRead => "clipboard-read",
             Self::DeviceApiProbe => "device-api-probe",
+            Self::NavigatorFp => "navigator-fp",
             Self::RafWaste => "raf-waste",
         }
     }
@@ -103,6 +106,7 @@ impl LearnKind {
             Self::AttentionTracking => TEXT_ATTENTION_TRACKING,
             Self::ClipboardRead => TEXT_CLIPBOARD_READ,
             Self::DeviceApiProbe => TEXT_DEVICE_API_PROBE,
+            Self::NavigatorFp => TEXT_NAVIGATOR_FP,
             Self::RafWaste => TEXT_RAF_WASTE,
         }
     }
@@ -252,6 +256,18 @@ const TEXT_DEVICE_API_PROBE: &str = concat!(
     "never appears."
 );
 
+const TEXT_NAVIGATOR_FP: &str = concat!(
+    "A script read 10+ distinct navigator / screen properties in ",
+    "rapid succession - the 'boring' fingerprint pattern. The ",
+    "combination of userAgent + language + hardwareConcurrency + ",
+    "deviceMemory + maxTouchPoints + plugins + webdriver + vendor ",
+    "+ colorDepth etc. uniquely identifies 90%+ of browser sessions ",
+    "in published studies. Legitimate browser-sniff code reads 1-2 ",
+    "properties; 10+ in the same call stack is fingerprinting. ",
+    "Brave's farbling defends the VALUES; this detector surfaces ",
+    "the attempt so you know which sites tried."
+);
+
 const TEXT_RAF_WASTE: &str = concat!(
     "A script is continuously painting to a canvas that is hidden ",
     "(display:none, offscreen, sub-2px, or opacity 0). Burns CPU and ",
@@ -285,6 +301,7 @@ mod tests {
             ("attention-tracking", LearnKind::AttentionTracking),
             ("clipboard-read", LearnKind::ClipboardRead),
             ("device-api-probe", LearnKind::DeviceApiProbe),
+            ("navigator-fp", LearnKind::NavigatorFp),
             ("raf-waste", LearnKind::RafWaste),
         ];
         for (tag, expected) in kinds {
@@ -321,6 +338,7 @@ mod tests {
             LearnKind::AttentionTracking,
             LearnKind::ClipboardRead,
             LearnKind::DeviceApiProbe,
+            LearnKind::NavigatorFp,
             LearnKind::RafWaste,
         ] {
             let t = kind.text();

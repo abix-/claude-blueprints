@@ -7,6 +7,43 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+### Tier 3 navigator-fp detector (Block)
+- New mainworld hook: `wrapPropertyGetter` factory patches
+  accessor properties on `Navigator.prototype` and
+  `Screen.prototype` via `Object.getOwnPropertyDescriptor` +
+  `Object.defineProperty`. Forwards `this` to the original
+  getter. Emits `nav-fp` with `param` = constructor-qualified
+  accessor name on every read.
+- Tracked properties (fingerprint-signal-dominant only):
+  - Navigator: userAgent, platform, language, languages,
+    hardwareConcurrency, deviceMemory, maxTouchPoints,
+    cookieEnabled, doNotTrack, plugins, mimeTypes, vendor,
+    webdriver, connection, onLine.
+  - Screen: colorDepth, pixelDepth.
+- Layout-noisy accessors (innerWidth / innerHeight /
+  devicePixelRatio / screen.width / screen.height) are
+  deliberately NOT hooked — responsive-design code reads them
+  every paint and would flood the detector with noise. The
+  pay-off would be minimal since they're also the least
+  discriminating fingerprint signals.
+- New detector: distinct `nav-fp` params per origin tracked
+  via `nav_fp_params_by_origin`. At 10+ distinct props from
+  one origin within 60s → Block suggestion, confidence 80.
+  Repeat reads of one property don't inflate the count
+  (regression test locks this).
+- New `LearnKind::NavigatorFp` with teaching text explaining
+  why 10+ distinct property reads is fingerprint density vs
+  normal browser-sniffing.
+- Three regression tests:
+  `navigator_fp_fires_at_10_distinct_properties`,
+  `navigator_fp_below_threshold_no_suggestion`,
+  `navigator_fp_repeat_reads_dont_inflate_count`. 119/119 pass.
+- Motivation: Brave farbles navigator / screen property values
+  but does so silently — users don't know which sites tried
+  to fingerprint them. Hush's detector is the transparency
+  layer over Brave's defense, and real defense for non-Brave
+  users.
+
 ### Hardware device-API probe detector (Block)
 - New main-world hooks: `Bluetooth.prototype.requestDevice`,
   `USB.prototype.requestDevice`, `HID.prototype.requestDevice`,
