@@ -39,12 +39,17 @@ global decisions (strip, referrer, redirector detection) are
 useful but not priority — they cover edge cases a default-on
 Brave install already handles.
 
-Recently shipped under this framing: **attention-tracking
-detector** (4+ `visibilitychange` / `focus` / `blur` / `pagehide`
-/ `pageshow` / `beforeunload` listeners from one origin → Neuter
-suggestion). Brave doesn't target this pattern; it catches
-engagement analytics + session-replay dwell-time hooks upstream
-of exfil.
+Recently shipped under this framing:
+
+- **attention-tracking detector** — 4+ `visibilitychange` /
+  `focus` / `blur` / `pagehide` / `pageshow` / `beforeunload`
+  listeners from one origin → Neuter suggestion. Catches
+  engagement analytics + session-replay dwell-time hooks.
+- **clipboard-read detector** — any `navigator.clipboard
+  .readText()` call from a page script → Block suggestion for
+  the calling origin (confidence 95). Legit page-script use is
+  near-zero; read attempts mean coupon/competitor-URL sniffing
+  or paste-in tracking. Brave doesn't hook this.
 
 ## Priority 1 — pure detection gaps Brave doesn't cover
 
@@ -52,18 +57,6 @@ These are behavioral signals Brave doesn't specifically target.
 They're the cleanest fit for Hush's thesis (per-tab behavioral
 observation with evidence-first suggestions) and add value that
 no amount of Brave-tuning replicates.
-
-### Clipboard API monitoring
-
-Some sites monitor `navigator.clipboard.readText()` (gesture-
-gated but many sites probe) or wrap paste events to sniff
-clipboard content for coupon codes / competitor URLs. Brave
-doesn't hook this.
-
-**Detection**: hook `navigator.clipboard.readText` /
-`navigator.clipboard.writeText` in main-world. Flag any
-`readText` call as high-signal (very few legit use cases).
-Output: block suggestion for the reading script origin.
 
 ### New-Web-API permission probes
 

@@ -158,6 +158,16 @@ Signals currently emitted:
   session-replay dwell-time hooks that Brave Shields doesn't
   specifically target.
 
+**Clipboard read**:
+
+- Any `navigator.clipboard.readText()` call from a page script
+  → suggests **Block** for the calling origin — confidence 95.
+  Chrome gesture-gates the API but legit page-script use is
+  near-zero (password managers and clipboard inspectors run as
+  extensions, not page scripts), so one call is enough signal.
+  Catches coupon / competitor-URL sniffing and paste-in
+  tracking that Brave doesn't hook.
+
 **Invisible animation loop**:
 
 - Hot 2D canvas draw ops sample target-canvas visibility once

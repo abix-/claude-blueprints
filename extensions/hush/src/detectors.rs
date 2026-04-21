@@ -1102,6 +1102,30 @@ pub(crate) fn detect_from_js_calls(
         }
     }
 
+    // Clipboard read: any call to navigator.clipboard.readText() from
+    // a page script is high-signal. Chrome gesture-gates the API, so
+    // the site had to convince the user to interact first — but legit
+    // page scripts almost never need it. One call is enough to emit
+    // a block suggestion for the calling origin; confidence 95.
+    if let Some(origins) = s.origins_by_kind.get("clipboard-fp") {
+        for (origin, &cnt) in origins {
+            if origin.is_empty() {
+                continue;
+            }
+            emit_origin_block(
+                ctx,
+                &mut out,
+                origin,
+                format!(
+                    "clipboard read (navigator.clipboard.readText called {cnt}x)"
+                ),
+                95,
+                "clipboard-read",
+                LearnKind::ClipboardRead,
+            );
+        }
+    }
+
     // Attention-tracking: 4+ page-lifecycle / visibility listeners
     // from one origin with 3+ distinct event types in <60s. Threshold
     // tighter than the interaction-density detector because attention
@@ -1607,6 +1631,47 @@ mod tests {
         let out = detect_from_js_calls(&ctx("site.test"), &calls);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].confidence, 80);
+    }
+
+    #[test]
+    fn clipboard_read_fires_on_single_call() {
+        let calls = vec![JsCall {
+            kind: "clipboard-fp".into(),
+            t: "2026-04-19T12:00:00.000Z".into(),
+            stack: vec!["at sniff (https://clip.test/s.js:1:1)".into()],
+            method: Some("readText".into()),
+            ..Default::default()
+        }];
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert_eq!(out.len(), 1, "clipboard-read should fire on first call");
+        assert_eq!(out[0].kind, "clipboard-read");
+        assert_eq!(out[0].confidence, 95);
+        assert_eq!(out[0].layer, SuggestionLayer::Block);
+        assert!(
+            out[0].reason.contains("clipboard read"),
+            "reason: {}",
+            out[0].reason
+        );
+    }
+
+    #[test]
+    fn clipboard_read_counts_repeat_calls_in_reason() {
+        let calls: Vec<JsCall> = (0..3)
+            .map(|_| JsCall {
+                kind: "clipboard-fp".into(),
+                t: "2026-04-19T12:00:00.000Z".into(),
+                stack: vec!["at sniff (https://clip.test/s.js:1:1)".into()],
+                method: Some("readText".into()),
+                ..Default::default()
+            })
+            .collect();
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert_eq!(out.len(), 1);
+        assert!(
+            out[0].reason.contains("3x"),
+            "expected call count in reason, got: {}",
+            out[0].reason
+        );
     }
 
     #[test]

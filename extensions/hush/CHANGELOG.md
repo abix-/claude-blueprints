@@ -7,6 +7,25 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+### Clipboard-read detector (Block)
+- New main-world hook: `Clipboard.prototype.readText` wrapped to
+  emit a `clipboard-fp` observation on every call. `writeText`
+  is NOT hooked — too many legit "copy link" uses would
+  false-positive; revisit if a concrete write-side abuse pattern
+  surfaces.
+- New detector: any `clipboard-fp` observation emits a block
+  suggestion for the calling script origin. Confidence 95
+  because Chrome gesture-gates the API and legit page-script
+  use is near-zero (password managers / clipboard inspectors run
+  as extensions, not page scripts). One call is enough signal.
+- New `LearnKind::ClipboardRead` with teaching text.
+- Two regression tests:
+  `clipboard_read_fires_on_single_call`,
+  `clipboard_read_counts_repeat_calls_in_reason`. 114/114 pass.
+- Motivation: Brave Shields doesn't hook this API. Pages that
+  sniff the clipboard for coupon codes, competitor URLs, or
+  paste-in tracking slip through Brave's defenses.
+
 ### Attention-tracking detector (Neuter)
 - New main-world hook coverage: `addEventListener` now also
   tracks attention / page-lifecycle events alongside the

@@ -25,6 +25,7 @@ pub enum LearnKind {
     ReplayVendor,
     ReplayListener,
     AttentionTracking,
+    ClipboardRead,
     RafWaste,
 }
 
@@ -47,6 +48,7 @@ impl LearnKind {
             "replay-vendor" | "replayVendor" => Self::ReplayVendor,
             "listener-density" | "replay-listener" | "replayListener" => Self::ReplayListener,
             "attention-tracking" | "attentionTracking" => Self::AttentionTracking,
+            "clipboard-read" | "clipboardRead" => Self::ClipboardRead,
             "raf-waste" | "rafWaste" => Self::RafWaste,
             _ => return None,
         })
@@ -73,6 +75,7 @@ impl LearnKind {
             Self::ReplayVendor => "replay-vendor",
             Self::ReplayListener => "listener-density",
             Self::AttentionTracking => "attention-tracking",
+            Self::ClipboardRead => "clipboard-read",
             Self::RafWaste => "raf-waste",
         }
     }
@@ -93,6 +96,7 @@ impl LearnKind {
             Self::ReplayVendor => TEXT_REPLAY_VENDOR,
             Self::ReplayListener => TEXT_REPLAY_LISTENER,
             Self::AttentionTracking => TEXT_ATTENTION_TRACKING,
+            Self::ClipboardRead => TEXT_CLIPBOARD_READ,
             Self::RafWaste => TEXT_RAF_WASTE,
         }
     }
@@ -220,6 +224,16 @@ const TEXT_ATTENTION_TRACKING: &str = concat!(
     "without blocking the rest of the site's script."
 );
 
+const TEXT_CLIPBOARD_READ: &str = concat!(
+    "A script called navigator.clipboard.readText() - reading the ",
+    "contents of your system clipboard. Chrome gesture-gates the API ",
+    "but legitimate page scripts almost never need it: password ",
+    "managers and clipboard-inspector tools run as extensions, not ",
+    "page scripts. What a page script reading the clipboard usually ",
+    "means is checking for coupon codes, competitor URLs, or paste-in ",
+    "tracking parameters. Blocking the script origin stops the sniff."
+);
+
 const TEXT_RAF_WASTE: &str = concat!(
     "A script is continuously painting to a canvas that is hidden ",
     "(display:none, offscreen, sub-2px, or opacity 0). Burns CPU and ",
@@ -251,6 +265,7 @@ mod tests {
             ("replay-vendor", LearnKind::ReplayVendor),
             ("listener-density", LearnKind::ReplayListener),
             ("attention-tracking", LearnKind::AttentionTracking),
+            ("clipboard-read", LearnKind::ClipboardRead),
             ("raf-waste", LearnKind::RafWaste),
         ];
         for (tag, expected) in kinds {
@@ -285,6 +300,7 @@ mod tests {
             LearnKind::ReplayVendor,
             LearnKind::ReplayListener,
             LearnKind::AttentionTracking,
+            LearnKind::ClipboardRead,
             LearnKind::RafWaste,
         ] {
             let t = kind.text();

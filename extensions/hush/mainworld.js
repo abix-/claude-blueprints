@@ -569,6 +569,40 @@
     }
   } catch (e) {}
 
+  // Clipboard API (navigator.clipboard.readText / writeText).
+  //
+  // readText() is gesture-gated by Chrome but sites probe for it
+  // and wrap paste events to sniff clipboard content for coupon
+  // codes, competitor URLs, and tracking parameters. Any script
+  // that calls readText() is high-signal — legit uses are rare
+  // and almost always initiated by a very explicit user action
+  // (paste button on a password manager, clipboard inspector in
+  // a dev tool). Emit a `clipboard-fp` observation so the
+  // detector can surface a block suggestion for the script
+  // origin.
+  //
+  // writeText() is NOT hooked here. Sites use it for "copy link"
+  // buttons routinely; flagging those would drown the user in
+  // false positives. If a concrete writeText abuse pattern turns
+  // up (e.g. copy-hijack injecting tracking params), add a
+  // separate detector with a more specific heuristic.
+  try {
+    if (typeof Clipboard !== "undefined" && Clipboard.prototype
+        && typeof Clipboard.prototype.readText === "function") {
+      const _readText = captureOrig(Clipboard.prototype, "readText");
+      Clipboard.prototype.readText = function hushReadText() {
+        try {
+          emit({
+            kind: "clipboard-fp",
+            method: "readText",
+            stack: cap()
+          });
+        } catch (e) {}
+        return _readText.apply(this, arguments);
+      };
+    }
+  } catch (e) {}
+
   // addEventListener density (stays JS-only - needs `this === document` filter)
   try {
     const _addEventListener = captureOrig(EventTarget.prototype, "addEventListener");
