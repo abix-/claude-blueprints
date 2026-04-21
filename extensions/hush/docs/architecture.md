@@ -256,16 +256,25 @@ privacy-preserving "no persistent behavioral history" principle
 
 ## Rule lifecycle
 
-1. **Authoring**. Rules come from one of three sources:
-   - User types a rule into the options editor (site list +
-     per-site editor, with a section per action).
+1. **Authoring**. Rules come from one of four sources:
+   - User types a rule into the options editor's **flat rules
+     table**. One row per rule; scope and action are inline
+     `<select>` cells so edits don't leave the row.
    - User clicks **Add** on a behavioral suggestion surfaced by
-     the detector (see below). The suggestion's `layer` + `value`
-     become a rule.
+     the detector. Accepted suggestions inherit an
+     `auto:<kind>` tag so the firewall log can filter by
+     detector origin.
    - User pastes JSON into the raw-JSON editor.
+   - User imports a **profile** (JSON with a `hushProfile`
+     header); the importer merges additively, preserving
+     existing rule metadata.
 2. **Persistence**. Rules live in `chrome.storage.local["config"]`
-   as a `{ domain: { block: [...], remove: [...], hide: [...],
-   spoof: [...] } }` tree. Plain JSON, inspectable, exportable.
+   as a `{ scope: { block: [...], allow: [...], neuter: [...],
+   silence: [...], remove: [...], hide: [...], spoof: [...] } }`
+   tree where each bucket is a list of
+   `{ value, disabled, tags, comment }` entries. The reserved
+   `__global__` scope key holds rules that apply to every tab.
+   Plain JSON, inspectable, exportable.
 3. **Install**. On every `chrome.storage.onChanged`, the service
    worker (`src/background.rs`) re-syncs dynamic DNR rules for the
    Block action. Content scripts re-read on tab reload for Remove
