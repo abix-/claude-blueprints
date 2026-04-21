@@ -9,31 +9,65 @@ them from this file — present-tense state lives in
 
 ## Context: Hush in a Brave stack
 
-Hush's maintainer uses Brave as the base browser. Brave Shields
-already handles filter-list-based ad/tracker blocking, fingerprint
-farbling at the browser layer (stronger than any extension spoof),
-HTTPS upgrade, third-party storage partitioning, query-parameter
-stripping, referrer rewriting, bounce-tracking protection, and
-CNAME-cloaked tracker unmasking.
+Hush's maintainer uses Brave as the base browser. Verified
+against Brave's current docs (privacy-features page, Shields
+wiki, privacy-updates blog), Brave Shields already ships all of
+this on-by-default at the browser layer:
 
-So Hush's value-add in a Brave world is **what Brave Shields
-doesn't see**:
+- EasyList / EasyPrivacy / uBO lists + Brave-curated lists (ad
+  and tracker blocking). Standard mode = third-party only;
+  Aggressive mode = first-party too.
+- Fingerprint **farbling** — per-session per-eTLD+1 seed
+  randomizes canvas, audio, WebGL, font-enum, and many
+  navigator/screen properties. Stronger than any extension spoof
+  because it operates before the JS returns.
+- HTTPS upgrade (Strict mode shows interstitial on failure).
+- **CNAME-cloaked tracker unmasking** (Brave was first browser to
+  ship this, 1.17.73). MV3 extensions have no DNS API and can't
+  replicate.
+- Third-party storage partitioning + ephemeral storage.
+- URL query-parameter stripping (curated global list).
+- Referrer header rewriting (policy-level).
+- **Debouncing** (1.32+) — skips known click-redirectors
+  entirely.
+- Social-media widget blocking (Facebook Connect, Twitter embed,
+  LinkedIn Share, Google Sign-In).
+- **Resource replacement** — GA4 / Meta Pixel scripts replaced
+  with no-op stubs at load time.
+- Global Privacy Control header, De-AMP, language-fingerprinting
+  reduction, Client Hints limiting, Auto Shred.
 
-- per-site surgical DOM cleanup (Remove/Hide custom elements that
-  no cosmetic list targets)
-- first-party telemetry subdomains (`collector.*`,
-  `w3-reporting.*`, `unagi.*`)
-- session-replay listener density (Neuter / Silence)
-- behavioral fingerprint detection (even with Brave farbling, the
-  evidence log tells you which sites tried)
-- new Web-API permission probes (Bluetooth / USB / HID / Serial)
-- attention tracking (Visibility API + focus/blur density)
-- clipboard read/write monitoring
-- fingerprinting via battery / connection / screen orientation
+That's a wide feature footprint. Hush's value-add shrinks to
+what Brave can't see or can't target:
 
-Priorities below are tuned for that world. The `spoof` action
-stays (non-Brave users still benefit) but is not a priority
-because Brave covers it better at the browser layer.
+**Gaps worth closing** (priority order):
+
+1. **Site-specific surgical DOM cleanup** (Remove/Hide for custom
+   elements). Shipped; Hush's core.
+2. **First-party telemetry subdomain detection**. Shipped;
+   Hush's core.
+3. **Session-replay listener-density detection** — catches
+   bundled first-party replay that doesn't ship from known vendor
+   domains. Shipped; unique to Hush.
+4. **Attention-tracking detector** (Visibility API + focus/blur
+   density). Not shipped; Brave doesn't specifically target this.
+5. **Clipboard API monitoring** (`readText` / `writeText` hooks).
+   Not shipped; Brave doesn't hook this.
+6. **New-Web-API permission probes** (Bluetooth / USB / HID /
+   Serial). Not shipped; Brave may limit but doesn't detect.
+7. **Per-site `strip` / `referrer` / `replace` overrides** on top
+   of Brave's global decisions. Not shipped; complementary.
+8. **Navigator-property fingerprint detection** (Tier 3 — not
+   spoofing; Brave farbles). Not shipped; transparency value
+   only.
+9. **Unknown-redirector detection** — long-tail bounce trackers
+   Brave's curated list hasn't caught yet. Not shipped.
+
+The `spoof` action stays (non-Brave users benefit; Brave users
+who want constant-return aggressive defense on specific sites can
+opt in) but isn't a priority.
+
+Priorities below are tuned to this gap list.
 
 ## Priority 1
 
@@ -63,17 +97,24 @@ let the user tune per-scope.
 
 **Implementation**: DNR `modifyHeaders` rule. Small.
 
-### Bounce-tracking / redirector detector
+### Site-specific redirector detector
 
-Click a link → hits `redirector.com/out?url=X` → 302s to the real
-destination. The redirector exists to log the click. Brave catches
-the common patterns; Hush can catch site-specific ones by
-observation.
+Brave already has **two** layers of bounce-tracking defense: a
+curated debouncing list (1.32+, skips known redirectors
+entirely) plus filter-list blocks. Both are curated, so
+long-tail site-specific redirectors slip through.
+
+Hush's angle: detect **unknown** redirector patterns on sites
+the user is active on, surface them as suggestions. Users can
+block locally or submit upstream to Brave / filter-list
+maintainers.
 
 **Detection**: Resource Timing + navigation correlation. A
-resource fetch immediately followed by a same-click navigation to
-a different host, with the intermediate host serving only a 3xx,
-is the pattern. Emit block suggestion for the redirector.
+resource fetch immediately followed by a same-click navigation
+to a different host, with the intermediate host serving only a
+3xx, is the pattern. Emit block suggestion for the redirector.
+Redundant with Brave's curated list when the redirector is
+already known; unique value is the long tail.
 
 ### Attention-tracking detector
 
@@ -225,6 +266,27 @@ paths) and `navigator.connection.effectiveType` /
 `.downlink` / `.rtt` are stable-ish signals. Detection only
 (Brave spoofs the values); emit an informational entry in the
 firewall log so the user knows which sites probed.
+
+### `replace` action — substitute scripts with no-op stubs
+
+Brave already does this for Google Analytics (gtag.js) and Meta
+Pixel (fbevents.js) — the script loads, page code calling
+`gtag()` / `fbq()` doesn't error, but the calls are no-ops.
+
+Hush's extension: a **per-site, user-authored `replace` rule**
+that substitutes a matched URL with an extension-packaged stub.
+Covers site-specific analytics libraries that Brave's curated
+replacement list doesn't target.
+
+**Implementation**: DNR `redirect` with `redirect.extensionPath`
+pointing to a bundled stub file. Stubs live under
+`stubs/ga.js` / `stubs/fbq.js` / etc. and expose a tiny no-op
+API. User specifies `{ match: "||example.com/analytics.js",
+stub: "noop" }` per rule.
+
+**Why separate from Block**: Block fails the request entirely,
+which can crash page code that checks for the script's globals.
+Replace preserves the global surface, kills the tracking.
 
 ### Crypto-mining heuristic
 

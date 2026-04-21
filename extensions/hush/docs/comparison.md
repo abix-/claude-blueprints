@@ -145,32 +145,83 @@ detection, no fingerprint hardening, no session-replay detection.
 
 ### Brave Shields (built into Brave browser)
 
-**Model**: filter lists + **browser-integrated fingerprint
-randomization** (canvas farbling, WebGL randomization, font
-enumeration limits) + HTTPS Everywhere rules + cookie controls +
-ephemeral storage for third-party iframes.
+**Model**: the most comprehensive browser-layer privacy stack
+shipping. Filter-list-based ad/tracker blocking (EasyList,
+EasyPrivacy, uBlock Origin lists, plus Brave's own curated set) +
+fingerprint randomization at the API level + HTTPS upgrade +
+storage partitioning + URL cleanup + bounce-tracking redirect +
+CNAME-cloak unmasking + script replacement, all on by default.
 
-**Strengths**: the fingerprint randomization is genuine defense
-that an extension cannot match — Brave perturbs the actual API
-returns at the browser level. Extensions can only spoof specific
-reads.
+**Verified shipped features** (cross-checked against Brave's
+privacy-features page + Shields wiki + privacy-updates blog as
+of this writing):
 
-**Overlap with Hush**: conceptually close on fingerprint defense
-but implemented at a different layer.
+- **Ad & tracker blocking**: EasyList / EasyPrivacy / uBO lists +
+  Brave-curated lists. Two modes: **Standard** (third-party
+  only) and **Aggressive** (first-party too).
+- **HTTPS Upgrade**: on by default. Strict mode shows an
+  interstitial when upgrade fails.
+- **Fingerprint farbling**: per-session, per-eTLD+1 randomization
+  of canvas, audio, WebGL, font enumeration, plus many
+  navigator/screen properties. Same site gets consistent values
+  within a session; different sites see different values;
+  reseeds on browser restart.
+- **CNAME cloaking unmasking**: resolves CNAME records and
+  checks both the original and resolved domain against filter
+  lists. Brave was the **first browser** to ship this (1.17.73,
+  Oct 2020). MV3 extensions cannot replicate — no DNS API.
+- **Third-party storage partitioning** + **ephemeral storage**:
+  third-party iframes can't read persistent IDs across sites;
+  storage clears when the last tab for a site closes.
+- **Query-parameter stripping**: removes tracking params
+  (utm_*, gclid, fbclid, msclkid, etc.) from URLs globally via
+  a curated list.
+- **Debouncing**: recognizes a curated list of
+  click-redirector domains and skips them entirely — navigates
+  directly to the final URL instead of bouncing through the
+  tracker. Shipped in 1.32 (Oct 2021).
+- **Referrer rewriting**: trims or removes the Referer header
+  on cross-site requests.
+- **Social-media widget blocking**: configurable at
+  `brave://settings/socialBlocking`. Facebook Connect, Twitter
+  embed, LinkedIn Share, Google Sign-In.
+- **Resource replacement**: replaces Google Analytics / Meta
+  Pixel scripts with privacy-friendly no-op stubs so site code
+  calling `gtag()` / `fbq()` doesn't error but doesn't track.
+  Closest analog to Hush's Silence action but at the script
+  layer, not the request layer.
+- **Global Privacy Control (GPC)**: sends the GPC header on all
+  requests. Legal signal under CCPA and similar laws.
+- **De-AMP**: bypasses Google AMP pages, navigates to canonical.
+- **Auto-redirect tracking URLs**: separate from debouncing;
+  catches longer-tail redirectors.
+- **Language fingerprinting reduction**: only sends primary
+  `navigator.language`; hides full `navigator.languages`.
+- **Client hints protection**: limits User-Agent Client Hints
+  headers.
+- **Auto Shred**: automatic site data clearing on configurable
+  schedule.
 
-| | Brave Shields | Hush |
+**Farbling vs Hush's spoof — different goals**:
+
+| | Brave farbling | Hush spoof |
 |---|---|---|
 | Implementation | Browser core | Extension (main-world hook) |
 | Scope | Every site automatically | Per-site opt-in via `spoof` rules |
-| Mechanism | **Randomize** (farbling — per-session noise added to canvas/audio reads) | **Replace with constant** (bland identical-across-users values) |
-| Trade-off | Small quality loss on legit canvas use site-wide | Breaks opted-in sites' legit canvas use |
-| Reversibility | Toggle in Shields | Per-site rule on/off |
-| Transparency | Brave tells you it's happening | Hush logs each spoof firing |
+| Mechanism | Randomize (per-session noise, per-eTLD+1 seed) | Replace with constant (identical across all users) |
+| Goal | Prevent **cross-session linking** (different you each visit) | Prevent **per-user identification** (everyone looks the same) |
+| Trade-off | Small quality loss on legit canvas use, site-wide | Breaks opted-in sites' legit canvas use entirely |
+| Transparency | Silent | Hush logs each spoof firing |
 
-Brave Shields is strictly a better general solution for
-fingerprint defense **if you're willing to use Brave**. Hush's
-spoof exists because most users aren't on Brave, and a per-site
-extension-level approach beats nothing.
+Subtle point: for per-session fingerprinting (site identifies you
+within one visit), Brave's randomization still produces a
+unique-ish value. Hush's constant produces the **same** value for
+everyone. Brave is better at defeating **tracking over time**;
+Hush's spoof is more aggressive at defeating **a single-visit
+identify**. In practice both are fine; this is mostly theoretical.
+
+**When Hush adds value on top of Brave Shields**: see the "Hush +
+Brave stack" section below.
 
 ### NoScript
 
@@ -210,15 +261,25 @@ behavioral / heuristic, then Hush at the right edge for contrast.
 |---|---|---|---|---|---|---|---|
 | Generic ad blocking (EasyList) | ✔ | ✔ | ✔ | partial | ✔ | partial | ✗ |
 | Cross-site tracker blocking | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | partial (via user rules) |
+| First-party ad/tracker blocking (aggressive) | ✗ | ✗ | ✗ | ✗ | ✔ (Aggressive mode) | ✗ | via user rules |
 | **First-party telemetry detection** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✔** |
 | **Site-specific custom-element cleanup** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✔** |
-| Session-replay vendor detection | list-based | list-based | list-based | no | ✗ | ✗ | **behavioral** |
+| Session-replay vendor detection | list-based | list-based | list-based | no | list-based | ✗ | **behavioral** |
 | **Session-replay listener density check** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **✔** |
 | Canvas fingerprint defense | ✗ | ✗ | ✗ | ✗ | ✔ randomize | ✗ | ✔ spoof (opt-in) |
 | WebGL fingerprint defense | ✗ | ✗ | ✗ | ✗ | ✔ randomize | ✗ | ✔ spoof (opt-in) |
 | Audio fingerprint defense | ✗ | ✗ | ✗ | ✗ | ✔ randomize | ✗ | ✔ spoof (opt-in) |
-| Font-enum fingerprint defense | ✗ | ✗ | ✗ | ✗ | ✔ limit | ✗ | ✔ spoof (opt-in) |
-| Cookie banner auto-dismiss | via list | ✗ | ✗ | ✗ | partial | ✗ | ✗ |
+| Font-enum fingerprint defense | ✗ | ✗ | ✗ | ✗ | ✔ randomize | ✗ | ✔ spoof (opt-in) |
+| Navigator/screen property defense | ✗ | ✗ | ✗ | ✗ | ✔ randomize | ✗ | planned (Tier 3 detect) |
+| Query-parameter stripping | via list | ✗ | ✗ | ✗ | ✔ | ✗ | planned (per-site `strip`) |
+| Referrer header rewriting | via list | ✗ | ✗ | ✗ | ✔ | ✗ | planned (per-site `referrer`) |
+| Bounce-tracking / debouncing | via list | ✗ | ✗ | ✗ | ✔ | ✗ | planned (site-specific detect) |
+| CNAME-cloaked tracker unmasking | ✗ | ✗ | ✗ | ✗ | ✔ | ✗ | ✗ (no DNS API in MV3) |
+| Third-party storage partitioning | ✗ | ✗ | ✗ | ✗ | ✔ | ✗ | ✗ (browser-level only) |
+| Resource replacement (GA/Pixel stubs) | ✗ | ✗ | ✗ | ✗ | ✔ | ✗ | planned (`replace` action) |
+| Global Privacy Control header | ✗ | ✗ | ✗ | ✗ | ✔ | ✗ | ✗ |
+| De-AMP / canonical URL follow | ✗ | ✗ | ✗ | ✗ | ✔ | ✗ | ✗ |
+| Cookie banner auto-dismiss | via list | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | HTTPS upgrade | ✗ | ✗ | ✗ | ✔ | ✔ | ✔ | ✗ |
 | Per-page evidence UI | partial | ✗ | **✔ (best)** | ✔ | partial | partial | **✔ (firewall log)** |
 | **User rule authoring** | limited (custom list) | ✗ | ✗ | ✗ | ✗ | ✗ | **✔ (primary model)** |
@@ -226,6 +287,70 @@ behavioral / heuristic, then Hush at the right edge for contrast.
 | No network egress from extension | ✗ fetches lists | ✗ | ✗ | ✗ | n/a | ✗ | **✔** |
 | MV3 native | uBOL yes, uBO no | yes | yes | yes | n/a | yes | **yes** |
 | Cross-site correlation | ✗ | ✗ | partial | **✔** | partial | ✗ | ✗ |
+
+## Hush + Brave stack
+
+Brave Shields covers most of what Hush's Block / Spoof / Allow
+actions do, only better (browser layer, farbling, DNS-level CNAME
+unmasking). A Brave user shouldn't expect Hush to add value in
+those lanes. What **does** Hush add on top of Shields:
+
+**Unique to Hush — not covered by Shields at any mode**:
+
+1. **Site-specific surgical DOM cleanup** (Remove, Hide). Shields
+   has cosmetic filters from EasyList but can't target custom
+   elements like Reddit's `shreddit-async-loader` or Amazon's
+   `ad-feedback` components.
+2. **First-party telemetry subdomain detection**
+   (`collector.github.com`, `unagi.amazon.com`, etc.).
+   Filter-list-free; behavioral signal from Resource Timing
+   (small responses, beacon types, same-host as tab).
+3. **Session-replay listener density check**. Catches
+   **bundled** first-party replay libraries that don't ship from
+   `hotjar.com` — the Neuter action denies
+   `addEventListener('mousemove' | 'keydown' | …)` at
+   document_start.
+4. **Evidence log of what tried to fingerprint you**. Brave
+   farbles silently; Hush's firewall log tells you that
+   `siteX.com` called `getParameter(UNMASKED_RENDERER_WEBGL)` 12
+   times in 2 seconds. Transparency layer, not additional
+   defense.
+5. **Per-site rule-authoring UI** for any of the above, with
+   live suggestions tied to evidence.
+
+**Complementary to Shields — per-site overrides on top of
+Brave's global decisions**:
+
+6. **`strip` action** (planned): Brave's curated param-strip
+   list is global. Hush's per-site strip lets you remove
+   site-specific tracking params Brave's list doesn't know
+   about — without turning off Brave's global strip.
+7. **`referrer` action** (planned): Brave's Referer rewriting
+   is policy-level. Hush can pin a Referer to a specific value
+   on a specific scope (useful for paywalled sites that gate on
+   the Referer header).
+8. **Spoof action** for sites where you want **stronger**
+   fingerprint defense than farbling. Trade-off: spoof returns
+   a constant (everyone identical, risks breaking legit canvas
+   use); farbling returns consistent-per-session noise (safer,
+   less aggressive). Use spoof only on sites where you know
+   the fingerprint attempt is malicious.
+
+**Future Hush additions specifically for Brave users**
+(prioritized in [roadmap.md](roadmap.md)):
+
+- Attention-tracking detector (Visibility API + focus/blur
+  density). Brave doesn't specifically target this.
+- Clipboard API monitoring (`navigator.clipboard.readText`).
+  Brave doesn't hook this.
+- New-Web-API permission probes
+  (Bluetooth/USB/HID/Serial/Web Share). Brave limits some but
+  doesn't detect/report probes.
+- Tier 3 navigator-property fingerprint **detection** (not
+  spoofing — Brave farbles it). Transparency value.
+- `replace` action — substitute matched scripts with no-op
+  stubs. Brave already does this for GA4 / Meta Pixel; Hush
+  would cover site-specific cases.
 
 ## When to use which
 
