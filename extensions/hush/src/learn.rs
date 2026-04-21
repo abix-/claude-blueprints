@@ -26,6 +26,7 @@ pub enum LearnKind {
     ReplayListener,
     AttentionTracking,
     ClipboardRead,
+    DeviceApiProbe,
     RafWaste,
 }
 
@@ -49,6 +50,9 @@ impl LearnKind {
             "listener-density" | "replay-listener" | "replayListener" => Self::ReplayListener,
             "attention-tracking" | "attentionTracking" => Self::AttentionTracking,
             "clipboard-read" | "clipboardRead" => Self::ClipboardRead,
+            "device-api-probe" | "deviceApiProbe" | "new-api-probe" => {
+                Self::DeviceApiProbe
+            }
             "raf-waste" | "rafWaste" => Self::RafWaste,
             _ => return None,
         })
@@ -76,6 +80,7 @@ impl LearnKind {
             Self::ReplayListener => "listener-density",
             Self::AttentionTracking => "attention-tracking",
             Self::ClipboardRead => "clipboard-read",
+            Self::DeviceApiProbe => "device-api-probe",
             Self::RafWaste => "raf-waste",
         }
     }
@@ -97,6 +102,7 @@ impl LearnKind {
             Self::ReplayListener => TEXT_REPLAY_LISTENER,
             Self::AttentionTracking => TEXT_ATTENTION_TRACKING,
             Self::ClipboardRead => TEXT_CLIPBOARD_READ,
+            Self::DeviceApiProbe => TEXT_DEVICE_API_PROBE,
             Self::RafWaste => TEXT_RAF_WASTE,
         }
     }
@@ -234,6 +240,18 @@ const TEXT_CLIPBOARD_READ: &str = concat!(
     "tracking parameters. Blocking the script origin stops the sniff."
 );
 
+const TEXT_DEVICE_API_PROBE: &str = concat!(
+    "A script called one of the hardware-device APIs ",
+    "(Bluetooth.requestDevice / USB.requestDevice / HID.requestDevice / ",
+    "Serial.requestPort). These APIs are user-gesture-gated and show a ",
+    "native permission prompt, but calling them tells the site the API ",
+    "exists on your browser / OS and opens a prompt that's already an ",
+    "entropy signal. Legitimate uses are rare and tend to be explicit ",
+    "industrial / maker-space / dev-tool contexts. Random web pages ",
+    "calling these are suspicious - block the origin so the prompt ",
+    "never appears."
+);
+
 const TEXT_RAF_WASTE: &str = concat!(
     "A script is continuously painting to a canvas that is hidden ",
     "(display:none, offscreen, sub-2px, or opacity 0). Burns CPU and ",
@@ -266,6 +284,7 @@ mod tests {
             ("listener-density", LearnKind::ReplayListener),
             ("attention-tracking", LearnKind::AttentionTracking),
             ("clipboard-read", LearnKind::ClipboardRead),
+            ("device-api-probe", LearnKind::DeviceApiProbe),
             ("raf-waste", LearnKind::RafWaste),
         ];
         for (tag, expected) in kinds {
@@ -301,6 +320,7 @@ mod tests {
             LearnKind::ReplayListener,
             LearnKind::AttentionTracking,
             LearnKind::ClipboardRead,
+            LearnKind::DeviceApiProbe,
             LearnKind::RafWaste,
         ] {
             let t = kind.text();

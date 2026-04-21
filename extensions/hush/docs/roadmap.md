@@ -50,6 +50,14 @@ Recently shipped under this framing:
   the calling origin (confidence 95). Legit page-script use is
   near-zero; read attempts mean coupon/competitor-URL sniffing
   or paste-in tracking. Brave doesn't hook this.
+- **device-api-probe detector** — any call to
+  `Bluetooth.requestDevice` / `USB.requestDevice` /
+  `HID.requestDevice` / `Serial.requestPort` from a page script
+  → Block suggestion (confidence 90). Legit uses are rare
+  (maker-space / industrial / dev-tool contexts); random web
+  pages calling these are probes. Brave doesn't hook these.
+  `navigator.share` deliberately excluded — legit share-button
+  use is common enough that it would false-positive.
 
 ## Priority 1 — pure detection gaps Brave doesn't cover
 
@@ -57,19 +65,6 @@ These are behavioral signals Brave doesn't specifically target.
 They're the cleanest fit for Hush's thesis (per-tab behavioral
 observation with evidence-first suggestions) and add value that
 no amount of Brave-tuning replicates.
-
-### New-Web-API permission probes
-
-`Bluetooth.requestDevice` / `USB.requestDevice` /
-`HID.requestDevice` / `Serial.requestPort` /
-`navigator.share` are device-fingerprinting vectors. Legit uses
-are rare and always user-initiated. Sites that merely *probe*
-(check for API existence) are also suspicious. Brave may limit
-some but doesn't detect/report probes.
-
-**Detection**: hook the five new-API entry points. Any call from
-a non-user-initiated context is high-signal. Output: Neuter
-suggestion for the script origin.
 
 ### Tier 3 navigator/screen property fingerprint **detection**
 

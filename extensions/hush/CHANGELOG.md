@@ -7,6 +7,29 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+### Hardware device-API probe detector (Block)
+- New main-world hooks: `Bluetooth.prototype.requestDevice`,
+  `USB.prototype.requestDevice`, `HID.prototype.requestDevice`,
+  `Serial.prototype.requestPort`. All four emit a
+  `new-api-probe` observation with the constructor-qualified
+  method name.
+- `navigator.share` deliberately **not** hooked — legit
+  share-button use is too common; would false-positive.
+- New detector: any `new-api-probe` observation emits a block
+  suggestion for the calling script origin. Confidence 90.
+  Multi-API calls from one origin consolidate into one
+  suggestion (regression test locks this).
+- New `LearnKind::DeviceApiProbe` with teaching text
+  explaining the fingerprint-via-prompt angle.
+- Two regression tests:
+  `device_api_probe_fires_on_single_call`,
+  `device_api_probe_consolidates_multi_api_calls_per_origin`.
+  116/116 pass.
+- Motivation: Brave Shields doesn't hook these APIs. Pages
+  that probe Bluetooth / USB / HID / Serial availability (to
+  fingerprint the browser/OS or show entropy-signaling
+  permission prompts) slip through Brave's defenses.
+
 ### Clipboard-read detector (Block)
 - New main-world hook: `Clipboard.prototype.readText` wrapped to
   emit a `clipboard-fp` observation on every call. `writeText`

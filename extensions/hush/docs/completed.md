@@ -168,6 +168,18 @@ Signals currently emitted:
   Catches coupon / competitor-URL sniffing and paste-in
   tracking that Brave doesn't hook.
 
+**Hardware device-API probes**:
+
+- Any call to `Bluetooth.requestDevice` / `USB.requestDevice` /
+  `HID.requestDevice` / `Serial.requestPort` from a page script
+  → suggests **Block** for the calling origin — confidence 90.
+  Legit uses are rare (maker-space, industrial, dev-tool
+  contexts) and always clearly user-initiated. Random web
+  pages calling these are fingerprint probes — the permission
+  prompt itself is an entropy signal. Brave doesn't hook any
+  of these APIs. `navigator.share` is excluded because legit
+  share-button use is common.
+
 **Invisible animation loop**:
 
 - Hot 2D canvas draw ops sample target-canvas visibility once

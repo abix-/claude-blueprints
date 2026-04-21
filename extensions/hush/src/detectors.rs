@@ -1102,6 +1102,33 @@ pub(crate) fn detect_from_js_calls(
         }
     }
 
+    // Hardware device-API probes: any call to
+    // navigator.bluetooth / usb / hid / serial .requestDevice (or
+    // .requestPort) from a page script is high-signal. These APIs
+    // are gesture-gated and show a native permission prompt, but
+    // the prompt itself is an entropy signal (the site learns the
+    // API exists on the browser / OS) and legit uses are rare and
+    // contextual. One call → block suggestion for the calling
+    // origin. Confidence 90.
+    if let Some(origins) = s.origins_by_kind.get("new-api-probe") {
+        for (origin, &cnt) in origins {
+            if origin.is_empty() {
+                continue;
+            }
+            emit_origin_block(
+                ctx,
+                &mut out,
+                origin,
+                format!(
+                    "hardware-device API probe ({cnt} requestDevice / requestPort calls)"
+                ),
+                90,
+                "device-api-probe",
+                LearnKind::DeviceApiProbe,
+            );
+        }
+    }
+
     // Clipboard read: any call to navigator.clipboard.readText() from
     // a page script is high-signal. Chrome gesture-gates the API, so
     // the site had to convince the user to interact first — but legit
@@ -1631,6 +1658,58 @@ mod tests {
         let out = detect_from_js_calls(&ctx("site.test"), &calls);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].confidence, 80);
+    }
+
+    #[test]
+    fn device_api_probe_fires_on_single_call() {
+        let calls = vec![JsCall {
+            kind: "new-api-probe".into(),
+            t: "2026-04-19T12:00:00.000Z".into(),
+            stack: vec!["at probe (https://hw.test/p.js:1:1)".into()],
+            method: Some("Bluetooth.requestDevice".into()),
+            ..Default::default()
+        }];
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        assert_eq!(out.len(), 1, "device-api-probe should fire on first call");
+        assert_eq!(out[0].kind, "device-api-probe");
+        assert_eq!(out[0].confidence, 90);
+        assert_eq!(out[0].layer, SuggestionLayer::Block);
+        assert!(
+            out[0].reason.contains("hardware-device API"),
+            "reason: {}",
+            out[0].reason
+        );
+    }
+
+    #[test]
+    fn device_api_probe_consolidates_multi_api_calls_per_origin() {
+        // One script origin hitting multiple device APIs (Bluetooth
+        // + USB in a single probe sweep) still produces ONE
+        // suggestion for that origin, not one per API. The count
+        // in the reason reflects all calls.
+        let calls = vec![
+            JsCall {
+                kind: "new-api-probe".into(),
+                t: "2026-04-19T12:00:00.000Z".into(),
+                stack: vec!["at probe (https://hw.test/p.js:1:1)".into()],
+                method: Some("Bluetooth.requestDevice".into()),
+                ..Default::default()
+            },
+            JsCall {
+                kind: "new-api-probe".into(),
+                t: "2026-04-19T12:00:01.000Z".into(),
+                stack: vec!["at probe (https://hw.test/p.js:1:1)".into()],
+                method: Some("USB.requestDevice".into()),
+                ..Default::default()
+            },
+        ];
+        let out = detect_from_js_calls(&ctx("site.test"), &calls);
+        let device_suggestions: Vec<_> = out
+            .iter()
+            .filter(|s| s.kind == "device-api-probe")
+            .collect();
+        assert_eq!(device_suggestions.len(), 1);
+        assert!(device_suggestions[0].reason.contains("2"));
     }
 
     #[test]

@@ -603,6 +603,66 @@
     }
   } catch (e) {}
 
+  // New-Web-API hardware device probes
+  // (Bluetooth / USB / HID / Serial).
+  //
+  // These APIs are user-gesture-gated and surface a native
+  // permission prompt, so merely calling them doesn't automatically
+  // give the site anything. But the call itself is a fingerprint
+  // vector: the site learns whether the browser implements the
+  // API, which OS / Chrome channel the user is on, and in the case
+  // of successful requests, the distinct device list (another
+  // entropy signal).
+  //
+  // Legitimate uses are rare and tend to be obvious dev-tool /
+  // industrial / maker-space contexts where the user explicitly
+  // clicks a "connect" button. On a random web page a
+  // `requestDevice` call is high-signal suspicious. Brave doesn't
+  // hook any of these APIs; a Hush block suggestion catches the
+  // gap.
+  //
+  // Implementation: one wrapper factory, applied to each
+  // prototype's entry point. Emits `new-api-probe` with the
+  // constructor-qualified method name so the detector can tell
+  // Bluetooth from USB in the firewall log.
+  function wrapDeviceApi(proto, methodName, tag) {
+    try {
+      if (proto && typeof proto[methodName] === "function") {
+        const _orig = captureOrig(proto, methodName);
+        proto[methodName] = function hushDeviceApi() {
+          try {
+            emit({
+              kind: "new-api-probe",
+              method: tag,
+              stack: cap()
+            });
+          } catch (e) {}
+          return _orig.apply(this, arguments);
+        };
+      }
+    } catch (e) {}
+  }
+  try {
+    if (typeof Bluetooth !== "undefined") {
+      wrapDeviceApi(Bluetooth.prototype, "requestDevice", "Bluetooth.requestDevice");
+    }
+  } catch (e) {}
+  try {
+    if (typeof USB !== "undefined") {
+      wrapDeviceApi(USB.prototype, "requestDevice", "USB.requestDevice");
+    }
+  } catch (e) {}
+  try {
+    if (typeof HID !== "undefined") {
+      wrapDeviceApi(HID.prototype, "requestDevice", "HID.requestDevice");
+    }
+  } catch (e) {}
+  try {
+    if (typeof Serial !== "undefined") {
+      wrapDeviceApi(Serial.prototype, "requestPort", "Serial.requestPort");
+    }
+  } catch (e) {}
+
   // addEventListener density (stays JS-only - needs `this === document` filter)
   try {
     const _addEventListener = captureOrig(EventTarget.prototype, "addEventListener");
