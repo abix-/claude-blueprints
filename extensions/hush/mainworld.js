@@ -43,6 +43,38 @@
     } catch (e) { /* ignore — detached document */ }
   }
 
+  // Check at call time whether the site has opted into spoofing a
+  // given kind. Content script writes dataset.hushSpoof = cfg.spoof
+  // .join(",") at document_start; reading at call time means the
+  // install-time race between content.js and mainworld.js is moot
+  // by the time any page script invokes the spoofed API.
+  function hasSpoofTag(tag) {
+    try {
+      const el = document.documentElement;
+      const v = el && el.dataset && el.dataset.hushSpoof;
+      return !!(v && v.indexOf(tag) >= 0);
+    } catch (e) { return false; }
+  }
+
+  // Constant 1x1 transparent PNG used as the bland return value from
+  // canvas `toDataURL` / `toBlob` when the `canvas` spoof is active.
+  // Fingerprinters rely on subpixel rendering differences across
+  // GPUs / drivers to hash a unique value; returning a fixed byte
+  // sequence takes that entropy to zero.
+  const BLAND_PNG_DATAURL =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAA" +
+    "DUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const BLAND_PNG_BYTES = (() => {
+    try {
+      const b64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+      const bin = atob(b64);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    } catch (e) { return new Uint8Array(0); }
+  })();
+
   // Same dedup shape for neuter + silence — one event per
   // (type, origin, page). Each set is keyed by the matched origin
   // host so different replay vendors on the same page each get a
@@ -344,30 +376,72 @@
     };
   } catch (e) {}
 
-  // Canvas FP: toDataURL, toBlob (stub now; Rust re-patches post-load)
+  // Canvas FP: toDataURL, toBlob.
+  //
+  // Detection emits a `canvas-fp` observation. Spoof (kind tag
+  // `canvas`): when opted in, both return constant bland bytes — a
+  // 1x1 transparent PNG — so the fingerprinter's hash is invariant
+  // across users. Opt-in per site since legitimate uses (image
+  // resize, drawing tools, thumbnail export) would break.
   try {
     const _toDataURL = captureOrig(HTMLCanvasElement.prototype, "toDataURL");
     HTMLCanvasElement.prototype.toDataURL = function hushToDataURL() {
       try { emit({ kind: "canvas-fp", method: "toDataURL", stack: cap() }); } catch (e) {}
+      if (hasSpoofTag("canvas")) {
+        emitSpoofHit("canvas");
+        return BLAND_PNG_DATAURL;
+      }
       return _toDataURL.apply(this, arguments);
     };
   } catch (e) {}
   try {
     if (HTMLCanvasElement.prototype.toBlob) {
       const _toBlob = captureOrig(HTMLCanvasElement.prototype, "toBlob");
-      HTMLCanvasElement.prototype.toBlob = function hushToBlob() {
+      HTMLCanvasElement.prototype.toBlob = function hushToBlob(cb) {
         try { emit({ kind: "canvas-fp", method: "toBlob", stack: cap() }); } catch (e) {}
+        if (hasSpoofTag("canvas")) {
+          emitSpoofHit("canvas");
+          try {
+            const blob = new Blob([BLAND_PNG_BYTES], { type: "image/png" });
+            // Spec: callback fires asynchronously.
+            Promise.resolve().then(() => {
+              try { cb && cb(blob); } catch (e) {}
+            });
+            return;
+          } catch (e) { /* fall through to real toBlob */ }
+        }
         return _toBlob.apply(this, arguments);
       };
     }
   } catch (e) {}
 
-  // Canvas 2D getImageData + measureText (stub now; Rust re-patches)
+  // Canvas 2D getImageData + measureText.
+  //
+  // getImageData spoof (kind tag `canvas`): return a fresh ImageData
+  // of the requested dimensions with all pixels transparent-black.
+  // Kills the pixel-hash fingerprint while keeping the API surface
+  // intact (instanceof, .data length, .width, .height all correct).
+  //
+  // measureText spoof (kind tag `font-enum`): return a synthetic
+  // TextMetrics-shaped plain object whose fields depend only on
+  // text length, not on font. Fingerprinters who compare
+  // measureText widths across many font-family strings see the
+  // same numbers every time → zero entropy. Note: returned object
+  // is not an instanceof TextMetrics; that trade-off is acceptable
+  // for opt-in spoof.
   try {
     if (typeof CanvasRenderingContext2D !== "undefined") {
       const _getImageData = captureOrig(CanvasRenderingContext2D.prototype, "getImageData");
-      CanvasRenderingContext2D.prototype.getImageData = function hushGetImageData() {
+      CanvasRenderingContext2D.prototype.getImageData = function hushGetImageData(x, y, w, h) {
         try { emit({ kind: "canvas-fp", method: "getImageData", stack: cap() }); } catch (e) {}
+        if (hasSpoofTag("canvas")) {
+          emitSpoofHit("canvas");
+          try {
+            const ww = (w | 0) > 0 ? (w | 0) : 1;
+            const hh = (h | 0) > 0 ? (h | 0) : 1;
+            return new ImageData(ww, hh);
+          } catch (e) { /* fall through to real getImageData */ }
+        }
         return _getImageData.apply(this, arguments);
       };
       const _measureText = captureOrig(CanvasRenderingContext2D.prototype, "measureText");
@@ -380,6 +454,25 @@
             stack: cap()
           });
         } catch (e) {}
+        if (hasSpoofTag("font-enum")) {
+          emitSpoofHit("font-enum");
+          const chars = text == null ? 0 : String(text).length;
+          const width = chars * 8;
+          return {
+            width: width,
+            actualBoundingBoxLeft: 0,
+            actualBoundingBoxRight: width,
+            actualBoundingBoxAscent: 10,
+            actualBoundingBoxDescent: 2,
+            fontBoundingBoxAscent: 12,
+            fontBoundingBoxDescent: 3,
+            emHeightAscent: 12,
+            emHeightDescent: 3,
+            hangingBaseline: 9,
+            alphabeticBaseline: 0,
+            ideographicBaseline: -3
+          };
+        }
         return _measureText.apply(this, arguments);
       };
     }
@@ -413,15 +506,9 @@
           stack: cap()
         });
       } catch (e) {}
-      if (param === 37445 || param === 37446) {
-        try {
-          const el = document.documentElement;
-          const spoof = el && el.dataset && el.dataset.hushSpoof;
-          if (spoof && spoof.indexOf("webgl-unmasked") >= 0) {
-            emitSpoofHit("webgl-unmasked");
-            return param === 37445 ? "Google Inc." : "ANGLE (Generic)";
-          }
-        } catch (e) { /* fall through to real value */ }
+      if ((param === 37445 || param === 37446) && hasSpoofTag("webgl-unmasked")) {
+        emitSpoofHit("webgl-unmasked");
+        return param === 37445 ? "Google Inc." : "ANGLE (Generic)";
       }
       return origFn.apply(this, arguments);
     };
@@ -429,7 +516,16 @@
   try { if (typeof WebGLRenderingContext !== "undefined") wrapGLStub(WebGLRenderingContext.prototype); } catch (e) {}
   try { if (typeof WebGL2RenderingContext !== "undefined") wrapGLStub(WebGL2RenderingContext.prototype); } catch (e) {}
 
-  // OfflineAudioContext constructor (stays JS-only - constructor replacement pattern)
+  // OfflineAudioContext constructor (stays JS-only - constructor
+  // replacement pattern).
+  //
+  // Detection: emit `audio-fp` observation on construction. Spoof
+  // (kind tag `audio`): when opted in, `startRendering` resolves to
+  // a silent AudioBuffer of the requested dimensions instead of the
+  // real rendered waveform. Audio fingerprinters rely on tiny
+  // floating-point divergences across platforms when rendering a
+  // known graph (oscillator → compressor → destination); returning
+  // silence zeroes that entropy.
   try {
     if (typeof OfflineAudioContext !== "undefined") {
       const OrigOAC = OfflineAudioContext;
@@ -440,6 +536,24 @@
       HushOAC.prototype = OrigOAC.prototype;
       HushOAC.prototype.constructor = HushOAC;
       window.OfflineAudioContext = HushOAC;
+
+      const _startRendering = captureOrig(OrigOAC.prototype, "startRendering");
+      if (_startRendering) {
+        OrigOAC.prototype.startRendering = function hushStartRendering() {
+          if (hasSpoofTag("audio")) {
+            emitSpoofHit("audio");
+            try {
+              const silent = this.createBuffer(
+                this.numberOfChannels,
+                this.length,
+                this.sampleRate
+              );
+              return Promise.resolve(silent);
+            } catch (e) { /* fall through to real render */ }
+          }
+          return _startRendering.apply(this, arguments);
+        };
+      }
     }
   } catch (e) {}
 

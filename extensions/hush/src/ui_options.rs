@@ -13,10 +13,11 @@ use crate::chrome_bridge;
 use crate::types::{Config, RuleEntry, SiteConfig};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::JsFuture;
 
 /// Initial snapshot `options.js` hands in at mount time. Keeps the
 /// Leptos root from having to re-fetch `chrome.storage.local` on
@@ -121,12 +122,13 @@ pub fn mount_options(snapshot: JsValue) -> Result<(), JsValue> {
         }
     }
 
-    // Site list + per-site editor.
+    // Flat firewall-style rule table: one row per rule across every
+    // scope and action, with scope/action as inline cells.
     if let Some(config_root) = document.get_element_by_id("rust-config-root") {
         if let Ok(el) = config_root.dyn_into::<web_sys::HtmlElement>() {
             let cfg = snap.config.clone();
             std::mem::forget(leptos::mount::mount_to(el, move || {
-                view! { <ConfigEditor initial=cfg.clone() /> }
+                view! { <RulesTable initial=cfg.clone() /> }
             }));
         }
     }
@@ -160,6 +162,7 @@ fn OptionsRoot(snap: OptionsSnapshot) -> impl IntoView {
             status=status
         />
         <ConfigToolbar status=status />
+        <ProfileTools status=status />
         <UrlSimulator />
         <StatusBanner status=status />
     }
@@ -269,6 +272,311 @@ fn ConfigToolbar(status: RwSignal<Option<StatusMsg>>) -> impl IntoView {
             </button>
         </div>
     }
+}
+
+/// Self-describing header for a profile JSON file. Gated so an
+/// accidental import of some unrelated JSON dies with a clear
+/// error rather than nuking the user's config.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ProfileHeader {
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default = "default_profile_version")]
+    version: u32,
+}
+
+fn default_profile_version() -> u32 {
+    1
+}
+
+/// A profile file on disk. `hushProfile` header identifies the
+/// shape; `config` is the same IndexMap<scope, SiteConfig> the
+/// live config uses, so export/import is a pure round-trip.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Profile {
+    #[serde(rename = "hushProfile")]
+    header: ProfileHeader,
+    config: Config,
+}
+
+#[derive(Default, Clone, Copy)]
+struct MergeStats {
+    added: usize,
+    skipped: usize,
+}
+
+/// Union an incoming profile's config into the current one.
+/// Dedup is by `(scope, action, value)`; existing rows keep their
+/// `disabled` / `tags` / `comment` metadata untouched (the import
+/// doesn't overwrite a user-maintained annotation with the
+/// profile's default one). Returns added / skipped counts for the
+/// confirmation banner.
+fn merge_profile_into_config(current: &mut Config, incoming: &Config) -> MergeStats {
+    let mut stats = MergeStats::default();
+    for (scope, site_in) in incoming.iter() {
+        let site_cur = current.entry(scope.clone()).or_default();
+        for action in LayerKind::ALL {
+            let to_add: Vec<RuleEntry> = action.read(site_in).to_vec();
+            let cur = action.modify(site_cur);
+            for entry in to_add {
+                if cur.iter().any(|e| e.value == entry.value) {
+                    stats.skipped += 1;
+                } else {
+                    cur.push(entry);
+                    stats.added += 1;
+                }
+            }
+        }
+    }
+    stats
+}
+
+/// Profile import / export row. Two buttons: Import merges a
+/// profile JSON (with `hushProfile` header) into the current
+/// config; Export wraps the current config with a user-supplied
+/// name / description and triggers a download. Import uses a
+/// dedup union — existing rules keep their metadata, new rules
+/// append to the end of the target bucket.
+#[component]
+fn ProfileTools(status: RwSignal<Option<StatusMsg>>) -> impl IntoView {
+    let busy = RwSignal::new(false);
+    let file_input_id = "hush-profile-import";
+
+    let on_import_click = move |_| {
+        let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+            return;
+        };
+        let Some(el) = document.get_element_by_id(file_input_id) else {
+            return;
+        };
+        if let Ok(input) = el.dyn_into::<web_sys::HtmlInputElement>() {
+            input.click();
+        }
+    };
+
+    let on_file_change = move |ev: web_sys::Event| {
+        if busy.get() {
+            return;
+        }
+        let Some(input) = ev
+            .target()
+            .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+        else {
+            return;
+        };
+        let Some(files) = input.files() else {
+            return;
+        };
+        let Some(file) = files.get(0) else {
+            return;
+        };
+        busy.set(true);
+        // Drop the picked file out of the input so picking the
+        // same file twice in a row still fires `change`.
+        input.set_value("");
+        spawn_local(async move {
+            let text_promise = file.text();
+            match JsFuture::from(text_promise).await {
+                Ok(v) => {
+                    let text = v.as_string().unwrap_or_default();
+                    if let Err(e) = handle_profile_import(&text, status).await {
+                        let msg = e
+                            .as_string()
+                            .unwrap_or_else(|| format!("{:?}", e));
+                        set_options_status(format!("Import failed: {msg}"), false);
+                    }
+                }
+                Err(e) => {
+                    set_options_status(format!("Import failed: {:?}", e), false);
+                }
+            }
+            busy.set(false);
+        });
+    };
+
+    let on_export = move |_| {
+        if busy.get() {
+            return;
+        }
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let name = match window
+            .prompt_with_message_and_default("Profile name:", "my-profile")
+        {
+            Ok(Some(n)) => n.trim().to_string(),
+            _ => return,
+        };
+        if name.is_empty() {
+            return;
+        }
+        let description = match window.prompt_with_message_and_default(
+            "Profile description (optional):",
+            "",
+        ) {
+            Ok(Some(d)) => d.trim().to_string(),
+            _ => String::new(),
+        };
+        busy.set(true);
+        let name_for_file = sanitize_filename(&name);
+        spawn_local(async move {
+            let config = match chrome_bridge::get_popup_storage().await {
+                Ok(s) => s.config,
+                Err(e) => {
+                    set_options_status(format!("Export failed: {:?}", e), false);
+                    busy.set(false);
+                    return;
+                }
+            };
+            let profile = Profile {
+                header: ProfileHeader { name, description, version: 1 },
+                config,
+            };
+            match profile_to_pretty_json(&profile) {
+                Ok(json) => {
+                    let filename = format!("hush-profile-{name_for_file}.json");
+                    if let Err(e) = trigger_json_download(&json, &filename) {
+                        set_options_status(
+                            format!("Export failed: {:?}", e),
+                            false,
+                        );
+                    } else {
+                        set_options_status(
+                            format!("Downloaded {filename}"),
+                            true,
+                        );
+                    }
+                }
+                Err(e) => {
+                    set_options_status(format!("Export failed: {:?}", e), false);
+                }
+            }
+            busy.set(false);
+        });
+    };
+
+    let _ = status;
+
+    view! {
+        <div class="rust-profile-toolbar"
+             style="display:flex; gap: 8px; margin-top: 8px; align-items: center;">
+            <button on:click=on_import_click
+                    disabled=move || busy.get()
+                    style="padding: 6px 14px; font-size: 13px; cursor: pointer;
+                           background: #fff; border: 1px solid #ccc;
+                           border-radius: 5px;">
+                "Import profile..."
+            </button>
+            <button on:click=on_export
+                    disabled=move || busy.get()
+                    style="padding: 6px 14px; font-size: 13px; cursor: pointer;
+                           background: #fff; border: 1px solid #ccc;
+                           border-radius: 5px;">
+                "Export as profile..."
+            </button>
+            <span style="color:#888; font-size:12px;">
+                "Profiles merge — they won't overwrite your existing rules."
+            </span>
+            <input type="file"
+                   id=file_input_id
+                   accept="application/json,.json"
+                   style="display:none;"
+                   on:change=on_file_change />
+        </div>
+    }
+}
+
+/// Shared import handler: parse profile JSON, confirm counts
+/// with the user, merge into the live config, persist. Caller
+/// handles the busy-state and error-surface wrapping.
+async fn handle_profile_import(
+    text: &str,
+    _status: RwSignal<Option<StatusMsg>>,
+) -> Result<(), JsValue> {
+    let profile: Profile = parse_profile_json(text).map_err(|e| {
+        JsValue::from_str(&format!("not a valid Hush profile: {:?}", e))
+    })?;
+    // Preview the merge without writing, so the user can confirm.
+    let current = chrome_bridge::get_popup_storage().await?.config;
+    let mut preview = current.clone();
+    let stats = merge_profile_into_config(&mut preview, &profile.config);
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
+    let desc = if profile.header.description.is_empty() {
+        String::new()
+    } else {
+        format!("\n\n{}", profile.header.description)
+    };
+    let prompt = format!(
+        "Import profile \"{}\"?{}\n\n\
+         {} new rule{} will be added, {} already exist and will be skipped.\n\n\
+         Existing rule metadata (disabled / tags / comments) is preserved.",
+        profile.header.name,
+        desc,
+        stats.added,
+        if stats.added == 1 { "" } else { "s" },
+        stats.skipped,
+    );
+    let confirmed = window.confirm_with_message(&prompt).unwrap_or(false);
+    if !confirmed {
+        set_options_status("Import cancelled".into(), false);
+        return Ok(());
+    }
+    chrome_bridge::set_config(&preview).await?;
+    set_options_status(
+        format!(
+            "Imported \"{}\": {} added, {} skipped. Reloading...",
+            profile.header.name, stats.added, stats.skipped
+        ),
+        true,
+    );
+    // Reload so the Leptos rules table re-reads the merged config.
+    if let Some(w) = web_sys::window() {
+        let _ = w.location().reload();
+    }
+    Ok(())
+}
+
+/// Parse a profile file via JS `JSON.parse` + `serde_wasm_bindgen`,
+/// avoiding a direct `serde_json` runtime dependency.
+fn parse_profile_json(text: &str) -> Result<Profile, JsValue> {
+    let parsed = js_sys::JSON::parse(text)?;
+    serde_wasm_bindgen::from_value(parsed)
+        .map_err(|e| JsValue::from_str(&format!("{e}")))
+}
+
+/// Serialize a profile to pretty JSON via `chrome_bridge::to_js` +
+/// `JSON.stringify`. Matches the existing serialization path for
+/// config writes so we don't drift on map-vs-object handling.
+fn profile_to_pretty_json(profile: &Profile) -> Result<String, JsValue> {
+    let js = chrome_bridge::to_js(profile)
+        .map_err(|e| JsValue::from_str(&format!("{e}")))?;
+    let pretty = js_sys::JSON::stringify_with_replacer_and_space(
+        &js,
+        &JsValue::NULL,
+        &JsValue::from_f64(2.0),
+    )?;
+    pretty
+        .as_string()
+        .ok_or_else(|| JsValue::from_str("JSON.stringify returned non-string"))
+}
+
+/// Trim a user-supplied profile name down to a safe filename
+/// fragment. Keeps alphanumerics, dashes, and underscores;
+/// everything else collapses to `-`.
+fn sanitize_filename(name: &str) -> String {
+    let mut out = String::new();
+    let mut last_was_dash = false;
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+            out.push(ch);
+            last_was_dash = false;
+        } else if !last_was_dash {
+            out.push('-');
+            last_was_dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
 }
 
 /// Allowlist editor: three `<textarea>`s (iframes, overlays,
@@ -432,363 +740,11 @@ fn AllowlistEditor(snap: AllowlistSnapshot) -> impl IntoView {
     }
 }
 
-/// Top-level site configuration editor. Owns the full `Config` map
-/// and the currently-selected domain as reactive signals. Hosts the
-/// sidebar `SiteList` and the right-pane `SiteDetail`.
-#[component]
-fn ConfigEditor(initial: Config) -> impl IntoView {
-    let config = RwSignal::new(initial);
-    let selected = RwSignal::new(Option::<String>::None);
-
-    view! {
-        <div class="two-pane">
-            <aside class="sidebar">
-                <h2>"Configured sites"</h2>
-                <SiteList config=config selected=selected />
-            </aside>
-            <section class="detail">
-                <SiteDetail config=config selected=selected />
-            </section>
-        </div>
-    }
-}
-
-/// Sidebar listing the configured domains. Domains are iterated in
-/// sorted order - matches the `Object.keys(config).sort()` the old JS
-/// site list used. Each row shows per-layer entry counts and is
-/// click-to-select; the "+ Add site" button at the bottom prompts
-/// for a domain name and seeds an empty triple.
-#[component]
-fn SiteList(
-    config: RwSignal<Config>,
-    selected: RwSignal<Option<String>>,
-) -> impl IntoView {
-    let on_add = move |_| {
-        let window = match web_sys::window() {
-            Some(w) => w,
-            None => return,
-        };
-        let input = match window
-            .prompt_with_message_and_default("New site domain (e.g. example.com):", "")
-        {
-            Ok(Some(s)) => s,
-            _ => return,
-        };
-        let name = input.trim().to_string();
-        if name.is_empty() {
-            return;
-        }
-        if config.with(|c| c.contains_key(&name)) {
-            set_options_status("Site already exists".into(), false);
-            selected.set(Some(name));
-            return;
-        }
-        config.update(|c| {
-            c.insert(name.clone(), SiteConfig::default());
-        });
-        selected.set(Some(name));
-        persist_config(config);
-    };
-
-    view! {
-        <ul class="site-list">
-            {move || {
-                // Global scope is always pinned at the top of the
-                // list (even when the user hasn't added any rules to
-                // it yet). Other site entries follow in sorted
-                // hostname order. Skip the `__global__` entry when
-                // sorting site rows so it isn't duplicated.
-                let all_keys: Vec<String> = config.with(|c| c.keys().cloned().collect());
-                let mut site_keys: Vec<String> = all_keys
-                    .into_iter()
-                    .filter(|k| k != crate::types::GLOBAL_SCOPE_KEY)
-                    .collect();
-                site_keys.sort();
-                let global_row = view! {
-                    <SiteListRow
-                        config=config
-                        selected=selected
-                        domain=crate::types::GLOBAL_SCOPE_KEY.to_string()
-                    />
-                };
-                let site_rows = if site_keys.is_empty() {
-                    view! {
-                        <div class="site-list-empty">
-                            "No sites yet. Click '+ Add site' to start."
-                        </div>
-                    }.into_any()
-                } else {
-                    site_keys.into_iter().map(|domain| {
-                        view! {
-                            <SiteListRow
-                                config=config
-                                selected=selected
-                                domain=domain
-                            />
-                        }
-                    }).collect::<Vec<_>>().into_any()
-                };
-                view! {
-                    {global_row}
-                    {site_rows}
-                }.into_any()
-            }}
-        </ul>
-        <div class="sidebar-actions">
-            <button on:click=on_add
-                    class="primary"
-                    style="width:100%; padding: 6px 10px; background: #2b7cff;
-                           color: white; border: 1px solid #2b7cff;
-                           border-radius: 5px; cursor: pointer;">
-                "+ Add site"
-            </button>
-        </div>
-    }
-}
-
-/// Single row in the site list. Reads counts reactively so adding a
-/// layer entry updates the badge without re-sorting the full list.
-#[component]
-fn SiteListRow(
-    config: RwSignal<Config>,
-    selected: RwSignal<Option<String>>,
-    domain: String,
-) -> impl IntoView {
-    let row_domain = domain.clone();
-    let click_domain = domain.clone();
-    let on_click = move |_| {
-        selected.set(Some(click_domain.clone()));
-    };
-
-    let badges = {
-        let d = row_domain.clone();
-        move || {
-            let (h, r, b) = config.with(|c| match c.get(&d) {
-                Some(entry) => (entry.hide.len(), entry.remove.len(), entry.block.len()),
-                None => (0, 0, 0),
-            });
-            format!("hide {}  rm {}  blk {}", h, r, b)
-        }
-    };
-
-    let class_name = {
-        let d = row_domain.clone();
-        move || {
-            if selected.with(|s| s.as_deref() == Some(d.as_str())) {
-                "selected".to_string()
-            } else {
-                String::new()
-            }
-        }
-    };
-
-    let display_name = if row_domain == crate::types::GLOBAL_SCOPE_KEY {
-        "Global (all sites)".to_string()
-    } else {
-        row_domain.clone()
-    };
-    view! {
-        <li class=class_name on:click=on_click>
-            <span>{display_name}</span>
-            <span class="badges">{badges}</span>
-        </li>
-    }
-}
-
-/// Right-pane detail for the currently-selected site. Shows the
-/// domain rename input, a delete-site button, and the three
-/// layer sections (Block / Remove / Hide).
-#[component]
-fn SiteDetail(
-    config: RwSignal<Config>,
-    selected: RwSignal<Option<String>>,
-) -> impl IntoView {
-    move || {
-        let current = selected.get();
-        let Some(domain) = current else {
-            return view! {
-                <div class="detail-empty">
-                    "Select a site on the left, or add a new one."
-                </div>
-            }
-            .into_any();
-        };
-        // The global-scope row is always selectable even before any
-        // rules are authored under it. If missing, lazily create it
-        // so the layer sections have something to write into.
-        let is_global = domain == crate::types::GLOBAL_SCOPE_KEY;
-        if is_global && !config.with(|c| c.contains_key(&domain)) {
-            config.update(|c| {
-                c.insert(domain.clone(), crate::types::SiteConfig::default());
-            });
-            // Don't persist yet - only writes with actual rule content
-            // should land on disk; empty global entry is transient.
-        }
-        if !config.with(|c| c.contains_key(&domain)) {
-            return view! {
-                <div class="detail-empty">
-                    "Select a site on the left, or add a new one."
-                </div>
-            }
-            .into_any();
-        }
-        view! {
-            <SiteDetailBody
-                config=config
-                selected=selected
-                domain=domain.clone()
-            />
-        }
-        .into_any()
-    }
-}
-
-/// Inner per-site body. Split out so the rename input + layer
-/// sections can take an owned `domain` string and rebuild cleanly
-/// when the selected signal flips.
-#[component]
-fn SiteDetailBody(
-    config: RwSignal<Config>,
-    selected: RwSignal<Option<String>>,
-    domain: String,
-) -> impl IntoView {
-    let domain_input = RwSignal::new(domain.clone());
-    let domain_original = domain.clone();
-
-    // Reset the input when the selected domain changes (e.g. user
-    // clicks a different site before committing a rename).
-    {
-        let original = domain_original.clone();
-        Effect::new(move |_| {
-            if selected.with(|s| s.as_deref() != Some(original.as_str())) {
-                domain_input.set(original.clone());
-            }
-        });
-    }
-
-    let on_rename = {
-        let original = domain_original.clone();
-        move |_| {
-            let next = domain_input.get().trim().to_string();
-            if next.is_empty() || next == original {
-                domain_input.set(original.clone());
-                return;
-            }
-            if config.with(|c| c.contains_key(&next)) {
-                set_options_status(format!("A site named '{}' already exists", next), false);
-                domain_input.set(original.clone());
-                return;
-            }
-            config.update(|c| {
-                if let Some(entry) = c.shift_remove(&original) {
-                    c.insert(next.clone(), entry);
-                }
-            });
-            selected.set(Some(next));
-            persist_config(config);
-            set_options_status("Renamed site".into(), true);
-        }
-    };
-
-    let on_delete = {
-        let original = domain_original.clone();
-        move |_| {
-            let window = match web_sys::window() {
-                Some(w) => w,
-                None => return,
-            };
-            let prompt = format!("Delete all rules for '{}'?", original);
-            if !window.confirm_with_message(&prompt).unwrap_or(false) {
-                return;
-            }
-            config.update(|c| {
-                c.shift_remove(&original);
-            });
-            selected.set(None);
-            persist_config(config);
-            set_options_status("Site deleted".into(), true);
-        }
-    };
-
-    let is_global = domain == crate::types::GLOBAL_SCOPE_KEY;
-    let header = if is_global {
-        view! {
-            <div class="domain-row" style="align-items: baseline;">
-                <div style="flex: 1; font-weight: 600; font-size: 14px;
-                            color: #2d4d8a;">
-                    "Global (all sites)"
-                </div>
-                <div style="color: #666; font-size: 12px;">
-                    "Rules here apply to every tab. Site-scoped rules layer on top."
-                </div>
-            </div>
-        }
-        .into_any()
-    } else {
-        view! {
-            <div class="domain-row">
-                <input type="text"
-                       spellcheck="false"
-                       prop:value=move || domain_input.get()
-                       on:input=move |ev| {
-                           let val = ev.target()
-                               .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-                               .map(|i| i.value())
-                               .unwrap_or_default();
-                           domain_input.set(val);
-                       }
-                       on:change=on_rename
-                />
-                <button class="danger" on:click=on_delete>
-                    "Delete site"
-                </button>
-            </div>
-        }
-        .into_any()
-    };
-
-    view! {
-        {header}
-        <LayerSection
-            config=config
-            domain=domain.clone()
-            layer=LayerKind::Block
-        />
-        <LayerSection
-            config=config
-            domain=domain.clone()
-            layer=LayerKind::Allow
-        />
-        <LayerSection
-            config=config
-            domain=domain.clone()
-            layer=LayerKind::Neuter
-        />
-        <LayerSection
-            config=config
-            domain=domain.clone()
-            layer=LayerKind::Silence
-        />
-        <LayerSection
-            config=config
-            domain=domain.clone()
-            layer=LayerKind::Remove
-        />
-        <LayerSection
-            config=config
-            domain=domain.clone()
-            layer=LayerKind::Hide
-        />
-        <LayerSection
-            config=config
-            domain=domain.clone()
-            layer=LayerKind::Spoof
-        />
-    }
-}
-
-/// Which of the config-layer arrays a `LayerSection` edits.
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Which of the config-layer arrays a rule lives in. Drives column
+/// labels, placeholders, and the action `<select>` options in the
+/// flat rules table. Order here is the canonical top-down render
+/// order within each scope (Block first, Spoof last).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum LayerKind {
     Block,
     Allow,
@@ -800,69 +756,61 @@ enum LayerKind {
 }
 
 impl LayerKind {
-    fn title(&self) -> &'static str {
+    const ALL: [Self; 7] = [
+        Self::Block,
+        Self::Allow,
+        Self::Neuter,
+        Self::Silence,
+        Self::Remove,
+        Self::Hide,
+        Self::Spoof,
+    ];
+
+    fn short_label(&self) -> &'static str {
         match self {
-            Self::Block => "Block (network)",
-            Self::Allow => "Allow (exception)",
-            Self::Neuter => "Neuter (script capture)",
-            Self::Silence => "Silence (script exfil)",
-            Self::Remove => "Remove (DOM)",
-            Self::Hide => "Hide (CSS)",
-            Self::Spoof => "Spoof (fingerprint)",
+            Self::Block => "Block",
+            Self::Allow => "Allow",
+            Self::Neuter => "Neuter",
+            Self::Silence => "Silence",
+            Self::Remove => "Remove",
+            Self::Hide => "Hide",
+            Self::Spoof => "Spoof",
         }
     }
-    fn help(&self) -> &'static str {
+    fn as_str(&self) -> &'static str {
         match self {
-            Self::Block => {
-                "URL patterns blocked at the network layer. Matching requests never \
-                 leave the browser."
-            }
-            Self::Allow => {
-                "Exceptions to Block / Remove / Hide. URL patterns here override a \
-                 broader Block rule via DNR priority; CSS selectors here exclude \
-                 matching nodes from the Remove and Hide passes. Use this to carve \
-                 an allowance out of a global rule on a single site."
-            }
-            Self::Neuter => {
-                "Script-origin URL patterns. Interaction-event listeners \
-                 (click/keydown/mouse/scroll/touch) registered from a matching \
-                 script origin are silently denied before any capture code runs. \
-                 Upstream defense for session-replay vendors: no listener, no \
-                 capture, no exfil, no CPU burn. Legitimate site listeners from \
-                 other origins register normally."
-            }
-            Self::Silence => {
-                "Script-origin URL patterns. Outbound fetch / XHR / sendBeacon \
-                 calls from a matching script origin are intercepted and fake- \
-                 succeeded (204 No Content). Fallback for bundled first-party \
-                 replay libraries where Neuter can't match by origin without \
-                 false-positives on legitimate listeners."
-            }
-            Self::Remove => {
-                "CSS selectors whose matching elements are physically removed from the \
-                 DOM (and kept out as the page mutates)."
-            }
-            Self::Hide => {
-                "CSS selectors applied with display: none !important. Elements stay in \
-                 the DOM but don't render."
-            }
-            Self::Spoof => {
-                "Fingerprint kind tags to neutralize by returning bland, \
-                 identical-across-users values instead of blocking the site. \
-                 Currently supported: `webgl-unmasked` (WebGL UNMASKED_VENDOR + \
-                 UNMASKED_RENDERER)."
-            }
+            Self::Block => "block",
+            Self::Allow => "allow",
+            Self::Neuter => "neuter",
+            Self::Silence => "silence",
+            Self::Remove => "remove",
+            Self::Hide => "hide",
+            Self::Spoof => "spoof",
         }
+    }
+    fn from_str(s: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|k| k.as_str() == s)
     }
     fn placeholder(&self) -> &'static str {
         match self {
-            Self::Block => "Add URL pattern like ||ads.example.com",
-            Self::Allow => "Add URL pattern or CSS selector to exempt",
-            Self::Neuter => "Add script-origin URL pattern like ||hotjar.com",
-            Self::Silence => "Add script-origin URL pattern like ||hotjar.com",
-            Self::Remove => "Add CSS selector like .modal-overlay",
-            Self::Hide => "Add CSS selector like .popup",
-            Self::Spoof => "Add kind tag like webgl-unmasked",
+            Self::Block => "||ads.example.com",
+            Self::Allow => "||example.com/api  or  .allowed-node",
+            Self::Neuter => "||hotjar.com",
+            Self::Silence => "||hotjar.com",
+            Self::Remove => ".modal-overlay",
+            Self::Hide => ".sticky-promo",
+            Self::Spoof => "webgl-unmasked",
+        }
+    }
+    fn badge_color(&self) -> &'static str {
+        match self {
+            Self::Block => "#d85c4f",
+            Self::Allow => "#2f9e4a",
+            Self::Neuter => "#6b5cd4",
+            Self::Silence => "#4fa89a",
+            Self::Remove => "#c77a2b",
+            Self::Hide => "#888",
+            Self::Spoof => "#2b7cff",
         }
     }
     fn read<'a>(&self, cfg: &'a SiteConfig) -> &'a [RuleEntry] {
@@ -889,300 +837,728 @@ impl LayerKind {
     }
 }
 
-/// One of the three `<fieldset>` editors on a site's detail page.
-/// Lists the current entries with a delete button on each row, plus
-/// an Add input + button at the bottom. All mutations go through
-/// the shared `config` signal and persist via `set_config`.
-#[component]
-fn LayerSection(
-    config: RwSignal<Config>,
-    domain: String,
-    layer: LayerKind,
-) -> impl IntoView {
-    let draft = RwSignal::new(String::new());
+/// Snapshot of one rule for table rendering. Captured per render pass
+/// so row components don't have to re-walk the `Config` signal to
+/// pull their own values out of the bucket.
+#[derive(Clone, Debug)]
+struct FlatRow {
+    scope: String,
+    action: LayerKind,
+    idx: usize,
+    bucket_len: usize,
+    entry: RuleEntry,
+}
 
-    // Entry rows are derived reactively from the config signal.
-    // Each row shows value + enable checkbox + delete. A disabled
-    // entry renders greyed-out and is skipped by the evaluator
-    // (DNR sync + content-script applier + suggestion dedup).
-    let rows = {
-        let domain = domain.clone();
-        move || {
-            let entries: Vec<(String, bool, Vec<String>, Option<String>)> = config.with(|c| {
-                c.get(&domain)
-                    .map(|cfg| {
-                        layer
-                            .read(cfg)
-                            .iter()
-                            .map(|e| (e.value.clone(), e.disabled, e.tags.clone(), e.comment.clone()))
-                            .collect()
-                    })
-                    .unwrap_or_default()
-            });
-            if entries.is_empty() {
-                view! {
-                    <li class="entries-empty">"(none)"</li>
-                }
-                .into_any()
-            } else {
-                let entries_len = entries.len();
-                entries
-                    .into_iter()
-                    .enumerate()
-                    .map(|(idx, (text, disabled, tags, comment))| {
-                        let d = domain.clone();
-                        let title = text.clone();
-                        let body = text.clone();
-                        let on_del = {
-                            let d = d.clone();
-                            move |_| {
-                                let d = d.clone();
-                                config.update(|c| {
-                                    if let Some(entry) = c.get_mut(&d) {
-                                        let arr = layer.modify(entry);
-                                        if idx < arr.len() {
-                                            arr.remove(idx);
-                                        }
-                                    }
-                                });
-                                persist_config(config);
-                            }
-                        };
-                        let on_toggle = {
-                            let d = d.clone();
-                            move |_| {
-                                let d = d.clone();
-                                config.update(|c| {
-                                    if let Some(entry) = c.get_mut(&d) {
-                                        let arr = layer.modify(entry);
-                                        if let Some(row) = arr.get_mut(idx) {
-                                            row.disabled = !row.disabled;
-                                        }
-                                    }
-                                });
-                                persist_config(config);
-                            }
-                        };
-                        // Reorder: swap idx with idx-1 (up) or idx+1
-                        // (down). First-match-wins ordering makes this
-                        // meaningful once Allow overrides land.
-                        let on_up = {
-                            let d = d.clone();
-                            move |_| {
-                                let d = d.clone();
-                                if idx == 0 {
-                                    return;
-                                }
-                                config.update(|c| {
-                                    if let Some(entry) = c.get_mut(&d) {
-                                        let arr = layer.modify(entry);
-                                        if idx < arr.len() {
-                                            arr.swap(idx, idx - 1);
-                                        }
-                                    }
-                                });
-                                persist_config(config);
-                            }
-                        };
-                        let on_down = {
-                            let d = d.clone();
-                            move |_| {
-                                let d = d.clone();
-                                config.update(|c| {
-                                    if let Some(entry) = c.get_mut(&d) {
-                                        let arr = layer.modify(entry);
-                                        if idx + 1 < arr.len() {
-                                            arr.swap(idx, idx + 1);
-                                        }
-                                    }
-                                });
-                                persist_config(config);
-                            }
-                        };
-                        let on_tags_change = {
-                            let d = d.clone();
-                            move |ev: web_sys::Event| {
-                                let val = ev.target()
-                                    .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-                                    .map(|i| i.value())
-                                    .unwrap_or_default();
-                                let tags: Vec<String> = val
-                                    .split(',')
-                                    .map(|s| s.trim().to_string())
-                                    .filter(|s| !s.is_empty())
-                                    .collect();
-                                let d = d.clone();
-                                config.update(|c| {
-                                    if let Some(entry) = c.get_mut(&d) {
-                                        let arr = layer.modify(entry);
-                                        if let Some(row) = arr.get_mut(idx) {
-                                            row.tags = tags;
-                                        }
-                                    }
-                                });
-                                persist_config(config);
-                            }
-                        };
-                        let on_comment_change = {
-                            let d = d.clone();
-                            move |ev: web_sys::Event| {
-                                let val = ev.target()
-                                    .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-                                    .map(|i| i.value())
-                                    .unwrap_or_default();
-                                let trimmed = val.trim().to_string();
-                                let d = d.clone();
-                                config.update(|c| {
-                                    if let Some(entry) = c.get_mut(&d) {
-                                        let arr = layer.modify(entry);
-                                        if let Some(row) = arr.get_mut(idx) {
-                                            row.comment = if trimmed.is_empty() {
-                                                None
-                                            } else {
-                                                Some(trimmed.clone())
-                                            };
-                                        }
-                                    }
-                                });
-                                persist_config(config);
-                            }
-                        };
-                        let text_style = if disabled {
-                            "text-decoration: line-through; color: #999; flex: 1;"
-                        } else {
-                            "flex: 1;"
-                        };
-                        let tag_value = tags.join(", ");
-                        let comment_value = comment.unwrap_or_default();
-                        let btn_style = "border: 1px solid #ccc; background: #fff; \
-                                         color: #444; padding: 0 5px; line-height: 18px; \
-                                         border-radius: 3px; cursor: pointer; font-size: 11px;";
-                        let up_disabled = idx == 0;
-                        let down_disabled = idx + 1 >= entries_len;
-                        let meta_input_style = "font-size: 11px; padding: 1px 5px; \
-                                                border: 1px solid #e0e0e0; border-radius: 3px;";
-                        view! {
-                            <li style="flex-direction: column; align-items: stretch; gap: 3px;">
-                                <div style="display: flex; align-items: center; gap: 4px;">
-                                    <input type="checkbox"
-                                           class="rule-enable"
-                                           title=if disabled { "Enable" } else { "Disable" }
-                                           prop:checked=!disabled
-                                           on:change=on_toggle />
-                                    <span class="text" title=title style=text_style>{body}</span>
-                                    <button title="Move up"
-                                            prop:disabled=up_disabled
-                                            on:click=on_up
-                                            style=btn_style>
-                                        "\u{2191}"
-                                    </button>
-                                    <button title="Move down"
-                                            prop:disabled=down_disabled
-                                            on:click=on_down
-                                            style=btn_style>
-                                        "\u{2193}"
-                                    </button>
-                                    <button class="del"
-                                            title="Delete"
-                                            on:click=on_del>
-                                        "\u{00d7}"
-                                    </button>
-                                </div>
-                                <div style="display: flex; gap: 4px; font-size: 11px;
-                                            color: #666; padding-left: 22px;">
-                                    <input type="text"
-                                           spellcheck="false"
-                                           placeholder="tags (comma-separated)"
-                                           style=format!("{} width: 180px;", meta_input_style)
-                                           prop:value=tag_value
-                                           on:change=on_tags_change />
-                                    <input type="text"
-                                           spellcheck="false"
-                                           placeholder="comment"
-                                           style=format!("{} flex: 1;", meta_input_style)
-                                           prop:value=comment_value
-                                           on:change=on_comment_change />
-                                </div>
-                            </li>
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .into_any()
+/// Rule health surfaced in the options editor as a colored dot +
+/// tooltip. Computed from the persistent firewall log, the union
+/// of broken-selector sets across every tab, and the shadow-lint
+/// pass on block rules. Stage 12 phase B rule-health audit.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum RuleHealth {
+    Disabled,
+    Broken,
+    Shadowed,
+    Firing,
+    NoHits,
+}
+
+impl RuleHealth {
+    fn color(&self) -> &'static str {
+        match self {
+            Self::Disabled => "#bbb",
+            Self::Broken => "#d85c4f",
+            Self::Shadowed => "#e0a048",
+            Self::Firing => "#2f9e4a",
+            Self::NoHits => "#d0d0d0",
+        }
+    }
+    fn tooltip(&self, hits: u32, shadowed_by: Option<&str>) -> String {
+        match self {
+            Self::Disabled => "disabled (evaluator skips this rule)".to_string(),
+            Self::Broken => {
+                "invalid selector: threw on querySelectorAll / element.matches"
+                    .to_string()
             }
+            Self::Shadowed => match shadowed_by {
+                Some(a) => format!("shadowed by allow: {a}"),
+                None => "shadowed by an allow rule".to_string(),
+            },
+            Self::Firing => {
+                if hits == 1 {
+                    "1 hit this session".to_string()
+                } else {
+                    format!("{hits} hits this session")
+                }
+            }
+            Self::NoHits => "no hits this session".to_string(),
+        }
+    }
+}
+
+/// Side data fed into the rules table so each row can compute its
+/// health without reaching back into the background. Populated
+/// async at mount time; empty until the first fetch resolves.
+/// Shadow-lint needs the full allow set from the live config,
+/// which is supplied fresh per render pass by the caller since
+/// it mutates reactively.
+#[derive(Clone, Default)]
+struct HealthData {
+    hits_by_rule: std::collections::HashMap<String, u32>,
+    broken_remove: std::collections::HashSet<String>,
+    broken_hide: std::collections::HashSet<String>,
+    broken_allow: std::collections::HashSet<String>,
+}
+
+impl HealthData {
+    fn health_for(
+        &self,
+        row: &FlatRow,
+        all_allows: &[RuleEntry],
+    ) -> (RuleHealth, Option<String>, u32) {
+        let value = row.entry.value.as_str();
+        let id = crate::types::rule_id(row.action.as_str(), &row.scope, value);
+        let hits = self.hits_by_rule.get(&id).copied().unwrap_or(0);
+        if row.entry.disabled {
+            return (RuleHealth::Disabled, None, hits);
+        }
+        // Broken only applies to DOM-selector actions; invalid URL
+        // patterns for block/allow don't throw synchronously.
+        match row.action {
+            LayerKind::Remove if self.broken_remove.contains(value) => {
+                return (RuleHealth::Broken, None, hits);
+            }
+            LayerKind::Hide if self.broken_hide.contains(value) => {
+                return (RuleHealth::Broken, None, hits);
+            }
+            LayerKind::Allow if self.broken_allow.contains(value) => {
+                return (RuleHealth::Broken, None, hits);
+            }
+            _ => {}
+        }
+        if row.action == LayerKind::Block {
+            if let Some(shadow) = crate::lint::block_shadowed_by(all_allows, value) {
+                return (RuleHealth::Shadowed, Some(shadow.value.clone()), hits);
+            }
+        }
+        if hits > 0 {
+            (RuleHealth::Firing, None, hits)
+        } else {
+            (RuleHealth::NoHits, None, hits)
+        }
+    }
+}
+
+fn flatten_rules(cfg: &Config) -> Vec<FlatRow> {
+    let mut out = Vec::new();
+    let mut keys: Vec<&String> = cfg.keys().collect();
+    // Global pinned first; everything else in IndexMap order.
+    keys.sort_by_key(|k| (k.as_str() != crate::types::GLOBAL_SCOPE_KEY, k.to_string()));
+    for scope in keys {
+        let Some(site) = cfg.get(scope) else { continue };
+        for action in LayerKind::ALL {
+            let bucket = action.read(site);
+            for (idx, entry) in bucket.iter().enumerate() {
+                out.push(FlatRow {
+                    scope: scope.clone(),
+                    action,
+                    idx,
+                    bucket_len: bucket.len(),
+                    entry: entry.clone(),
+                });
+            }
+        }
+    }
+    out
+}
+
+fn site_keys_for_scope_select(cfg: &Config) -> Vec<String> {
+    let mut keys: Vec<String> = cfg
+        .keys()
+        .filter(|k| k.as_str() != crate::types::GLOBAL_SCOPE_KEY)
+        .cloned()
+        .collect();
+    keys.sort();
+    keys
+}
+
+/// Append a rule to the `(scope, action)` bucket, creating the scope
+/// entry if it doesn't exist yet.
+fn append_rule(cfg: &mut Config, scope: &str, action: LayerKind, entry: RuleEntry) {
+    let site = cfg.entry(scope.to_string()).or_default();
+    action.modify(site).push(entry);
+}
+
+/// Pop the rule at `(scope, action, idx)` out of its bucket. Returns
+/// `None` if the bucket has fewer entries than `idx`.
+fn take_rule(
+    cfg: &mut Config,
+    scope: &str,
+    action: LayerKind,
+    idx: usize,
+) -> Option<RuleEntry> {
+    let site = cfg.get_mut(scope)?;
+    let bucket = action.modify(site);
+    if idx >= bucket.len() {
+        return None;
+    }
+    Some(bucket.remove(idx))
+}
+
+/// Flat firewall-style rule table. One row per rule across every
+/// scope and action, with scope/action as inline `<select>` cells. The
+/// underlying storage stays [`Config = IndexMap<scope, SiteConfig>`]
+/// with seven [`Vec<RuleEntry>`] fields per scope; this table
+/// flattens on read and routes every write back to the right bucket.
+#[component]
+fn RulesTable(initial: Config) -> impl IntoView {
+    let config = RwSignal::new(initial);
+    let scope_filter = RwSignal::new(String::new());
+    let action_filter = RwSignal::new(String::new());
+    let search = RwSignal::new(String::new());
+    let health = RwSignal::new(HealthData::default());
+
+    // Async fetch: persistent firewall events (for hit counts) +
+    // union of broken-selector sets across every tab. Both feed the
+    // per-row health dot. Allows list is derived from the config
+    // signal inside the render closure so reorder/edit updates
+    // re-evaluate shadow without refetching.
+    spawn_local(async move {
+        let events = chrome_bridge::get_firewall_events(-1)
+            .await
+            .unwrap_or_default();
+        let broken = chrome_bridge::get_all_broken_selectors()
+            .await
+            .unwrap_or_default();
+        let mut hits: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
+        for ev in events {
+            *hits.entry(ev.rule_id).or_insert(0) += 1;
+        }
+        health.update(|h| {
+            h.hits_by_rule = hits;
+            h.broken_remove = broken.remove.into_iter().collect();
+            h.broken_hide = broken.hide.into_iter().collect();
+            h.broken_allow = broken.allow.into_iter().collect();
+        });
+    });
+
+    let rows_view = move || {
+        let scope_f = scope_filter.get();
+        let action_f = action_filter.get();
+        let q = search.get().to_lowercase();
+        let rows: Vec<FlatRow> = config.with(flatten_rules);
+        let filtered: Vec<FlatRow> = rows
+            .into_iter()
+            .filter(|r| {
+                if !scope_f.is_empty() && r.scope != scope_f {
+                    return false;
+                }
+                if !action_f.is_empty() && r.action.as_str() != action_f {
+                    return false;
+                }
+                if !q.is_empty() {
+                    let hay = format!(
+                        "{} {} {} {}",
+                        r.entry.value,
+                        r.entry.tags.join(" "),
+                        r.entry.comment.clone().unwrap_or_default(),
+                        r.scope
+                    )
+                    .to_lowercase();
+                    if !hay.contains(&q) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect();
+
+        if filtered.is_empty() {
+            return view! {
+                <tr>
+                    <td colspan="8" class="rules-empty">
+                        "No rules match. Clear filters or add a rule below."
+                    </td>
+                </tr>
+            }
+            .into_any();
+        }
+
+        // Health input for this render pass. Allows are derived
+        // from the live config, so shadow detection re-evaluates
+        // whenever the user adds / reorders / disables an allow
+        // rule. Hit counts + broken sets come from the async fetch
+        // and stay stable for the life of the options page.
+        let all_allows: Vec<RuleEntry> = config.with(|c| {
+            let mut v: Vec<RuleEntry> = Vec::new();
+            for site in c.values() {
+                v.extend(site.allow.iter().cloned());
+            }
+            v
+        });
+        let h_snap = health.get();
+
+        filtered
+            .into_iter()
+            .enumerate()
+            .map(|(flat_idx, row)| {
+                let (status, shadowed_by, hits) =
+                    h_snap.health_for(&row, &all_allows);
+                view! {
+                    <RuleRow
+                        config=config
+                        row=row
+                        flat_idx=flat_idx + 1
+                        status=status
+                        shadowed_by=shadowed_by
+                        hits=hits
+                    />
+                }
+            })
+            .collect::<Vec<_>>()
+            .into_any()
+    };
+
+    let on_add = move |_| {
+        let entry = RuleEntry::new(String::new());
+        let scope = crate::types::GLOBAL_SCOPE_KEY.to_string();
+        let action = LayerKind::Block;
+        config.update(|c| append_rule(c, &scope, action, entry));
+        persist_config(config);
+    };
+
+    view! {
+        <div class="rules-table">
+            <FilterBar
+                config=config
+                scope_filter=scope_filter
+                action_filter=action_filter
+                search=search
+            />
+            <table class="rules-grid">
+                <thead>
+                    <tr>
+                        <th class="col-on">"On"</th>
+                        <th class="col-num">"#"</th>
+                        <th class="col-scope">"Scope"</th>
+                        <th class="col-action">"Action"</th>
+                        <th class="col-match">"Match"</th>
+                        <th class="col-tags">"Tags"</th>
+                        <th class="col-comment">"Comment"</th>
+                        <th class="col-ops">""</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_view}
+                </tbody>
+            </table>
+            <div class="rules-footer">
+                <button class="primary" on:click=on_add>
+                    "+ Add rule"
+                </button>
+                <span class="rules-hint">
+                    "Rules evaluate first-match-wins within each action. \
+                     Scope and action are editable per row."
+                </span>
+            </div>
+        </div>
+    }
+}
+
+/// Filter bar above the rules table. Scope + action dropdowns
+/// driven by what's actually in the config; free-text search over
+/// value / tags / comment / scope.
+#[component]
+fn FilterBar(
+    config: RwSignal<Config>,
+    scope_filter: RwSignal<String>,
+    action_filter: RwSignal<String>,
+    search: RwSignal<String>,
+) -> impl IntoView {
+    let scope_options = move || {
+        let sites = config.with(site_keys_for_scope_select);
+        let mut out: Vec<(String, String)> = vec![
+            ("".into(), "All scopes".into()),
+            (
+                crate::types::GLOBAL_SCOPE_KEY.into(),
+                "Global".into(),
+            ),
+        ];
+        for s in sites {
+            out.push((s.clone(), s));
+        }
+        out.into_iter()
+            .map(|(val, label)| {
+                let selected = scope_filter.with(|s| s.as_str() == val);
+                view! {
+                    <option value=val prop:selected=selected>{label}</option>
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let action_options = move || {
+        let mut out: Vec<(String, String)> =
+            vec![("".into(), "All actions".into())];
+        for a in LayerKind::ALL {
+            out.push((a.as_str().into(), a.short_label().into()));
+        }
+        out.into_iter()
+            .map(|(val, label)| {
+                let selected = action_filter.with(|s| s.as_str() == val);
+                view! {
+                    <option value=val prop:selected=selected>{label}</option>
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let on_clear = move |_| {
+        scope_filter.set(String::new());
+        action_filter.set(String::new());
+        search.set(String::new());
+    };
+
+    view! {
+        <div class="rules-filter-bar">
+            <select
+                class="filter-scope"
+                on:change=move |ev| scope_filter.set(select_value(&ev))
+            >
+                {scope_options}
+            </select>
+            <select
+                class="filter-action"
+                on:change=move |ev| action_filter.set(select_value(&ev))
+            >
+                {action_options}
+            </select>
+            <input
+                type="text"
+                class="filter-search"
+                placeholder="Search match / tags / comment / scope"
+                prop:value=move || search.get()
+                on:input=move |ev| search.set(input_value(&ev))
+            />
+            <button class="filter-clear" on:click=on_clear>"Clear"</button>
+        </div>
+    }
+}
+
+/// One row in the rules table. Receives a snapshot and the live
+/// `config` signal; every cell change routes back through the
+/// snapshot's `(scope, action, idx)` coordinate.
+#[component]
+fn RuleRow(
+    config: RwSignal<Config>,
+    row: FlatRow,
+    flat_idx: usize,
+    status: RuleHealth,
+    shadowed_by: Option<String>,
+    hits: u32,
+) -> impl IntoView {
+    let FlatRow { scope, action, idx, bucket_len, entry } = row;
+    let scope_c = scope.clone();
+    let val_c = entry.value.clone();
+    let tags_c = entry.tags.join(", ");
+    let comment_c = entry.comment.clone().unwrap_or_default();
+    let disabled = entry.disabled;
+
+    let scope_options = {
+        let current_scope = scope.clone();
+        move || {
+            let existing = config.with(site_keys_for_scope_select);
+            let mut out: Vec<(String, String)> = vec![(
+                crate::types::GLOBAL_SCOPE_KEY.into(),
+                "Global".into(),
+            )];
+            for s in existing {
+                out.push((s.clone(), s));
+            }
+            out.push(("__add_new__".into(), "+ New site...".into()));
+            out.into_iter()
+                .map(|(val, label)| {
+                    let selected = val == current_scope;
+                    view! {
+                        <option value=val prop:selected=selected>{label}</option>
+                    }
+                })
+                .collect::<Vec<_>>()
         }
     };
 
-    // Shared add logic. Both the click handler and the Enter-key
-    // handler delegate here so there's one source of truth for the
-    // dedup + push + clear-draft sequence.
-    let add_entry = {
-        let domain = domain.clone();
-        move || {
-            let value = draft.get().trim().to_string();
-            if value.is_empty() {
-                return;
-            }
-            let already = config.with(|c| {
-                c.get(&domain)
-                    .map(|cfg| layer.read(cfg).iter().any(|e| e.value == value))
-                    .unwrap_or(false)
-            });
-            if already {
-                set_options_status("Already in the list".into(), false);
-                return;
-            }
-            let d = domain.clone();
-            let v = value.clone();
+    let action_options = move || {
+        LayerKind::ALL
+            .into_iter()
+            .map(|k| {
+                let selected = k == action;
+                view! {
+                    <option value=k.as_str() prop:selected=selected>
+                        {k.short_label()}
+                    </option>
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let on_toggle = {
+        let s = scope.clone();
+        move |_| {
+            let s = s.clone();
             config.update(|c| {
-                if let Some(entry) = c.get_mut(&d) {
-                    layer.modify(entry).push(RuleEntry::new(v));
+                if let Some(site) = c.get_mut(&s)
+                    && let Some(row) = action.modify(site).get_mut(idx)
+                {
+                    row.disabled = !row.disabled;
                 }
             });
-            draft.set(String::new());
             persist_config(config);
         }
     };
 
-    let on_click = {
-        let add_entry = add_entry.clone();
-        move |_| add_entry()
-    };
-
-    let on_keydown = {
-        let add_entry = add_entry.clone();
-        move |ev: web_sys::KeyboardEvent| {
-            if ev.key() == "Enter" {
-                add_entry();
-            }
+    let on_match_change = {
+        let s = scope.clone();
+        move |ev: web_sys::Event| {
+            let val = input_value(&ev).trim().to_string();
+            let s = s.clone();
+            config.update(|c| {
+                if let Some(site) = c.get_mut(&s)
+                    && let Some(row) = action.modify(site).get_mut(idx)
+                {
+                    row.value = val.clone();
+                }
+            });
+            persist_config(config);
         }
     };
 
+    let on_tags_change = {
+        let s = scope.clone();
+        move |ev: web_sys::Event| {
+            let raw = input_value(&ev);
+            let tags: Vec<String> = raw
+                .split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect();
+            let s = s.clone();
+            config.update(|c| {
+                if let Some(site) = c.get_mut(&s)
+                    && let Some(row) = action.modify(site).get_mut(idx)
+                {
+                    row.tags = tags.clone();
+                }
+            });
+            persist_config(config);
+        }
+    };
+
+    let on_comment_change = {
+        let s = scope.clone();
+        move |ev: web_sys::Event| {
+            let raw = input_value(&ev).trim().to_string();
+            let s = s.clone();
+            config.update(|c| {
+                if let Some(site) = c.get_mut(&s)
+                    && let Some(row) = action.modify(site).get_mut(idx)
+                {
+                    row.comment = if raw.is_empty() { None } else { Some(raw.clone()) };
+                }
+            });
+            persist_config(config);
+        }
+    };
+
+    let on_scope_change = {
+        let s = scope.clone();
+        move |ev: web_sys::Event| {
+            let next = select_value(&ev);
+            let s = s.clone();
+            let target_scope = if next == "__add_new__" {
+                let window = match web_sys::window() {
+                    Some(w) => w,
+                    None => return,
+                };
+                let input = match window.prompt_with_message_and_default(
+                    "New site hostname (e.g. example.com):",
+                    "",
+                ) {
+                    Ok(Some(v)) => v.trim().to_string(),
+                    _ => return,
+                };
+                if input.is_empty() {
+                    return;
+                }
+                input
+            } else {
+                next
+            };
+            if target_scope == s {
+                return;
+            }
+            config.update(|c| {
+                if let Some(entry) = take_rule(c, &s, action, idx) {
+                    append_rule(c, &target_scope, action, entry);
+                }
+            });
+            persist_config(config);
+        }
+    };
+
+    let on_action_change = {
+        let s = scope.clone();
+        move |ev: web_sys::Event| {
+            let next = select_value(&ev);
+            let Some(target_action) = LayerKind::from_str(&next) else {
+                return;
+            };
+            if target_action == action {
+                return;
+            }
+            let s = s.clone();
+            config.update(|c| {
+                if let Some(entry) = take_rule(c, &s, action, idx) {
+                    append_rule(c, &s, target_action, entry);
+                }
+            });
+            persist_config(config);
+        }
+    };
+
+    let on_up = {
+        let s = scope.clone();
+        move |_| {
+            if idx == 0 {
+                return;
+            }
+            let s = s.clone();
+            config.update(|c| {
+                if let Some(site) = c.get_mut(&s) {
+                    let b = action.modify(site);
+                    if idx < b.len() {
+                        b.swap(idx, idx - 1);
+                    }
+                }
+            });
+            persist_config(config);
+        }
+    };
+
+    let on_down = {
+        let s = scope.clone();
+        move |_| {
+            let s = s.clone();
+            config.update(|c| {
+                if let Some(site) = c.get_mut(&s) {
+                    let b = action.modify(site);
+                    if idx + 1 < b.len() {
+                        b.swap(idx, idx + 1);
+                    }
+                }
+            });
+            persist_config(config);
+        }
+    };
+
+    let on_delete = {
+        let s = scope.clone();
+        move |_| {
+            let s = s.clone();
+            config.update(|c| {
+                take_rule(c, &s, action, idx);
+            });
+            persist_config(config);
+        }
+    };
+
+    let up_disabled = idx == 0;
+    let down_disabled = idx + 1 >= bucket_len;
+    let row_class = if disabled { "rule-row disabled" } else { "rule-row" };
+    let match_class = if disabled { "match-input strike" } else { "match-input" };
+    let _ = scope_c;
+
     view! {
-        <fieldset class="layer-section">
-            <legend>{layer.title()}</legend>
-            <p class="layer-help">{layer.help()}</p>
-            <ul class="entries">
-                {rows}
-            </ul>
-            <div class="add-row">
+        <tr class=row_class>
+            <td class="col-on">
+                <input type="checkbox"
+                       prop:checked=!disabled
+                       on:change=on_toggle />
+            </td>
+            <td class="col-num">
+                <span class="status-dot"
+                      title=status.tooltip(hits, shadowed_by.as_deref())
+                      style=format!("background:{};", status.color())></span>
+                {flat_idx.to_string()}
+            </td>
+            <td class="col-scope">
+                <select on:change=on_scope_change>
+                    {scope_options}
+                </select>
+            </td>
+            <td class="col-action">
+                <span class="action-dot"
+                      style=format!("background:{};", action.badge_color())></span>
+                <select on:change=on_action_change>
+                    {action_options}
+                </select>
+            </td>
+            <td class="col-match">
                 <input type="text"
+                       class=match_class
                        spellcheck="false"
-                       placeholder=layer.placeholder()
-                       prop:value=move || draft.get()
-                       on:input=move |ev| {
-                           let val = ev.target()
-                               .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-                               .map(|i| i.value())
-                               .unwrap_or_default();
-                           draft.set(val);
-                       }
-                       on:keydown=on_keydown
-                />
-                <button on:click=on_click>"+ Add"</button>
-            </div>
-        </fieldset>
+                       placeholder=action.placeholder()
+                       prop:value=val_c
+                       on:change=on_match_change />
+            </td>
+            <td class="col-tags">
+                <input type="text"
+                       class="meta-input"
+                       spellcheck="false"
+                       placeholder="tags, comma-separated"
+                       prop:value=tags_c
+                       on:change=on_tags_change />
+            </td>
+            <td class="col-comment">
+                <input type="text"
+                       class="meta-input"
+                       spellcheck="false"
+                       placeholder="comment"
+                       prop:value=comment_c
+                       on:change=on_comment_change />
+            </td>
+            <td class="col-ops">
+                <button class="op"
+                        title="Move up in bucket"
+                        prop:disabled=up_disabled
+                        on:click=on_up>"\u{2191}"</button>
+                <button class="op"
+                        title="Move down in bucket"
+                        prop:disabled=down_disabled
+                        on:click=on_down>"\u{2193}"</button>
+                <button class="op del"
+                        title="Delete rule"
+                        on:click=on_delete>"\u{00d7}"</button>
+            </td>
+        </tr>
     }
 }
+
+/// Read the value off a DOM event's target as a select element.
+fn select_value(ev: &web_sys::Event) -> String {
+    ev.target()
+        .and_then(|t| t.dyn_into::<web_sys::HtmlSelectElement>().ok())
+        .map(|s| s.value())
+        .unwrap_or_default()
+}
+
+/// Read the value off a DOM event's target as a text input element.
+fn input_value(ev: &web_sys::Event) -> String {
+    ev.target()
+        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
+        .map(|i| i.value())
+        .unwrap_or_default()
+}
+
 
 /// Persist the current `Config` signal value to
 /// `chrome.storage.local["config"]`. Fire-and-forget - any storage

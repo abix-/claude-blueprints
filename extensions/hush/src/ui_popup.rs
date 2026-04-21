@@ -131,6 +131,13 @@ pub struct PopupSnapshot {
     /// match counts. Same ordering guarantee as `remove_selectors`.
     #[serde(default)]
     pub hide_selectors: IndexMap<String, u32>,
+    /// Selectors the content script flagged as invalid on this tab
+    /// (threw on `querySelectorAll` / `element.matches`). Drives the
+    /// firewall-log "broken selector" badge. Empty when the content
+    /// script hasn't flagged anything or the tab lacks a content
+    /// script (chrome:// pages, etc.).
+    #[serde(default)]
+    pub broken_selectors: crate::types::BrokenSelectors,
     /// Recently-removed DOM elements reported by the content script.
     /// Rendered as a collapsible evidence panel under the Removed
     /// section.
@@ -272,6 +279,7 @@ pub async fn hush_popup_main() -> Result<(), JsValue> {
         site_rules,
         remove_selectors: stats.remove,
         hide_selectors: stats.hide,
+        broken_selectors: stats.broken_selectors,
         removed_elements: stats.removed_elements,
         tab_url: tab.url,
     };
@@ -364,6 +372,7 @@ fn PopupRoot(snap: PopupSnapshot) -> impl IntoView {
                         current_tab_id=tab_id.unwrap_or(-1)
                         remove_counts=snap.remove_selectors.clone()
                         hide_counts=snap.hide_selectors.clone()
+                        broken_selectors=snap.broken_selectors.clone()
                     />
                 }.into_any()
             } else { view! { <div /> }.into_any() }
@@ -591,6 +600,7 @@ fn FirewallLog(
     current_tab_id: i32,
     remove_counts: IndexMap<String, u32>,
     hide_counts: IndexMap<String, u32>,
+    broken_selectors: crate::types::BrokenSelectors,
 ) -> impl IntoView {
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -665,6 +675,14 @@ fn FirewallLog(
     let site_scope_rc = Arc::new(site_scope);
     let remove_counts = Arc::new(remove_counts);
     let hide_counts = Arc::new(hide_counts);
+    // Turn the Vec<String> broken lists into HashSets once so each
+    // row lookup is O(1).
+    let broken_remove: Arc<std::collections::HashSet<String>> =
+        Arc::new(broken_selectors.remove.iter().cloned().collect());
+    let broken_hide: Arc<std::collections::HashSet<String>> =
+        Arc::new(broken_selectors.hide.iter().cloned().collect());
+    let broken_allow: Arc<std::collections::HashSet<String>> =
+        Arc::new(broken_selectors.allow.iter().cloned().collect());
 
     // Aggregate + filter. Rebuilt whenever any of the three filter
     // signals change. Returns the sorted row list plus the event map
@@ -678,6 +696,9 @@ fn FirewallLog(
         let rule_tags = rule_tags.clone();
         let remove_counts = remove_counts.clone();
         let hide_counts = hide_counts.clone();
+        let broken_remove = broken_remove.clone();
+        let broken_hide = broken_hide.clone();
+        let broken_allow = broken_allow.clone();
         move || {
             let q = search.get().trim().to_lowercase();
             let action_f = action_filter.get();
@@ -797,6 +818,20 @@ fn FirewallLog(
                     } else {
                         false
                     };
+                    // Broken-selector only applies to DOM actions
+                    // (remove/hide/allow). Same "this-tab only" gate
+                    // as zero_match: the broken flag is per-tab
+                    // state.
+                    let broken = if !all_tabs {
+                        match action {
+                            "remove" => broken_remove.contains(m),
+                            "hide" => broken_hide.contains(m),
+                            "allow" => broken_allow.contains(m),
+                            _ => false,
+                        }
+                    } else {
+                        false
+                    };
                     rows.push(RuleRow {
                         rule_id: id,
                         action: action.to_string(),
@@ -806,6 +841,7 @@ fn FirewallLog(
                         last_t,
                         shadowed_by,
                         zero_match,
+                        broken,
                     });
                 }
             };
@@ -840,6 +876,7 @@ fn FirewallLog(
                         last_t: evs.last().map(|e| e.t.clone()),
                         shadowed_by: None,
                         zero_match: false,
+                        broken: false,
                     });
                 }
             }
@@ -850,17 +887,27 @@ fn FirewallLog(
             let rule_count = rows.len();
             let shadowed_count = rows.iter().filter(|r| r.shadowed_by.is_some()).count();
             let zero_match_count = rows.iter().filter(|r| r.zero_match).count();
+            let broken_count = rows.iter().filter(|r| r.broken).count();
 
             let scope_hint = if all_tabs {
                 "across all tabs".to_string()
             } else {
                 "on this tab".to_string()
             };
-            let health_hint = match (shadowed_count, zero_match_count) {
-                (0, 0) => String::new(),
-                (s, 0) => format!(" · {s} shadowed"),
-                (0, z) => format!(" · {z} zero-match"),
-                (s, z) => format!(" · {s} shadowed · {z} zero-match"),
+            let mut hint_parts: Vec<String> = Vec::new();
+            if shadowed_count > 0 {
+                hint_parts.push(format!("{shadowed_count} shadowed"));
+            }
+            if zero_match_count > 0 {
+                hint_parts.push(format!("{zero_match_count} zero-match"));
+            }
+            if broken_count > 0 {
+                hint_parts.push(format!("{broken_count} broken"));
+            }
+            let health_hint = if hint_parts.is_empty() {
+                String::new()
+            } else {
+                format!(" · {}", hint_parts.join(" · "))
             };
 
             let body = if rows.is_empty() {
@@ -1089,9 +1136,26 @@ fn FirewallLogRow(row: RuleRow, events: Vec<FirewallEvent>) -> impl IntoView {
                 } else {
                     None
                 };
+                // Broken selector: content script flagged the selector as
+                // invalid CSS. Overrides zero_line's softer "no match"
+                // since broken is a harder fail (selector will never
+                // match anything, fix the syntax).
+                let broken_line = if row.broken {
+                    Some(view! {
+                        <div style="font-size: 10px; color: #8a1616;
+                                    background: #fdecea; padding: 2px 6px;
+                                    margin-top: 3px; border-radius: 3px;
+                                    border: 1px solid #f4baba;">
+                            "invalid selector (threw on querySelectorAll)"
+                        </div>
+                    }.into_any())
+                } else {
+                    None
+                };
                 view! {
                     {shadow_line}
                     {zero_line}
+                    {broken_line}
                 }
             }
             {if can_expand {
@@ -1166,8 +1230,12 @@ struct RuleRow {
     /// covers this block rule, making it DNR-unreachable.
     /// `zero_match` = true when this remove/hide selector has
     /// count=0 on the current tab's latest stats snapshot.
+    /// `broken` = true when the content script flagged this
+    /// remove/hide/allow selector as throwing on
+    /// `querySelectorAll` / `element.matches` (invalid CSS).
     shadowed_by: Option<String>,
     zero_match: bool,
+    broken: bool,
 }
 
 /// Blocked (network) section. Replaces the `#block-count` / `#block-list`

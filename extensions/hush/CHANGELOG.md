@@ -7,6 +7,95 @@ Format is loosely based on Keep-a-Changelog. Each release bumps
 
 ## [Unreleased]
 
+### Stage 12 phase B: options-editor per-row health dot
+- New `RuleHealth` enum in `src/ui_options.rs`:
+  `Disabled | Broken | Shadowed | Firing | NoHits`. Covers
+  every action with one status surface rather than four
+  parallel diagnostic types (the original phase-B spec) since
+  the rendered output is uniform per row.
+- New `HealthData` snapshot fetched once at options-page mount
+  via two new handlers:
+  - `hush:get-all-broken-selectors` — unions
+    `TabStatsEntry.broken_selectors` across every tab.
+    Selectors are CSS-invalid regardless of which tab reported
+    them, so the union is the right aggregation.
+  - Existing `hush:get-firewall-events` (called with tab_id=-1
+    since the handler already ignores the arg and ships the
+    full global ring buffer).
+- Per-row dot renders in the `#` column with color +
+  `title` tooltip: green "N hits this session", amber
+  "shadowed by allow: ...", red "invalid selector (threw on
+  querySelectorAll)", grey filled "no hits this session", grey
+  outline "disabled".
+- Shadow detection reuses `src/lint.rs::block_shadowed_by` on
+  the live allow list (rebuilt per render pass so reorders /
+  edits re-evaluate without a refetch).
+
+### Stage 12 phase B: broken-selector surfacing
+- `content.js`: new `brokenRemove` / `brokenHide` /
+  `brokenAllow` sets plus a `flagBroken(kind, sel)` helper
+  attached to every `querySelectorAll` / `element.matches`
+  throw. Once flagged, a selector is skipped on subsequent
+  passes so CSS-invalid rules don't re-throw each
+  MutationObserver tick.
+- `hush:stats` payload gains a `brokenSelectors` object shipped
+  only when the set changed since the last send.
+- `background.rs`: new `BrokenSelectors` type in `src/types.rs`;
+  `TabStatsEntry.broken_selectors` unions each incoming payload;
+  `reset_stats` wipes the set on `webNavigation.onCommitted`.
+- `chrome_bridge::TabStats` + `ui_popup::PopupSnapshot` carry
+  the broken list through to the popup.
+- Firewall log: `RuleRow.broken` is set for remove/hide/allow
+  rules whose value appears in the broken set (This-tab view
+  only). New red "invalid selector (threw on
+  querySelectorAll)" line renders alongside the existing
+  shadow / zero-match annotations; header roll-up includes a
+  "N broken" term.
+
+### Stage 8: canvas / audio / font-enum spoof kinds
+- `canvas` spoof: `HTMLCanvasElement.prototype.toDataURL` and
+  `toBlob` return a constant 1x1 transparent PNG when the site
+  opts in; `CanvasRenderingContext2D.prototype.getImageData`
+  returns a fresh zero-initialized `ImageData` of the requested
+  dimensions. Emits one `canvas` spoof-hit FirewallEvent per
+  page.
+- `audio` spoof: wraps
+  `OfflineAudioContext.prototype.startRendering` so it resolves
+  to a silent `AudioBuffer` matching the context's channels,
+  length, and sampleRate. Emits one `audio` spoof-hit per page.
+- `font-enum` spoof: `CanvasRenderingContext2D.prototype
+  .measureText` returns a synthetic TextMetrics-shaped plain
+  object whose width is a constant function of text length (not
+  font family), collapsing cross-font width probing to one
+  invariant value. Emits one `font-enum` spoof-hit per page.
+  Returned object is not `instanceof TextMetrics` — acceptable
+  trade-off for opt-in spoof.
+- All three new kinds follow the `dataset.hushSpoof` opt-in
+  pattern that `webgl-unmasked` established. New `hasSpoofTag()`
+  helper centralizes the dataset read; existing `webgl-unmasked`
+  branch refactored onto it.
+- No Rust changes required — `spoof_kind_for_signal` in
+  `src/detectors.rs` already mapped `canvas-fp` / `audio-fp` /
+  `font-fp` observations to these spoof tags (anticipating Stage
+  8); the main-world enforcement was the missing piece.
+
+### Options UI: flat firewall-style rule table
+- Options page rewritten as a single flat rules table. Scope and
+  action are now inline `<select>` cells on every row; all scopes
+  and all actions render top-to-bottom in one sortable,
+  filterable grid. Replaces the prior two-pane site-list + seven
+  per-action `<fieldset>` layout. Storage schema unchanged —
+  `Config = IndexMap<scope, SiteConfig>` with seven `Vec<RuleEntry>`
+  fields still owns the data; the table flattens on read and
+  routes writes back to the right bucket.
+- New filter bar above the table: scope filter, action filter,
+  free-text search over value / tags / comment / scope.
+- Changing a row's scope or action pops the rule out of its
+  current bucket and appends to the target bucket. "+ New site..."
+  in the scope dropdown prompts for a hostname and creates the
+  entry lazily. Up/down still reorder within the `(scope, action)`
+  bucket — first-match-wins evaluation stays per-action.
+
 ### Stage 13: rule simulate / test-match UI
 - New `src/simulate.rs` module with a pure `simulate_url(config,
   site_host, url) -> Vec<RuleMatch>` function. Walks global +

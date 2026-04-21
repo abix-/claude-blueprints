@@ -112,6 +112,12 @@ struct TabStatsEntry {
     block: u32,
     blocked_urls: Vec<BlockedUrl>,
     removed_elements: Vec<RemovedElement>,
+    /// Remove/hide/allow selectors that threw on `querySelectorAll`
+    /// or `element.matches` during a content-script pass. Union of
+    /// every pass on this tab since the last navigation commit, so
+    /// once a selector is flagged broken it stays flagged for the
+    /// rest of the page.
+    broken_selectors: crate::types::BrokenSelectors,
 }
 
 // ---------------------------------------------------------------------------
@@ -1346,6 +1352,10 @@ fn handle_message(msg: JsValue, sender: JsValue, send_response: JsValue) -> JsVa
             handle_get_firewall_events(&msg, &sender, &send_response);
             JsValue::FALSE
         }
+        "hush:get-all-broken-selectors" => {
+            handle_get_all_broken_selectors(&send_response);
+            JsValue::FALSE
+        }
         "hush:get-suggestions" => {
             handle_get_suggestions(&msg, &sender, send_response.clone());
             JsValue::TRUE
@@ -1395,6 +1405,11 @@ fn handle_stats(msg: &JsValue, sender: &JsValue) {
         .ok()
         .and_then(|v| serde_wasm_bindgen::from_value::<Vec<RemovedElement>>(v).ok())
         .unwrap_or_default();
+    let broken = Reflect::get(msg, &JsValue::from_str("brokenSelectors"))
+        .ok()
+        .and_then(|v| {
+            serde_wasm_bindgen::from_value::<crate::types::BrokenSelectors>(v).ok()
+        });
     // Snapshot the new removed events before moving them into stats;
     // the firewall-log emission below needs the per-element detail.
     let remove_events: Vec<RemovedElement> = new_removed.clone();
@@ -1423,6 +1438,24 @@ fn handle_stats(msg: &JsValue, sender: &JsValue) {
             if s.removed_elements.len() > MAX_EVIDENCE {
                 let drop = s.removed_elements.len() - MAX_EVIDENCE;
                 s.removed_elements.drain(..drop);
+            }
+        }
+        if let Some(b) = broken {
+            // Union — once broken, stays broken for the page.
+            for sel in b.remove {
+                if !s.broken_selectors.remove.contains(&sel) {
+                    s.broken_selectors.remove.push(sel);
+                }
+            }
+            for sel in b.hide {
+                if !s.broken_selectors.hide.contains(&sel) {
+                    s.broken_selectors.hide.push(sel);
+                }
+            }
+            for sel in b.allow {
+                if !s.broken_selectors.allow.contains(&sel) {
+                    s.broken_selectors.allow.push(sel);
+                }
             }
         }
     });
@@ -1755,6 +1788,42 @@ fn handle_get_tab_stats(msg: &JsValue, sender: &JsValue, send_response: &JsValue
         }
     } else {
         let _ = Reflect::set(&reply, &JsValue::from_str("stats"), &JsValue::NULL);
+    }
+    call_send_response(send_response, &reply.into());
+}
+
+fn handle_get_all_broken_selectors(send_response: &JsValue) {
+    // Union broken sets across every tab's stats entry. Selectors
+    // are invalid CSS regardless of which tab reported them, so
+    // the union is the right aggregation for the options-editor
+    // health indicator.
+    let mut remove: Vec<String> = Vec::new();
+    let mut hide: Vec<String> = Vec::new();
+    let mut allow: Vec<String> = Vec::new();
+    STATE.with(|s| {
+        let st = s.borrow();
+        for entry in st.tab_stats.values() {
+            for sel in &entry.broken_selectors.remove {
+                if !remove.contains(sel) {
+                    remove.push(sel.clone());
+                }
+            }
+            for sel in &entry.broken_selectors.hide {
+                if !hide.contains(sel) {
+                    hide.push(sel.clone());
+                }
+            }
+            for sel in &entry.broken_selectors.allow {
+                if !allow.contains(sel) {
+                    allow.push(sel.clone());
+                }
+            }
+        }
+    });
+    let reply = Object::new();
+    let broken = crate::types::BrokenSelectors { remove, hide, allow };
+    if let Ok(v) = crate::chrome_bridge::to_js(&broken) {
+        let _ = Reflect::set(&reply, &JsValue::from_str("broken"), &v);
     }
     call_send_response(send_response, &reply.into());
 }

@@ -453,11 +453,31 @@
   // the firewall's "allow" action for DOM-level rules, mirroring
   // how DNR's `allow` action overrides Block at the network layer.
   const allowSelectors = cfg.allow.slice();
+
+  // Broken-selector tracking: querySelectorAll / element.matches
+  // throws on CSS-invalid selectors. Record which selectors threw
+  // so the popup firewall log can flag them. Sets dedup across
+  // MutationObserver passes; new entries trigger an out-of-band
+  // stats send so the popup picks them up without waiting for a
+  // remove/hide hit.
+  const brokenRemove = new Set();
+  const brokenHide = new Set();
+  const brokenAllow = new Set();
+  let brokenDirty = false;
+  function flagBroken(kind, sel) {
+    const set = kind === "remove" ? brokenRemove
+              : kind === "hide"   ? brokenHide
+              : brokenAllow;
+    if (set.has(sel)) return;
+    set.add(sel);
+    brokenDirty = true;
+    scheduleSend();
+  }
   function matchesAnyAllow(el) {
     if (!allowSelectors.length) return false;
     for (const sel of allowSelectors) {
       try { if (el.matches && el.matches(sel)) return true; }
-      catch (e) { /* invalid selector */ }
+      catch (e) { flagBroken("allow", sel); }
     }
     return false;
   }
@@ -527,6 +547,7 @@
   function applyRemove() {
     let anyChanged = false;
     for (const sel of removeSelectors) {
+      if (brokenRemove.has(sel)) continue;
       try {
         const nodes = document.querySelectorAll(sel);
         if (!nodes.length) continue;
@@ -549,7 +570,7 @@
           stats.remove[sel] = (stats.remove[sel] || 0) + removed;
           anyChanged = true;
         }
-      } catch (e) { /* invalid selector, skip */ }
+      } catch (e) { flagBroken("remove", sel); }
     }
     return anyChanged;
   }
@@ -577,13 +598,14 @@
   function recountHide() {
     let anyChanged = false;
     for (const sel of hideSelectors) {
+      if (brokenHide.has(sel)) continue;
       try {
         const n = document.querySelectorAll(sel).length;
         if (stats.hide[sel] !== n) {
           stats.hide[sel] = n;
           anyChanged = true;
         }
-      } catch (e) { /* invalid selector */ }
+      } catch (e) { flagBroken("hide", sel); }
     }
     return anyChanged;
   }
@@ -636,6 +658,17 @@
         scope: scopeForSelector("hide", sel)
       });
     }
+    // Only ship brokenSelectors when something changed since the
+    // last send — background merges via union, so skipping when
+    // clean avoids redundant per-pass traffic.
+    const brokenPayload = brokenDirty
+      ? {
+          remove: Array.from(brokenRemove),
+          hide: Array.from(brokenHide),
+          allow: Array.from(brokenAllow)
+        }
+      : undefined;
+    brokenDirty = false;
     try {
       const p = chrome.runtime.sendMessage({
         type: "hush:stats",
@@ -643,7 +676,8 @@
         hide: stats.hide,
         remove: stats.remove,
         newRemovedElements: toSend,
-        newHideEvents
+        newHideEvents,
+        brokenSelectors: brokenPayload
       });
       if (p && typeof p.catch === "function") p.catch(() => {});
     } catch (e) {

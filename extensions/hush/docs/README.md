@@ -18,10 +18,14 @@ Each case study documents:
 
 ## Planning
 
-- [roadmap.md](roadmap.md) - stage-based development roadmap. First unchecked stage is the current sprint. Follows the endless repo pattern: numbered stages with "Done when:" acceptance criteria.
+- [roadmap.md](roadmap.md) - prioritized list of what's next. Items get removed when shipped; rollout notes land in CHANGELOG / history.
 - [completed.md](completed.md) - snapshot of current user-facing features.
 - [history.md](history.md) - retired rollout notes.
-- [heuristic-roadmap.md](heuristic-roadmap.md) - gap analysis of detection signals. Source material for future roadmap stages.
+- [architecture.md](architecture.md) - mental model, rule shape, runtime data flow.
+
+## Context
+
+- [comparison.md](comparison.md) - how Hush compares with uBlock Origin, Privacy Badger, Ghostery, Brave Shields, NoScript, and others. Includes a feature-overlap matrix and "when to use which" recommendations.
 
 ## Contributing your own
 

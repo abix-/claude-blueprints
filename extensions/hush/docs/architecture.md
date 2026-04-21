@@ -92,13 +92,44 @@ Rules also carry optional metadata used by the log and the editor:
    `display: none !important` via a user stylesheet injected at
    `document_start`. The element stays in the DOM; it doesn't
    render. Mildest action.
-7. **Spoof (fingerprint)** — kind tags (e.g. `webgl-unmasked`) that
-   swap the real value returned by a fingerprinting API for a
-   bland identical-across-users default. First case: WebGL
-   `UNMASKED_VENDOR_WEBGL` / `UNMASKED_RENDERER_WEBGL` returning
-   `"Google Inc."` / `"ANGLE (Generic)"` instead of your actual
-   GPU identity. Lets the page keep rendering while killing the
-   fingerprint's entropy contribution.
+7. **Spoof (fingerprint)** — kind tags that swap the real value
+   returned by a fingerprinting API for a bland
+   identical-across-users default. Supported kinds:
+     - `webgl-unmasked` — WebGL `UNMASKED_VENDOR_WEBGL` /
+       `UNMASKED_RENDERER_WEBGL` return `"Google Inc."` /
+       `"ANGLE (Generic)"` instead of the real GPU identity.
+     - `canvas` — `HTMLCanvasElement.toDataURL` / `toBlob` return
+       a constant 1x1 PNG; `CanvasRenderingContext2D.getImageData`
+       returns a zero-initialized `ImageData` of the requested
+       dimensions. Kills the subpixel-rendering fingerprint at
+       the cost of breaking legitimate canvas rendering — opt-in
+       per site.
+     - `audio` — `OfflineAudioContext.startRendering` resolves to
+       a silent `AudioBuffer` matching the context's channels,
+       length, and sampleRate. Kills the audio-rendering
+       divergence fingerprint.
+     - `font-enum` — `measureText` returns a synthetic metrics
+       object whose `width` depends only on text length, not
+       font. Collapses cross-font width probing to one invariant
+       value.
+   Lets the page keep rendering while killing the fingerprint's
+   entropy contribution. Opt-in per site via the `spoof` array
+   (kind tags) in SiteConfig. Each kind fires one spoof-hit
+   FirewallEvent per page.
+
+### Options UI: one flat table
+
+Mirroring enterprise firewall conventions (iptables, pf, AWS
+Security Group rules, Windows Defender Firewall), the options
+page renders every rule across every scope and every action in a
+**single flat table**. Each row carries its own scope + action
+selects, match input, tags, comment, enable checkbox, up/down
+reorder, delete. Users read top-to-bottom to understand what will
+fire. Filters above the table let the reader narrow by scope,
+action, or substring. Under the covers the store is still
+`Config = IndexMap<scope, SiteConfig>` with seven
+`Vec<RuleEntry>` fields per scope — the table is a projection
+and writes are routed to the matching `(scope, action)` bucket.
 
 ### Evaluation order
 
@@ -143,7 +174,7 @@ there is no cross-action ordering beyond the Allow/Block override.
   over utility-class chains.
 - **Kind tag** (for Spoof): a short string identifying which
   fingerprint signal to neutralize. Currently supported:
-  `webgl-unmasked`. Future: `canvas`, `audio`, `font-enum`.
+  `webgl-unmasked`, `canvas`, `audio`, `font-enum`.
 
 ### The rule-hit event
 
@@ -323,67 +354,19 @@ extensions/hush/
     reddit.md                Case study: reddit.com rules.
     amazon.md                Case study: amazon.com rules.
     github.md                Case study: github.com rules.
-    heuristic-roadmap.md     Per-signal research notes.
-    roadmap.md               Stage-by-stage plan.
-    history.md               Completed-stage rollout notes.
+    roadmap.md               Prioritized list of what's next.
+    history.md               Retired rollout notes.
     completed.md             Current feature snapshot.
     benchmarks.md            compute_suggestions perf.
   sites.json                 Seed rules — case studies only.
   tools/log-server.mjs       Local dev HTTP log sink.
 ```
 
-## Future stages
+## Planned work
 
-Tracked in [roadmap.md](roadmap.md).
-
-**Shipped**: global scope (reserved `__global__` key), stable
-per-rule IDs, unified `FirewallEvent` ring buffer, firewall-style
-log popup section aggregating by `rule_id`.
-
-**Stage 7 closeout** (quick wins that finish the current surface):
-
-- **Hide + Spoof event emission.** Hide is count-based today
-  (CSS selector hit counts, not per-element events); Spoof is
-  silent. Wire a main-world → content → bg event path so both
-  actions show up in the firewall log uniformly alongside
-  block/remove.
-- **Per-rule disable toggle.** Each rule row gets a switch so the
-  user can mute a rule temporarily without deleting it. DNR sync
-  excludes disabled rules; content-script applier skips them;
-  `compute_suggestions` ignores them for dedup.
-
-**Stage 8** (fingerprint coverage):
-
-- **More spoof kinds.** `canvas` (return a fixed hash from
-  `toDataURL` / `getImageData`), `audio` (stub
-  `OfflineAudioContext`), `font-enum` (return a fixed allowlist
-  from `measureText`). Each follows the same content-script →
-  dataset → main-world-hook pattern the WebGL spoof uses.
-
-**Stage 9 — firewall primitives** (the shape-change that makes Hush
-a real firewall, not a blocker list):
-
-- **Allow action** with DNR priority override + content-script
-  selector exclusion. Enables write-through exceptions to broader
-  Block/Remove rules.
-- **First-match-wins ordering within each action.** Rules become
-  an ordered list; options editor gains up/down reordering.
-- **Persistent searchable firewall log.** Migrate the per-tab
-  ring buffer to a single `chrome.storage.session` buffer
-  (10k cap). Popup gains action / tag / tab / search filters.
-- **Rule tags.** Each `RuleEntry` carries a `tags: Vec<String>`.
-  Detector-origin tags (from accepted suggestions) are prefixed
-  `auto:` so the log can distinguish hand-authored vs. derived
-  rules.
-
-**Stage 10** (serialization on top of the Stage 9 primitives):
-
-- **Rule import/export profiles.** Named rule bundles — e.g.
-  "news-site baseline" (telemetry beacons + generic overlay
-  killers), "developer baseline" (session-replay vendors + GPU
-  fingerprint spoof) — users can merge in on a per-machine basis.
-  Deferred to after Stage 9 because a profile is only interesting
-  once ordering, tags, and allow-overrides exist to serialize.
+Forward-looking items live in [roadmap.md](roadmap.md), which is a
+prioritized queue — highest-priority at the top, items removed when
+shipped.
 
 ## Design principles
 

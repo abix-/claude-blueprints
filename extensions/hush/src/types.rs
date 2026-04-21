@@ -264,6 +264,23 @@ pub fn rule_id(action: &str, scope: &str, match_: &str) -> String {
     format!("{action}::{scope}::{match_}")
 }
 
+/// Selectors a content-script pass observed throwing on
+/// `document.querySelectorAll` (remove/hide) or `element.matches`
+/// (allow). Collected per-tab and included in every `hush:stats`
+/// message so the popup's firewall log can flag CSS-invalid rules.
+///
+/// Reset on `webNavigation.onCommitted` alongside the rest of
+/// [`TabStatsEntry`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct BrokenSelectors {
+    #[serde(default)]
+    pub remove: Vec<String>,
+    #[serde(default)]
+    pub hide: Vec<String>,
+    #[serde(default)]
+    pub allow: Vec<String>,
+}
+
 /// Persistent allowlist in `chrome.storage.local`. All three lists are
 /// independent user-editable arrays. `suggestions` is the per-key
 /// cross-session allowlist populated by the popup's "Allow" button;

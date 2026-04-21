@@ -576,6 +576,11 @@ pub struct TabStats {
     pub blocked_urls: Vec<crate::types::BlockedUrl>,
     #[serde(rename = "removedElements", default)]
     pub removed_elements: Vec<crate::types::RemovedElement>,
+    /// Selectors the content script flagged as invalid on this tab
+    /// (threw on `querySelectorAll` / `element.matches`). Resets on
+    /// navigation. Empty for tabs the content script hasn't reached.
+    #[serde(rename = "brokenSelectors", default)]
+    pub broken_selectors: crate::types::BrokenSelectors,
 }
 
 #[derive(Deserialize, Default)]
@@ -623,6 +628,28 @@ pub async fn get_firewall_events(tab_id: i32) -> Result<Vec<FirewallEvent>, JsVa
     })
     .await?;
     Ok(resp.events)
+}
+
+/// POST `hush:get-all-broken-selectors` and return the union of
+/// every tab's `broken_selectors` set. Used by the options editor
+/// per-row health indicator to flag invalid CSS selectors
+/// regardless of which tab surfaced them.
+pub async fn get_all_broken_selectors() -> Result<crate::types::BrokenSelectors, JsValue> {
+    #[derive(Serialize)]
+    struct Msg {
+        #[serde(rename = "type")]
+        type_: &'static str,
+    }
+    #[derive(Deserialize, Default)]
+    #[serde(default)]
+    struct Resp {
+        broken: crate::types::BrokenSelectors,
+    }
+    let resp: Resp = send(&Msg {
+        type_: "hush:get-all-broken-selectors",
+    })
+    .await?;
+    Ok(resp.broken)
 }
 
 /// POST `hush:get-rule-diagnostics` and return the per-rule diagnostic

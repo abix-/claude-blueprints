@@ -17,169 +17,149 @@
     h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; }
     .tagline { color: #666; margin: 0 0 20px; }
 
-    /* Two-pane layout */
-    .two-pane {
-      display: grid;
-      grid-template-columns: 260px 1fr;
-      gap: 16px;
+    /* Firewall-style flat rules table */
+    .rules-table {
       background: #fff;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
-      overflow: hidden;
-      min-height: 400px;
+      padding: 14px 16px;
     }
-    .sidebar {
-      background: #f5f5f5;
-      border-right: 1px solid #e0e0e0;
-      padding: 12px 0;
+    .rules-filter-bar {
       display: flex;
-      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: center;
     }
-    .sidebar h2 {
+    .rules-filter-bar select,
+    .rules-filter-bar input {
+      font-size: 12px;
+      padding: 5px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+    }
+    .rules-filter-bar .filter-search { flex: 1; }
+    .rules-filter-bar .filter-clear {
+      padding: 5px 10px;
+      font-size: 12px;
+      background: #f5f5f5;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .rules-filter-bar .filter-clear:hover { background: #eaeaea; }
+    table.rules-grid {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      font-family: ui-monospace, monospace;
+    }
+    table.rules-grid thead th {
+      text-align: left;
+      padding: 6px 6px;
+      border-bottom: 2px solid #ddd;
+      color: #555;
+      font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.4px;
+      background: #f7f7f7;
+    }
+    table.rules-grid tbody td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #eee;
+      vertical-align: middle;
+    }
+    tr.rule-row.disabled td { background: #fafafa; }
+    tr.rule-row.disabled .match-input { color: #999; }
+    .col-on { width: 34px; text-align: center; }
+    .col-num {
+      width: 32px;
       color: #888;
-      margin: 0 14px 8px;
-      font-weight: 600;
-    }
-    .site-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      flex: 1;
-      overflow-y: auto;
-    }
-    .site-list li {
-      padding: 8px 14px;
-      cursor: pointer;
-      font-size: 13px;
-      border-left: 3px solid transparent;
-    }
-    .site-list li:hover { background: #eee; }
-    .site-list li.selected {
-      background: #e3ecff;
-      border-left-color: #2b7cff;
-      font-weight: 500;
-    }
-    .site-list li .badges {
-      display: block;
-      font-size: 10px;
-      color: #888;
-      margin-top: 2px;
+      text-align: right;
       font-family: ui-monospace, monospace;
     }
-    .site-list-empty {
-      padding: 14px;
-      color: #999;
+    .col-scope { width: 150px; }
+    .col-action { width: 120px; white-space: nowrap; }
+    .col-match { min-width: 220px; }
+    .col-tags { width: 150px; }
+    .col-comment { min-width: 140px; }
+    .col-ops { width: 80px; text-align: right; white-space: nowrap; }
+    .rules-grid select,
+    .rules-grid .match-input,
+    .rules-grid .meta-input {
+      width: 100%;
       font-size: 12px;
-      font-style: italic;
-    }
-    .sidebar-actions {
-      padding: 12px 14px 4px;
-      border-top: 1px solid #e0e0e0;
-      margin-top: 8px;
-    }
-
-    .detail {
-      padding: 18px 22px;
-      overflow-y: auto;
-    }
-    .detail-empty {
-      color: #999;
-      text-align: center;
-      padding: 60px 20px;
-      font-style: italic;
-    }
-    .domain-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-    .domain-row input {
-      flex: 1;
-      font-size: 16px;
-      font-weight: 500;
-      padding: 8px 10px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      font-family: ui-monospace, monospace;
-    }
-
-    .layer-section {
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      padding: 12px 14px;
-      margin-bottom: 14px;
-    }
-    .layer-section legend {
-      padding: 0 6px;
-      font-size: 12px;
-      font-weight: 600;
-      color: #444;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .layer-help {
-      margin: 0 0 10px;
-      color: #666;
-      font-size: 12px;
-    }
-    .entries {
-      list-style: none;
-      padding: 0;
-      margin: 0 0 10px;
-    }
-    .entries li {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 0;
-      font-family: ui-monospace, monospace;
-      font-size: 12px;
-    }
-    .entries li .text {
-      flex: 1;
-      background: #f5f5f5;
-      padding: 4px 8px;
-      border-radius: 4px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .entries li button.del {
+      padding: 3px 6px;
+      border: 1px solid transparent;
+      border-radius: 3px;
       background: transparent;
-      border: none;
-      color: #c33;
-      cursor: pointer;
-      font-size: 14px;
-      padding: 0 4px;
-    }
-    .entries li button.del:hover { background: #fee; border-radius: 3px; }
-    .entries-empty { color: #999; font-style: italic; font-size: 12px; }
-    .add-row {
-      display: flex;
-      gap: 6px;
-      margin-top: 6px;
-    }
-    .add-row input {
-      flex: 1;
-      padding: 6px 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
       font-family: ui-monospace, monospace;
-      font-size: 12px;
+      box-sizing: border-box;
     }
-    .add-row button {
-      padding: 6px 12px;
-      background: #f0f0f0;
+    .rules-grid select:hover,
+    .rules-grid .match-input:hover,
+    .rules-grid .meta-input:hover,
+    .rules-grid select:focus,
+    .rules-grid .match-input:focus,
+    .rules-grid .meta-input:focus {
+      border-color: #ccc;
+      background: #fff;
+      outline: none;
+    }
+    .rules-grid .match-input.strike {
+      text-decoration: line-through;
+    }
+    .rules-grid .action-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .rules-grid .status-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+      cursor: help;
+    }
+    .rules-grid button.op {
+      padding: 1px 6px;
+      line-height: 18px;
+      font-size: 11px;
+      background: #fff;
       border: 1px solid #ccc;
-      border-radius: 4px;
+      border-radius: 3px;
       cursor: pointer;
+      color: #444;
+    }
+    .rules-grid button.op:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .rules-grid button.op.del { color: #c33; }
+    .rules-grid button.op.del:hover { background: #fee; border-color: #c33; }
+    .rules-grid td.rules-empty {
+      color: #999;
+      font-style: italic;
+      text-align: center;
+      padding: 20px;
+    }
+    .rules-footer {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .rules-footer .rules-hint {
+      color: #888;
       font-size: 12px;
     }
-    .add-row button:hover { background: #e0e0e0; }
 
     button {
       padding: 6px 14px;
@@ -330,8 +310,10 @@
   <h1>Hush</h1>
   <p class="tagline">Per-site element hiding, DOM removal, and network blocking.</p>
 
-  <!-- Site list sidebar + per-site editor are rendered by the Leptos
-       ConfigEditor component (src/ui_options.rs). -->
+  <!-- Flat firewall-style rule table rendered by the Leptos
+       RulesTable component (src/ui_options.rs). Every rule is one
+       row; scope and action are inline `<select>` cells so edits
+       stay in the table. -->
   <div id="rust-config-root"></div>
 
   <section class="how">

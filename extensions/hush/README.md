@@ -18,42 +18,74 @@ model, threat model, and rule taxonomy. The short version:
 
 A Hush rule is a **(scope, action, match)** triple.
 
-- **Scope**: `<domain>` (applies to that hostname + suffixes) or
-  `global` (planned — applies everywhere).
-- **Action**: `block`, `remove`, `hide`, or `spoof`.
-- **Match**: URL pattern, CSS selector, or fingerprint kind tag,
-  depending on the action.
+- **Scope**: `Global` (the reserved `__global__` key — applies to every
+  tab) or a hostname (applies to that hostname and its subdomains via
+  exact-or-suffix matching).
+- **Action**: `block`, `allow`, `neuter`, `silence`, `remove`, `hide`,
+  or `spoof`.
+- **Match**: URL pattern, CSS selector, script-origin URL pattern, or
+  fingerprint kind tag, depending on the action.
 
-The four actions, in order of aggressiveness:
+The seven actions:
 
 1. **Block (network)** — URL patterns registered with
-   `chrome.declarativeNetRequest`. Matching requests are rejected by the browser
-   before DNS resolution, TCP connection, or TLS handshake. No bytes reach the
-   network; the initiating `fetch()` or iframe load fails locally with
-   `net::ERR_BLOCKED_BY_CLIENT`.
+   `chrome.declarativeNetRequest`. Matching requests are rejected by the
+   browser before DNS resolution, TCP connection, or TLS handshake. No
+   bytes reach the network; the initiating `fetch()` or iframe load
+   fails locally with `net::ERR_BLOCKED_BY_CLIENT`.
 
-2. **Remove (DOM)** — CSS selectors whose matching elements are physically
-   removed from the DOM via `element.remove()`. A `MutationObserver` keeps
-   watch and removes matching nodes that arrive later (SPA routers, infinite
-   scroll, modals). Frees listeners and stops libraries that rely on the
-   element being in the tree.
+2. **Allow (exception)** — the counter-rule to Block. Matching requests
+   pass through even when a broader Block rule would cover them (DNR
+   priority override). For Remove/Hide, an Allow selector excludes
+   matching nodes from the DOM passes. Use it to carve an exception out
+   of a global rule on a single site.
 
-3. **Hide (CSS)** — CSS selectors applied with `display: none !important` via
-   a user stylesheet injected at `document_start`. Skips layout, paint, and
-   compositing. Mildest layer; leaves the element in the DOM and its
-   JavaScript running.
+3. **Neuter (script capture)** — script-origin URL patterns. At
+   `document_start`, main-world denies `addEventListener` calls for
+   interaction events (click/keydown/mouse/scroll/touch) from matching
+   script origins. No listener, no capture, no exfil. Upstream defense
+   for session-replay vendors.
 
-4. **Spoof (fingerprint)** — intercept specific fingerprinting APIs and
-   return bland identical-across-users values instead of blocking the site.
-   First signal: `webgl-unmasked` returns `"Google Inc."` /
-   `"ANGLE (Generic)"` from
-   `WebGLRenderingContext.getParameter(UNMASKED_VENDOR_WEBGL)` /
-   `getParameter(UNMASKED_RENDERER_WEBGL)` so fingerprinting code gets a
-   useless value while legitimate rendering code keeps working.
+4. **Silence (script exfil)** — script-origin URL patterns. Main-world
+   intercepts outbound `fetch` / `XMLHttpRequest.send` /
+   `navigator.sendBeacon` from matching script origins and fake-succeeds
+   them (204 No Content / XHR state 4 / beacon true). Fallback for
+   bundled first-party replay libraries where Neuter can't match cleanly
+   by origin.
 
-Each site entry specifies any combination of the four. A site entry for
-`example.com` also applies to `www.example.com`, `m.example.com`, and any
-other subdomain via exact-or-suffix matching.
+5. **Remove (DOM)** — CSS selectors whose matching elements are
+   physically deleted via `element.remove()`. A `MutationObserver`
+   re-applies on every DOM mutation so SPA routers and infinite-scroll
+   insertions can't sneak the element back in.
+
+6. **Hide (CSS)** — CSS selectors applied with
+   `display: none !important` via a user stylesheet injected at
+   `document_start`. Skips layout, paint, and compositing. Mildest
+   layer; leaves the element in the DOM and its JavaScript running.
+
+7. **Spoof (fingerprint)** — intercept specific fingerprinting APIs and
+   return bland identical-across-users values instead of blocking the
+   site. Supported kinds:
+   - `webgl-unmasked` — `getParameter(UNMASKED_VENDOR_WEBGL)` /
+     `getParameter(UNMASKED_RENDERER_WEBGL)` return `"Google Inc."` /
+     `"ANGLE (Generic)"` instead of the real GPU identity.
+   - `canvas` — `toDataURL` / `toBlob` return a constant 1x1 PNG;
+     `getImageData` returns a zero-initialized `ImageData`. Kills
+     subpixel-rendering fingerprints; opt-in per site since legit
+     canvas uses will break.
+   - `audio` — `OfflineAudioContext.startRendering` resolves to a
+     silent `AudioBuffer`, neutralizing audio-rendering-divergence
+     fingerprints.
+   - `font-enum` — `measureText` returns synthetic metrics whose
+     width depends only on text length, killing installed-font probes.
+
+Rules are evaluated **first-match-wins within each action**, top-down
+in authoring order. The options UI is a single flat table that lets you
+reorder rows; order is persisted verbatim in `chrome.storage.local`.
+The Block↔Allow cross-action override runs through DNR priority, not
+table ordering. Other actions are orthogonal (Block gates the network,
+Remove/Hide touch the DOM, Spoof touches fingerprint APIs), so there
+is no cross-action ordering to worry about.
 
 ## Install
 
@@ -65,47 +97,87 @@ other subdomain via exact-or-suffix matching.
 
 ## Configure
 
-The options page is a two-pane editor:
+The options page is a **flat firewall-style rule table**. Every rule is
+one row; scope and action are inline dropdowns on each row:
 
-- Left: list of configured sites. Each entry shows counts for hide/remove/block.
-- Right: the selected site's three layer sections. Add or delete entries inline.
-  Rename or delete the whole site.
+| On | # | Scope | Action | Match | Tags | Comment |
+|---|---|---|---|---|---|---|
 
-Below the editor: a **How Hush works** section with detailed notes on each
-layer, pattern syntax, and the runtime order of operations.
+- **Scope**: `Global` (reserved `__global__` key, applies to every tab)
+  or any hostname you've added. Changing the dropdown moves the rule
+  between scopes; `+ New site...` prompts for a hostname and creates the
+  entry lazily.
+- **Action**: one of the seven action types (Block, Allow, Neuter,
+  Silence, Remove, Hide, Spoof). Changing the dropdown moves the rule
+  between action buckets.
+- **Match**: URL pattern, CSS selector, script-origin pattern, or
+  fingerprint kind tag, depending on action.
+- Up/down buttons reorder within the row's `(scope, action)` bucket —
+  rules evaluate first-match-wins per action, so bucket order is what
+  matters. Cross-bucket ordering is meaningless (DNR priority handles
+  allow-over-block; other actions are orthogonal).
+
+A filter bar above the table narrows by scope, action, or substring.
+`+ Add rule` at the bottom appends a row with defaults (Global / Block /
+empty); fill in the Match cell to activate it.
+
+Below the table: a **How Hush works** section with detailed notes on
+each layer, pattern syntax, and runtime order of operations.
 
 At the bottom: an **Advanced: edit raw JSON** section for bulk edits or
-copy-paste between machines. The UI and the JSON view edit the same storage.
+copy-paste between machines. The UI and the JSON view edit the same
+storage.
 
 ### Config format
 
+Under the covers, rules are stored keyed by scope. The `__global__`
+entry applies to every tab; any hostname key applies to that hostname
+and its subdomains. Each scope has seven optional arrays (one per
+action). Rule entries are `{ "value": ..., "disabled": ..., "tags":
+[...], "comment": "..." }`; a bare string still parses as a
+value-only entry.
+
 ```json
 {
+  "__global__": {
+    "block": [{"value": "||doubleclick.net"}]
+  },
   "example.com": {
-    "block":  ["||ads.example.com"],
-    "remove": [".modal-overlay"],
-    "hide":   [".popup", ".newsletter-signup", "[class*=\"AdBanner\"]"],
-    "spoof":  ["webgl-unmasked"]
+    "block":   [{"value": "||ads.example.com"}],
+    "allow":   [{"value": "||ads.example.com/partner/"}],
+    "neuter":  [{"value": "||hotjar.com"}],
+    "silence": [{"value": "||replay-vendor.example/api/"}],
+    "remove":  [{"value": ".modal-overlay"}],
+    "hide":    [{"value": ".popup"}, {"value": "[class*=\"AdBanner\"]"}],
+    "spoof":   [{"value": "webgl-unmasked"}]
   }
 }
 ```
 
-Keys are domain names. Each site has four optional arrays:
-
-- `block` — uBlock-style URL patterns (`||domain.com`, `*.cdn.example.com`,
-  path wildcards, etc.). Rules are declared under a site in your config but
-  applied as **global URL-pattern matches** at the network layer. This means
-  a rule under `reddit.com` blocks its target URL wherever that URL is
-  requested — including from embedded third-party iframes (redgifs, YouTube,
-  etc.) loaded inside Reddit. Chrome's DNR `initiatorDomains` condition only
-  matches the initiating frame's origin, which would fail for cross-origin
-  iframe traffic, so we don't use it. If you need a URL blocked only on a
-  specific site, make the pattern itself more specific.
-- `remove` — CSS selectors. Matching elements are physically deleted from the
-  DOM. Applied per-frame when the frame's hostname matches the site config
-  (Reddit selectors only touch Reddit's DOM, not embedded iframe contents).
-- `hide` — CSS selectors. Matching elements get `display: none !important`
-  via a user stylesheet. Per-frame application, same as `remove`.
+- `block` — uBlock-style URL patterns (`||domain.com`,
+  `*.cdn.example.com`, path wildcards, etc.). Rules are keyed by scope
+  in your config but applied as **global URL-pattern matches** at the
+  network layer. A rule under `reddit.com` blocks its target URL
+  wherever that URL is requested — including from embedded third-party
+  iframes loaded inside Reddit. Chrome's DNR `initiatorDomains` condition
+  only matches the initiating frame's origin, which would fail for
+  cross-origin iframe traffic, so we don't use it. For a URL blocked
+  only on a specific site, make the pattern itself more specific.
+- `allow` — uBlock-style URL patterns (for network) or CSS selectors
+  (for DOM). A matching URL passes DNR even if a broader `block` rule
+  would cover it; a matching selector excludes nodes from the Remove
+  and Hide passes.
+- `neuter` — script-origin URL patterns. Interaction-event
+  `addEventListener` calls from matching script origins are silently
+  denied at `document_start`.
+- `silence` — script-origin URL patterns. Outbound fetch/XHR/beacon
+  calls from matching script origins are intercepted and fake-succeeded.
+- `remove` — CSS selectors. Matching elements are physically deleted
+  from the DOM. Applied per-frame when the frame's hostname matches the
+  scope.
+- `hide` — CSS selectors. Matching elements get `display: none
+  !important` via a user stylesheet. Per-frame application, same as
+  `remove`.
 - `spoof` — kind tags identifying fingerprint signals to neutralize.
   Currently supported: `webgl-unmasked`. Applied via main-world hook;
   the site's JS still sees a string (not a thrown error), just a
@@ -119,7 +191,7 @@ as text. The seeded `sites.json` is a generic example only.
 Clicking the toolbar icon opens a compact popup showing, for the current tab:
 
 - Matched site (or "no config matched" if none applies)
-- Counts and per-pattern detail for each of the three layers
+- Counts and per-pattern detail for each action layer
 - An expandable list of every blocked URL with timestamp and resource type
 - An expandable list of every removed element with tag + class signature,
   distinguishing attributes (`name`, `data-testid`, `post-title`, etc.), and a
@@ -311,21 +383,38 @@ on. When on:
 
 Errors are always logged regardless of the toggle.
 
-## How the three layers interact
+## How the action layers interact
 
-- **Remove and Hide on the same selector:** Remove runs first on every
-  MutationObserver pass. By the time the hide-counter looks, matching
-  elements are gone. The popup shows such selectors as `- (removed)` in the
-  Hidden section.
+- **Allow over Block:** An `allow` URL pattern overrides a broader
+  `block` via DNR priority. An `allow` selector excludes matching
+  nodes from Remove/Hide passes. Use it to carve a narrow exception
+  out of a blanket rule.
 
-- **Block plus Hide/Remove:** the request is killed at the network layer;
-  if a site's JS still creates a DOM element whose src just failed
-  (a dead iframe, for example), Hide or Remove cleans up the shell.
+- **Neuter / Silence vs. Block:** Block kills the request before
+  connection. Neuter kills the `addEventListener` registration at
+  `document_start` so replay vendors never get a chance to capture.
+  Silence intercepts the outbound fetch/XHR/beacon call after it's
+  made but before the network write. Pick Neuter when you can match
+  the vendor's script origin cleanly; Silence when the capture is
+  bundled into the site's own JS.
+
+- **Remove and Hide on the same selector:** Remove runs first on
+  every MutationObserver pass. By the time the hide-counter looks,
+  matching elements are gone. The popup shows such selectors as
+  `- (removed)` in the Hidden section.
+
+- **Block plus Hide/Remove:** the request is killed at the network
+  layer; if a site's JS still creates a DOM element whose src just
+  failed (a dead iframe, for example), Hide or Remove cleans up
+  the shell.
 
 - **Runtime order for any given element:**
-  1. Block decides whether the request exists at all.
-  2. Remove decides whether the element gets to stay in the DOM.
-  3. Hide decides whether what remains actually renders.
+  1. Block / Allow decide whether the request exists at all.
+  2. Neuter decides whether capture listeners ever register.
+  3. Silence intercepts any capture that still made it to the wire.
+  4. Remove decides whether the element gets to stay in the DOM.
+  5. Hide decides whether what remains actually renders.
+  6. Spoof returns bland values from fingerprinting reads.
 
 ## Limitations
 
@@ -356,6 +445,16 @@ Worked examples with full rule sets and reasoning live under [`docs/`](docs/READ
 - [Reddit](docs/reddit.md) - telemetry beacons, Brand Affiliate posts, algorithmic community recs, sidebar widgets
 - [Amazon](docs/amazon.md) - homepage ad iframes (narrow scope, observed-only)
 - [GitHub](docs/github.md) - first-party sendBeacon telemetry collector (`collector.github.com`)
+
+## How Hush compares to other blockers
+
+Honest side-by-side with uBlock Origin, Privacy Badger, Ghostery, Brave
+Shields, NoScript, and others lives in
+[docs/comparison.md](docs/comparison.md). Short version: Hush is not a
+replacement for uBlock Origin — it's a per-site surgical tool that
+catches first-party telemetry subdomains, site-specific custom elements,
+session-replay listener density, and fingerprint-API reads that curated
+filter lists can't see. Use it alongside a general blocker.
 
 ## License
 

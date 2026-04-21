@@ -2,9 +2,9 @@
 //!
 //! Single-crate layout matching the `endless` repo model. All modules
 //! live flat under `src/`; the wasm-bindgen-exported entry points are
-//! right here in `lib.rs`. For the stage-by-stage port plan see
-//! `docs/roadmap.md`; for per-signal research notes see
-//! `docs/heuristic-roadmap.md`.
+//! right here in `lib.rs`. For the prioritized work queue see
+//! `docs/roadmap.md`; for mental model + rule shape see
+//! `docs/architecture.md`.
 
 #![forbid(unsafe_code)]
 
