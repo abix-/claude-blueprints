@@ -20,7 +20,7 @@ For Jinja templating inside YAML, read the `jinja` skill.
 - **LF line endings**, UTF-8, no BOM, final newline at EOF.
 - **One document per file** by default. Multi-doc (`---` separator)
   only when the tool expects it (k8s manifests, helm).
-- **Optional top `---`** -- some tools require it, most don't. Pick
+- **Optional top `---`**. Some tools require it, most don't. Pick
   one style per repo. Trailing `...` end-marker is almost never needed.
 - **No trailing whitespace.** yamllint flags it; editors should auto-strip.
 
@@ -89,8 +89,8 @@ if you mean a string.
 
 ## Booleans and nulls
 
-- **`true` / `false`** -- use these. Lowercase.
-- **`null`** -- explicit. `~` is the legacy alternative; avoid.
+- **`true` / `false`**. Use these. Lowercase.
+- **`null`**. Explicit. `~` is the legacy alternative; avoid.
 - Empty value `key:` parses as null in most parsers. **Don't rely on
   it.** Write `key: null` if you mean null, `key: ""` for empty
   string.
