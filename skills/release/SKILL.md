@@ -28,7 +28,7 @@ cd /c/code/endless && git tag -l 'v*' | sort -V | tail -1
 
 4. **Build release notes**: Read CHANGELOG.md entries since the last release tag. Write notes that make a player want to download the update.
 
-   **Voice**: Write for the player, not the developer. Every bullet should answer "what can I do now?" or "what's better now?" — never "what did we refactor."
+   **Voice**: Write for the player, not the developer. Every bullet should answer "what can I do now?" or "what's better now?". Never "what did we refactor."
 
    **Format**: `- **Short Title** — one sentence that sells the feature or explains why they should care`
 
@@ -37,11 +37,11 @@ cd /c/code/endless && git tag -l 'v*' | sort -V | tail -1
    - Lead with the biggest new features (things the player can see and interact with)
    - Combine related entries (e.g. "added towers" + "tower inspector" + "tower stats tuning" = one Tower bullet)
    - Internal/architectural work gets ONE bullet max ("Performance & Stability" or similar), only if significant
-   - Bug fixes fold into their parent feature or into the stability bullet — no standalone fix bullets
+   - Bug fixes fold into their parent feature or into the stability bullet. No standalone fix bullets
    - Add personality and specifics: "no more getting wiped before you can build" > "added town fountain auto-attack"
    - End with `**Full Changelog**: https://github.com/abix-/endless/compare/{prev_tag}...{new_tag}`
 
-   **Reference** — match the tone of previous releases:
+   **Reference**. Match the tone of previous releases:
    ```
    - **Town Fountain**: Auto-shoots nearby enemies, no more getting wiped before you can build
    - **Smarter AI Economy**: AI players actually want food now — they build farms and homes faster when running low
@@ -69,8 +69,8 @@ Report the release URL and build run URL.
 ## Rules
 
 - Never create a release if working tree is dirty or commits are unpushed
-- Notes are a sales pitch to the player — every bullet should make them want to try the update
+- Notes are a sales pitch to the player. Every bullet should make them want to try the update
 - No developer jargon: no ECS, GPU, SystemParam, HashMap, refactor, pipeline, etc.
-- 6-10 bullets max — fewer is better if the features are strong
+- 6-10 bullets max. Fewer is better if the features are strong
 - Always include the Full Changelog comparison link
 - Pull the tag locally after creation: `git fetch --tags`
