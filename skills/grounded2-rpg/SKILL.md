@@ -230,17 +230,24 @@ grounded2-rpg does NOT own a DllMain.
 
 ## Deployed mod location
 
-After `cargo deploy install -p grounded2-rpg`:
+After `cargo deploy install -p grounded2-rpg`, the DLL lands in
+the user's Grounded 2 install under
+`<game-root>/Augusta/Binaries/WinGRTS/ue4ss/Mods/Grounded2RPG/dlls/`
+(Steam) or the equivalent `WinGDK` path on Xbox. `cargo deploy`
+autodetects `<game-root>` by walking every Steam library for a
+directory matching the crate's `[package.metadata.ueforge]`
+`game_name_regex`.
 
-```
-C:\Games\Steam\steamapps\common\Grounded2\Augusta\Binaries\WinGRTS\ue4ss\Mods\Grounded2RPG\dlls\
-  main.dll                # built mod (cdylib)
-  main-new.dll            # transient: present between deploy and hot reload (see ueforge skill)
-  main-old.dll            # transient: cleaned at next init
-  grounded2_rpg.log       # mod log -- ueforge::log writes here, per-line flush
-  settings.json           # live settings the mod reads at load
-  saves/                  # per-playthrough JSON: <playthrough-guid>.json
-```
+Files in `dlls/`:
+
+| File                  | Role                                                  |
+| --------------------- | ----------------------------------------------------- |
+| `main.dll`            | Built mod (cdylib)                                    |
+| `main-new.dll`        | Transient: present between deploy and hot reload (see `ueforge` skill) |
+| `main-old.dll`        | Transient: cleaned at next init                       |
+| `grounded2_rpg.log`   | Mod log -- `ueforge::log` writes here, per-line flush |
+| `settings.json`       | Live settings the mod reads at load                   |
+| `saves/`              | Per-playthrough JSON: `<playthrough-guid>.json`       |
 
 When investigating in-game behavior, **first place to look is
 `grounded2_rpg.log`**. The mod logs every apply step, spend /
@@ -334,11 +341,10 @@ expectations.
 
 ## Session etiquette
 
-- Read `~/.claude/skills/rust/SKILL.md` +
-  `~/.claude/skills/code/SKILL.md` before writing code.
-- Read `~/.claude/skills/ueforge/SKILL.md` for the framework.
-- For HTTP debug endpoint pattern, read
-  `~/.claude/skills/runtime-control-http/SKILL.md`.
+- Read the `rust` + `code` skills before writing code.
+- Read the `ueforge` skill for the framework doctrine.
+- For the HTTP debug endpoint pattern, read the
+  `runtime-control-http` skill.
 - For damage / fall / environmental work, you MUST read
   `grounded2-rpg/docs/damage.md` before changing anything.
 - Each crate's `docs/` is authoritative on its subject; read
