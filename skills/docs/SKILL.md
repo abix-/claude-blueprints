@@ -126,13 +126,13 @@ Override Material variables in `[data-md-color-scheme="slate"]`:
 ```
 
 Key selectors for deeper customization:
-- `.md-header` -- top bar
-- `.md-sidebar` -- left nav panel
-- `.md-typeset h1/h2/h3` -- headings
-- `.md-typeset table:not([class]) th` -- table headers
-- `.md-typeset .admonition` -- callout boxes
-- `.md-typeset pre` -- code blocks
-- `.md-typeset :not(pre) > code` -- inline code
+- `.md-header`. Top bar
+- `.md-sidebar`. Left nav panel
+- `.md-typeset h1/h2/h3`. Headings
+- `.md-typeset table:not([class]) th`. Table headers
+- `.md-typeset .admonition`. Callout boxes
+- `.md-typeset pre`. Code blocks
+- `.md-typeset :not(pre) > code`. Inline code
 
 ## GitHub Actions auto-deploy
 
@@ -197,10 +197,10 @@ Description of what it does.
 
 - ALWAYS `mkdocs build` before committing to catch warnings
 - ALWAYS verify CLI examples match actual Python method parameter names (snake_case), not HTTP body keys (camelCase)
-- NEVER add light mode -- dark only unless user requests it
-- Keep nav flat -- no nested sections unless 10+ pages
-- Use admonitions for warnings, tips, bugs -- not bold text or blockquotes
+- NEVER add light mode. Dark only unless user requests it
+- Keep nav flat. No nested sections unless 10+ pages
+- Use admonitions for warnings, tips, bugs. Not bold text or blockquotes
 - Use collapsible blocks for long JSON responses to keep pages scannable
 - Use content tabs for CLI vs HTTP examples
-- `site/` goes in .gitignore -- never commit build output
+- `site/` goes in .gitignore. Never commit build output
 - Test locally with `mkdocs serve` before pushing
