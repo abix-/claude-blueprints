@@ -86,6 +86,73 @@ hooks:                              # hooks scoped to this skill's lifecycle
 | Paragraphs | Bullets |
 | Same concept repeated | Say it once |
 
+### Authoring Coding Skills
+
+Coding skills (rust, go, python, csharp, typescript, bash, etc.) exist
+so that code pops out near-final on the first try. They must encode
+**this user's** preferences, not generic style guides. The web is the
+**second** source, never the first.
+
+**Order of operations:**
+
+1. **Mine the user's repos first.** The authoritative source is what
+   they actually ship. Read 3-5 real files per language to extract
+   the patterns that recur. Look for:
+   - Naming conventions (functions, types, modules, files)
+   - Project structure (`cmd/`, `internal/`, workspace layout)
+   - Error handling style (wrap vs bare return, panic boundaries)
+   - Dependency choices (which crates / packages they pick)
+   - Performance shortcuts they reach for (preallocation, sync vs
+     async, zero-copy paths)
+   - Test layout and harnesses
+   - Build / release patterns (CI, profiles, features)
+
+   Canonical repos by language:
+   - **Rust:** `abix-/endless`, `abix-/abixio`, `abix-/abixio-ui`,
+     `abix-/terse`, `abix-/Grounded2Mods`, `abix-/chromium-extensions`.
+   - **Go:** `abix-/k3sc`.
+   - **PowerShell:** `abix-/powershell-practical`, `abix-/Join-Object`.
+   - **C#:** `abix-/TimberbornMods`, `abix-/Schedule1Mods`.
+   - **Python:** `abix-/TimberbornMods`, `abix-/endless/scripts`,
+     `claude-blueprints/scripts`.
+   - **TypeScript / JS:** `abix-/chromium-extensions`,
+     `abix-/filter-anything-everywhere`.
+   - **Bash:** `abix-/k3sc`, `abix-/awx-operator`, `abix-/ascender-install`.
+   - **Jinja / Ansible:** `abix-/awx`, `abix-/awx-operator`.
+   - **YAML:** any of the above, especially CI workflows.
+   - **AHK:** `abix-/Ahk-For-accordion-In-Atlas`.
+   - **Lua:** `abix-/Fluid-Void-Extra`, `abix-/CustomizableContainers`,
+     `claude-blueprints/wezterm`.
+   - **Assembly / RE:** `abix-/Grounded2Mods` (image-relative offsets,
+     UE4SS struct layouts, hook trampolines).
+
+2. **Validate against canonical best-practices.** After the codebase
+   pass, cross-check with the language's authoritative guides
+   (Effective Go, PEP 8 / Ruff rules, PSScriptAnalyzer, the Rust
+   API Guidelines, etc.). Flag where the user's style diverges and
+   keep the user's style by default. The guides exist to catch gaps,
+   not override taste.
+
+3. **Verify performance claims.** Any perf rule in a skill ("X is
+   faster than Y") must be tied to a measurement in the user's
+   actual code or benches. If it can't be verified, mark it as
+   "convention" not "performance" and move on.
+
+4. **Cite the source.** Where a rule comes from a specific file in
+   a user repo, note it inline (`see abixio/src/wal.rs`). This makes
+   the skill auditable and lets future maintenance trace decisions
+   back to real code.
+
+**Anti-patterns:**
+
+- Writing a coding skill from generic web research without opening
+  any of the user's repos. The result drifts from what they actually
+  write.
+- Citing performance numbers without a bench. Skills are not blog
+  posts.
+- Recommending a crate / package the user has explicitly avoided.
+  Check `Cargo.toml` / `go.mod` / `package.json` before suggesting.
+
 ### Versioning
 
 - Increment on every change
