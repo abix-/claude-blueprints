@@ -43,7 +43,7 @@ Returns tags: `esxhostname`, `clustername`, `vcenter`, `guesthostname`, `guest` 
 
 ### Step 3: CPU
 
-**Usage (%)** -- overall CPU utilization:
+**Usage (%)**. Overall CPU utilization:
 
 ```flux
 from(bucket: "BUCKET")
@@ -55,7 +55,7 @@ from(bucket: "BUCKET")
   |> aggregateWindow(every: 1m, fn: max, createEmpty: false)
 ```
 
-**Readiness (%)** -- vCPU waiting for physical CPU. >5% = contention, >10% = problem:
+**Readiness (%)**. VCPU waiting for physical CPU. >5% = contention, >10% = problem:
 
 ```flux
 from(bucket: "BUCKET")
@@ -67,7 +67,7 @@ from(bucket: "BUCKET")
   |> aggregateWindow(every: 1m, fn: max, createEmpty: false)
 ```
 
-**Per-vCPU usage (MHz)** -- identify hot vCPUs:
+**Per-vCPU usage (MHz)**. Identify hot vCPUs:
 
 ```flux
 from(bucket: "BUCKET")
@@ -121,9 +121,9 @@ from(bucket: "BUCKET")
   |> aggregateWindow(every: 1m, fn: max, createEmpty: false)
 ```
 
-**Active (GB)** -- same query, field = `active_average`, same divisor.
+**Active (GB)**. Same query, field = `active_average`, same divisor.
 
-**Swapped (MB)** -- any value > 0 is concerning:
+**Swapped (MB)**. Any value > 0 is concerning:
 
 ```flux
 from(bucket: "BUCKET")
@@ -135,11 +135,11 @@ from(bucket: "BUCKET")
   |> aggregateWindow(every: 1m, fn: max, createEmpty: false)
 ```
 
-**Swap rate (MB/s)** -- active swapping, fields: `swapinRate_average`, `swapoutRate_average`. Same pattern, divide by 1024.0.
+**Swap rate (MB/s)**. Active swapping, fields: `swapinRate_average`, `swapoutRate_average`. Same pattern, divide by 1024.0.
 
 ### Step 6: Disk
 
-**Read/Write latency (ms)** -- most important disk metric:
+**Read/Write latency (ms)**. Most important disk metric:
 
 ```flux
 from(bucket: "BUCKET")
@@ -155,11 +155,11 @@ from(bucket: "BUCKET")
 
 Latency thresholds: <5ms healthy, 5-15ms warning, >15ms critical.
 
-**IOPS** -- fields: `numberReadAveraged_average`, `numberWriteAveraged_average`. Same pattern, no unit conversion.
+**IOPS**. Fields: `numberReadAveraged_average`, `numberWriteAveraged_average`. Same pattern, no unit conversion.
 
-**Throughput (MBps)** -- fields: `read_average`, `write_average`. Divide by 1024.0. Filter `disk != "instance-total"`.
+**Throughput (MBps)**. Fields: `read_average`, `write_average`. Divide by 1024.0. Filter `disk != "instance-total"`.
 
-**Outstanding IO** -- fields: `readOIO_latest`, `writeOIO_latest`. High values indicate queue saturation.
+**Outstanding IO**. Fields: `readOIO_latest`, `writeOIO_latest`. High values indicate queue saturation.
 
 ### Step 7: Network
 
@@ -178,18 +178,18 @@ from(bucket: "BUCKET")
   |> keep(columns: ["_time", "interface", "_value", "_field"])
 ```
 
-**Dropped packets** -- fields: `droppedRx_summation`, `droppedTx_summation`. Same pattern, no unit conversion. Any non-zero value warrants investigation.
+**Dropped packets**. Fields: `droppedRx_summation`, `droppedTx_summation`. Same pattern, no unit conversion. Any non-zero value warrants investigation.
 
 ## Diagnosis Patterns
 
 | Symptom | Metrics to Check | Likely Cause |
 |---------|-------------------|--------------|
 | VM slow, high CPU usage | `usage_average` near 100% | Undersized CPU, runaway process |
-| VM slow, low CPU usage | `readiness_average` > 5% | Host overcommit -- check host CPU |
+| VM slow, low CPU usage | `readiness_average` > 5% | Host overcommit. Check host CPU |
 | VM slow, memory swapping | `swapped_average` > 0, swap rates active | Memory overcommit, balloon driver |
 | High disk latency | `readLatencyUS_latest` or `writeLatencyUS_latest` > 15ms | Storage array slow, queue saturation, DSNRO throttling |
-| High outstanding IO | `readOIO_latest` or `writeOIO_latest` climbing | Queue depth limit hit -- check DSNRO/DQLEN per ESXi perf skill |
-| Network drops | `droppedRx_summation` or `droppedTx_summation` > 0 | Ring buffer exhaustion, TX hangs -- check vmxnet3 per ESXi perf skill |
+| High outstanding IO | `readOIO_latest` or `writeOIO_latest` climbing | Queue depth limit hit. Check DSNRO/DQLEN per ESXi perf skill |
+| Network drops | `droppedRx_summation` or `droppedTx_summation` > 0 | Ring buffer exhaustion, TX hangs. Check vmxnet3 per ESXi perf skill |
 
 ## Tips
 
