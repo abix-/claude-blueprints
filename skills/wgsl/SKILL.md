@@ -167,3 +167,118 @@ Rust side must match with `#[repr(C)]` + bytemuck. Field order and padding must 
 - **`read_write` for all storage**. Even read-only buffers use `read_write` in compute. WGSL is lenient here and it avoids needing separate bind group layouts.
 - **Hidden NPC sentinel**. `pos.x < -9000.0` means dead/hidden. Skip in all modes. Set position to `vec2<f32>(-9999.0, -9999.0)` to hide.
 - **Deactivated projectile sentinel**. `proj_hits[i] = vec2<i32>(-1, 0)` means no hit. Set on deactivation to prevent re-trigger.
+
+## Canonical references
+
+- **WGSL spec** (`gpuweb.github.io/gpuweb/wgsl/`). Authoritative on
+  syntax, type rules, alignment, and built-in functions.
+- **wgpu examples** (`github.com/gfx-rs/wgpu/tree/trunk/examples`).
+  Match the version Bevy uses (currently wgpu 27).
+- **Tour of WGSL** (`google.github.io/tour-of-wgsl/`). Interactive,
+  good for refreshing syntax.
+- **Naga** (`github.com/gfx-rs/wgpu/tree/trunk/naga`) is the
+  reference compiler; its diagnostics are the ground truth for what
+  WGSL accepts.
+
+## Workgroup and Dispatch Sizing
+
+- **Workgroup size should be a multiple of 32** on NVIDIA (warp) and
+  **64 on AMD** (wavefront). 64 is a safe default that works well on
+  both.
+- **Total workgroup size <= 256** for portability. Some integrated
+  GPUs cap lower; check `Limits::max_compute_invocations_per_workgroup`
+  at runtime if shipping broadly.
+- **Bevy default dispatch is 1D**. For 2D grids (spatial scans),
+  match dispatch shape to data layout: `@workgroup_size(8, 8)` for a
+  64-thread workgroup that maps naturally to tiles.
+- **Round dispatch UP** to the workgroup size and bounds-check inside
+  the shader (`if (gid.x >= count) { return; }`). Don't try to
+  short the last workgroup.
+
+## Performance
+
+GPU shader perf is about memory bandwidth, divergence, and atomic
+contention more than ALU.
+
+- **Coalesce reads.** Adjacent threads should read adjacent memory.
+  Random access from a storage buffer is 10x slower than linear.
+- **Avoid `if/else` divergence inside a warp.** A 32-thread warp
+  serializes both branches when half take the `if` and half the
+  `else`. Use `select(a, b, cond)` for short conditionals.
+- **`textureLoad` over `textureSample`** when you don't need
+  filtering. No sampler overhead.
+- **Storage buffer reads are cached per-workgroup.** Reading the
+  same value 100 times across a workgroup costs roughly the same
+  as 1.
+- **Atomic contention murders performance.** 1000 threads doing
+  `atomicAdd` on the same counter serialize completely. Use
+  per-workgroup accumulators in workgroup memory, then one atomic
+  per workgroup at the end.
+- **Workgroup memory (`var<workgroup>`)** is ~100x faster than
+  storage. Use for inter-thread communication and accumulators.
+  Limit is 16-32KB depending on GPU.
+- **Avoid 64-bit atomics** in WGSL -- not supported on all GPUs
+  yet. Use 32-bit indexes and ranges.
+- **Minimize bind group switches.** Each `set_bind_group` is a
+  small but non-zero cost. Batch related buffers into one group.
+- **Push constants** (if your backend supports them) over uniform
+  buffers for small frequently-changing data. wgpu exposes them
+  via `Features::PUSH_CONSTANTS`.
+
+## Bind Group Layout Discipline
+
+- **Layout must match between pipeline creation and `set_bind_group`
+  call.** Mismatches surface as cryptic validation errors at draw
+  time, not at pipeline creation.
+- **Group 0 for per-frame data** (camera, time), group 1 for
+  per-material, group 2 for per-instance. Stable layout means
+  fewer rebinds.
+- **`@binding` indices are flat per group.** Don't reuse indices.
+- **`read_write` is the safe default in compute.** WGSL is lenient
+  about it and avoids needing separate bind group layouts. In
+  performance-critical paths, mark truly read-only buffers as
+  `read` so the driver can place them in a cacheable region.
+
+## Vendor and Driver Gotchas
+
+- **NVIDIA**: warp size 32, very forgiving WGSL acceptance.
+- **AMD**: wavefront 64, stricter alignment requirements. Some
+  WGSL constructs that work on NVIDIA fail validation on AMD.
+- **Intel iGPU**: smaller workgroup limits, slower atomics. Test
+  here if shipping to a general audience.
+- **Apple Silicon (Metal backend)**: WGSL transpiles to MSL; some
+  features (subgroup ops) unavailable. Best perf comes from larger
+  workgroups (128-256) due to threadgroup memory hierarchy.
+- **WebGPU vs native**: Web build has stricter validation (no
+  bindless, smaller buffer limits, no subgroups in current spec).
+  Test in browser if you ship a web target.
+
+## Debugging
+
+- **Naga validation errors** are read carefully -- they cite the
+  exact line and rule.
+- **`@compute @workgroup_size(1)` for serial debugging**: forces
+  one thread per workgroup. Slow but deterministic.
+- **`textureStore` debug output**: write intermediate values to a
+  spare RGBA texture and inspect with RenderDoc. The poor man's
+  printf for shaders.
+- **RenderDoc** (renderdoc.org): capture a frame, inspect every
+  bind group, buffer, and dispatch. Indispensable.
+- **wgpu validation layers** are on by default in debug builds.
+  Don't disable. The error messages are verbose but accurate.
+- **Bevy `RenderDebug`** (if exposed in 0.18): toggles
+  `RUST_LOG=wgpu_core=warn,wgpu_hal=warn` style filters at runtime.
+
+## Avoid
+
+- Variable shadowing inside loops. WGSL allows it but readers don't.
+- Mismatched Rust struct + WGSL struct. Always update both in one
+  commit and bench-test alignment.
+- Long shader chains where one would do. Combining a separation pass
+  and a movement pass saves a buffer roundtrip.
+- Writing to storage buffers in vertex shaders -- legal but slow
+  and often ill-supported.
+- Recompiling shaders mid-frame. Bevy caches; manual `ShaderModule`
+  creation per frame stalls.
+- Tiny dispatches. The fixed overhead per dispatch (~5us) dominates
+  for <1k invocations. Batch into one larger pass.

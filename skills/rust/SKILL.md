@@ -571,6 +571,139 @@ These landed across multiple projects. Apply by default:
 - Every `unsafe { ... }` carries a `// SAFETY:` line.
 - Every Rust → foreign boundary `catch_unwind`s.
 
+## Canonical references
+
+When uncertain, these are authoritative:
+
+- **Rust API Guidelines** (rust-lang.github.io/api-guidelines).
+  Naming, error types, predictability, flexibility.
+- **The Rustonomicon** for unsafe + FFI questions.
+- **rust-lang/rust** issue tracker: search for the exact behavior
+  before assuming.
+- **clippy** lint catalog. Every warning has a reason; don't
+  `#[allow]` without a one-line comment explaining why.
+- **docs.rs** for crate API; cargo docs (`cargo doc --open`) for
+  the local view.
+- **godbolt.org** to see what the compiler does with a snippet.
+
+## Trait design
+
+- **One trait per coherent concept.** `Read`, `Write`, `Iterator`
+  are split because consumers usually want one, not both.
+- **Default methods** are how you grow a trait without breaking
+  implementors. Keep the required surface tiny; default the rest.
+- **Object-safe vs. not.** A trait is object-safe if its methods
+  take `&self` or `&mut self` and have no generic parameters or
+  `Self` returns (with exceptions). If you want `dyn Trait`, design
+  for object safety from the start.
+- **Marker traits** (`Send`, `Sync`, `Copy`, etc.) -- never add a
+  marker trait of your own. Use `PhantomData` to express affinity.
+- **Sealed traits** (`pub trait X: sealed::Sealed`) when the trait
+  is part of your public API but you don't want downstream impls.
+  Lets you extend it later without breaking changes.
+- **Don't lean on inherited methods** from `Deref`. They look like
+  methods on your type but are actually on `Target`. Confusing for
+  readers and breaks autocomplete predictability.
+
+## Generics vs dyn
+
+| | `impl Trait` / generics | `dyn Trait` |
+|--|--|--|
+| Dispatch | static (monomorphized) | dynamic (vtable) |
+| Code size | grows per type instantiation | constant |
+| Inlining | yes | no |
+| Hot path | yes | no -- one indirect call per use |
+| Stored in struct field | need a type param | `Box<dyn Trait>` works directly |
+| Heterogeneous collection | no | yes (`Vec<Box<dyn Trait>>`) |
+
+- **Default to generics** for hot paths and library APIs.
+- **Reach for `dyn Trait`** when you genuinely need heterogeneity or
+  want to constrain compile time / binary size.
+- **`Box<dyn Trait>`** for owned, `&dyn Trait` for borrowed. Both
+  pay the one indirection.
+- **GAT-heavy traits** (lending iterators, async trait methods)
+  can't be made `dyn` easily; reach for `async-trait` macro or
+  enum dispatch.
+- **Enum dispatch** beats `dyn` when the set of impls is closed.
+  Add `EnumDispatch` macro or just write the enum + match by hand.
+
+## Lifetime hygiene
+
+- **Most lifetimes can be elided.** Don't add `'a` to a signature
+  unless the compiler asks. Elision is the readable form.
+- **Named lifetimes only when you have a relationship** between
+  inputs and outputs that elision can't express.
+- **`'static` is a constraint, not a feature.** Lots of types need
+  `'static` because they're stored in threads or async tasks. Plan
+  for it from the start; retrofitting is painful.
+- **Self-referential structs** (a field borrowing from another)
+  require Pin or interior unsafety. `ouroboros` / `self_cell`
+  crates exist for this; usually a redesign is cheaper.
+- **`'_` placeholder** in `impl<'_>` is fine and reads better than
+  inventing `'a` for a single use.
+- **Higher-ranked trait bounds** (`for<'a> Fn(&'a T) -> &'a U`) when
+  a closure must work for any lifetime. Rare outside library code.
+
+## std performance characteristics
+
+Know what each std type costs. Pick deliberately.
+
+| Type | Lookup | Insert | Memory | Notes |
+|------|--------|--------|--------|-------|
+| `Vec<T>` | O(1) by index, O(n) search | O(1) amortized push | tight | default sequence |
+| `VecDeque<T>` | O(1) by index | O(1) push front/back | tight | FIFO queue |
+| `HashMap<K, V>` | O(1) avg | O(1) amortized | ~2-3x payload | uses SipHash by default; switch to `ahash` / `foldhash` for speed |
+| `BTreeMap<K, V>` | O(log n) | O(log n) | tight, sorted | range queries, ordered iteration |
+| `HashSet<T>` | O(1) avg | O(1) | same as HashMap | |
+| `IndexMap<K, V>` (`indexmap` crate) | O(1) | O(1) | + Vec for order | preserves insertion order |
+| `SmallVec<T, N>` (smallvec crate) | O(1) | O(1) | inline if `<= N` | avoids heap for small sequences |
+
+- **HashMap's default hasher (SipHash) is slow.** For internal use
+  where DoS isn't a concern (game data, build tooling), swap in
+  `ahash`, `foldhash`, or `rustc-hash`. 2-5x faster for typical
+  workloads.
+- **`Vec::with_capacity(n)`** when you know the size. Avoids
+  reallocation.
+- **`Vec::extend`** beats a `push` loop on slices (vectorized memcpy).
+- **`String::from_utf8_unchecked`** is unsafe but the bound check
+  is rarely worth the cost in hot paths; benchmark.
+- **`std::mem::swap` / `take` / `replace`** to avoid clones when
+  you need to move out of `&mut`.
+- **`Vec<u8>` over `String`** when you don't need UTF-8 validation.
+- **`Arc<T>` vs `Rc<T>`:** `Arc` uses atomic refcount; ~2x slower
+  to clone. Single-threaded code should use `Rc` (or just `&T`).
+- **`Cow<'a, T>`** to avoid clones when most calls borrow. Pays
+  off when read-heavy.
+- **`Box<[T]>` over `Vec<T>`** for immutable sequences; saves 8
+  bytes (no capacity) and signals intent.
+
+## Iterator performance
+
+- **Iterator chains compile to tight loops** when LLVM can see all
+  the closures. Adding `.collect::<Vec<_>>()` mid-chain breaks
+  fusion -- inline the work instead.
+- **`iter().copied()`** to convert `&T` to `T` when `T: Copy`.
+  Faster and clearer than `.map(|x| *x)`.
+- **`.fold(init, f)`** over `for` loops when you're accumulating.
+  Compiler often produces better code.
+- **`.try_fold`** to short-circuit on error.
+- **`Iterator::sum`** / **`product`** / **`min`** / **`max`** are
+  faster than rolling your own; SIMD-vectorized for primitives.
+- **`rayon::par_iter`** for embarrassingly parallel work over
+  large collections. Setup cost is ~1µs; not worth it for <1ms of
+  serial work.
+
+## Allocation profiling
+
+- **`heaptrack`** (Linux) or **`dhat`** for heap profiling.
+- **`#[global_allocator] = Jemalloc`** (jemalloc-sys) when the
+  default system allocator is slow on Windows / for many small
+  allocations.
+- **`mimalloc`** is competitive with jemalloc and easier to drop in.
+- **In hot paths, count allocations.** Use `dhat-rs` to see exact
+  call counts per stack. Often the answer is "preallocate once and
+  reuse."
+
 ## When in doubt
 
 - Read the `code` skill for universal cross-language rules

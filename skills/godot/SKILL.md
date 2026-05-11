@@ -795,3 +795,190 @@ Check `if shooter < 0` to skip XP/aggro logic.
 
 ### Grid Spacing
 34px for 32px buildings (1px border each side): `const TOWN_GRID_SPACING := 34`
+
+---
+
+## Canonical references
+
+- **Godot 4 docs** (`docs.godotengine.org/en/stable`). The version
+  selector at the top must match your editor; APIs shift between
+  4.0, 4.1, 4.2, 4.3.
+- **GDScript Style Guide** (under "Best practices" in the docs).
+  Indent with tabs, snake_case, prefix private with `_`.
+- **GDScript performance** (docs "Optimization using servers"). The
+  authoritative page on bypassing the scene tree for hot loops.
+- **godotengine/godot-demo-projects** -- official examples per
+  topic. Match the branch (`master`, `3.x`, `4.0-stable`, etc.).
+- **godot-proposals** repo: track upcoming API changes before they
+  land.
+
+## Scene tree and node patterns
+
+Established Godot conventions independent of the Endless project:
+
+- **One scene per logical entity.** Each scene's root is the
+  "owner"; children are implementation. Use unique names (`%Name`)
+  for cross-scene-only references.
+- **`@onready` for node references**, never `get_node()` in `_ready`.
+  `@onready var sprite := $Sprite2D as Sprite2D`. Type-cast for
+  autocomplete.
+- **`@export` for inspector vars.** `@export var speed := 100.0`.
+  Add range hints: `@export_range(0, 1000) var hp := 100`.
+- **`class_name`** on every reusable class. Without it, the class
+  isn't visible in autocomplete or `instance.is_in_class()`.
+- **Scene composition over inheritance.** Prefer "Body has a HitBox
+  child" over "Body extends HitBox". Reuse via composition.
+- **Don't manipulate the tree in physics callbacks.** Tree mutation
+  during `_physics_process` causes frame-late errors. Queue
+  spawns/frees and apply at end of frame.
+
+## Signals
+
+```gdscript
+signal damaged(amount: int, source: Node)
+
+# Connecting
+button.pressed.connect(_on_button_pressed)
+enemy.damaged.connect(self._on_enemy_damaged)
+
+# With binds (extra args at end)
+button.pressed.connect(_on_button_pressed.bind("attack"))
+
+# One-shot
+timer.timeout.connect(_on_timeout, CONNECT_ONE_SHOT)
+
+# Disconnect when done
+if button.pressed.is_connected(_on_button_pressed):
+    button.pressed.disconnect(_on_button_pressed)
+```
+
+- **Typed signal params.** Without types, Godot can't catch
+  mismatches at parse time.
+- **`Callable.bind` for extra args**, not lambdas if the handler is
+  named. Bound callables are equality-comparable, which lets you
+  disconnect cleanly.
+- **`CONNECT_ONE_SHOT`** flag for self-disconnecting handlers.
+- **`CONNECT_DEFERRED`** to run the handler on the next idle frame.
+  Use when the emitter is mid-tree-mutation.
+
+## Process vs physics_process
+
+- **`_process(delta)`** runs every render frame. Variable rate.
+  Use for visuals, UI, input.
+- **`_physics_process(delta)`** runs at fixed 60Hz (or whatever
+  `physics_ticks_per_second` is set to). Use for physics, AI,
+  game-state updates.
+- **Don't read `delta`** from `_process` for game-state changes;
+  it's variable and leads to inconsistent simulation.
+- **`set_process(false)` / `set_physics_process(false)`** to disable
+  callbacks on inactive nodes. Mass-spawned nodes that don't need
+  per-frame updates should opt out.
+
+## Autoloads (Singletons)
+
+- **Project Settings -> AutoLoad** to register a script or scene as
+  globally accessible. Names become global identifiers.
+- **Use autoloads for**: game state (`GameState`), event bus
+  (`Events`), audio (`Sfx`), input mapping (`InputMap` wrapper),
+  save/load.
+- **Don't use autoloads for**: anything that has a clear owner in
+  the scene tree. Autoloads are a workaround for cross-cutting
+  concerns, not a replacement for proper composition.
+- **Event bus pattern**: an autoload with no state, just signals.
+  Decouples emitters from listeners.
+
+## Resources
+
+- **`Resource` subclasses for serializable data.** Defines, save
+  data, configs.
+- **`@export var data: ItemDef`** in the inspector lets you drop in
+  a `.tres` file. Hot-reloadable.
+- **`load()` is cached** at runtime; cheap to call repeatedly.
+  `preload()` happens at parse time (faster, fails if path is
+  wrong).
+- **Custom resources** with `class_name` show up in the "New
+  Resource" dropdown. Powerful for data-driven design.
+
+## GDScript type discipline
+
+- **Type every variable and parameter.** `var hp: int = 100`,
+  `func damage(amount: int) -> void:`. Untyped GDScript is 2-3x
+  slower (interpreted) than typed.
+- **Type with `:=` inferred type** when the RHS is unambiguous:
+  `var pos := Vector2.ZERO`.
+- **`as` casts** for safe downcasts: `var sprite := $Sprite as Sprite2D`.
+  Returns `null` on failure instead of crashing.
+- **`is`** for type checks: `if node is Enemy:`.
+- **`Variant` (untyped)** is the slowest path. Audit before shipping.
+
+## Performance reference
+
+| Operation | Typical cost | Notes |
+|-----------|--------------|-------|
+| `get_node("Path")` | ~1us | walk the tree; cache in `@onready` |
+| `get_node_or_null` | same | safe variant |
+| `node.queue_free()` | ~0.5us deferred | freed at end of frame |
+| Signal emit (typed, 0 listeners) | ~0.1us | |
+| Signal emit (1 listener) | ~1us | |
+| `Array.push_back` | O(1) amortized | preallocate with `resize` |
+| `Dictionary` lookup | ~50ns | open-addressing hash |
+| `RenderingServer.canvas_item_*` direct calls | 2-5x faster | bypass scene tree |
+| `MultiMeshInstance2D.set_instance_transform_2d` | ~0.2us per instance | go-to for 1000s of sprites |
+| `_process` on 1000 nodes (no work) | ~3ms | scene tree dispatch overhead is real |
+
+- **The scene tree is the bottleneck above ~5k active nodes.** Move
+  hot loops to direct `RenderingServer` / `PhysicsServer` API.
+- **`MultiMeshInstance2D`** is the standard pattern for thousands
+  of similar sprites. The Endless skill section above covers it.
+- **`call_deferred` for batch operations** that would otherwise
+  mutate the tree mid-callback.
+- **Object pooling** for projectiles, particles, anything spawned/
+  killed at high rate. `Node.queue_free()` + re-instantiation is
+  ~50us each.
+
+## Debugging and profiling
+
+- **Built-in profiler:** `Debug > Profiler` in the editor.
+  Frame-by-frame breakdown of scripts, physics, drawing.
+- **Visual Profiler** for GPU work.
+- **`print_debug()`** includes call site, beats `print()`.
+- **`assert(cond)`** is stripped in release builds. Use it freely
+  for invariants.
+- **`@warning_ignore("...")`** to suppress a single warning with
+  reason.
+- **`OS.get_ticks_usec()`** for micro-benchmarks; pair with
+  `Engine.get_frames_drawn()` to compute averages over N frames.
+
+## Common gotchas (canonical Godot 4)
+
+- **`@tool` scripts** run in the editor. Easy to crash the editor
+  if `_ready` does I/O. Guard with `if not Engine.is_editor_hint():`.
+- **`free()` vs `queue_free()`**: `free` is immediate (use in
+  `_exit_tree` cleanup); `queue_free` defers. Calling `free` on a
+  node mid-`_physics_process` crashes.
+- **`Node.duplicate()`** copies subtree but not scripts unless flag
+  is set. Use `DUPLICATE_USE_INSTANTIATION` for full clones.
+- **`Array` is reference type.** Assigning passes a reference; use
+  `array.duplicate()` for a copy.
+- **`Vector2.normalized()` of zero vector** returns zero (no NaN);
+  Godot's safer than GLM here.
+- **`process_mode`** controls whether a node runs while paused.
+  Default is `Inherit`; set to `Always` for menus, `Pausable` for
+  gameplay.
+
+## Avoid
+
+- Untyped variables in hot paths. The interpreter penalty is large.
+- `get_node()` in callbacks. Cache via `@onready`.
+- Tree mutation in `_process` / `_physics_process` without
+  `call_deferred`.
+- Spawning / freeing nodes for cheap effects. Use pools.
+- Custom signals when a built-in (`tree_entered`, `child_entered_tree`)
+  would do.
+- `connect` without storing the target Callable -- can't disconnect
+  cleanly.
+- `_unhandled_input` doing heavy work; it runs every input event.
+- Mixing `_process` and `_physics_process` for the same state.
+  Pick one cadence per system.
+- Long autoload chains (autoload A depends on B depends on C);
+  initialization order surprises. Keep autoloads independent.

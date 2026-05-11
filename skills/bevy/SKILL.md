@@ -186,6 +186,80 @@ These broke during the migration and were fixed in commits. Reference when touch
 - **Neutralize orthogonal systems**: When testing behavior X, force-satisfy unrelated needs so the test isn't derailed. E.g., start energy high or use fast time_scale so tests complete before energy drains to 0 (starvation).
 - **Don't double-consume queues**: If a state transition already pops from a queue (e.g., `auto_start_next_test` pops `RunAllState.queue`), the completion handler should only check `is_empty()`, not also pop. Two consumers = skipped entries.
 
+## Canonical references
+
+- **Bevy 0.18 examples**: `github.com/bevyengine/bevy/tree/release-0.18.0/examples`.
+  Always the version-tagged tree, never `main`.
+- **Bevy book** (`bevy-cheatbook.github.io`): cross-version reference,
+  noisy on newer features but reliable for ECS fundamentals.
+- **Bevy migration guides** (`bevyengine.org/learn/migration-guides`):
+  read the one for the version you're upgrading to. Bevy breaks API
+  every minor release.
+- **Bevy Discord #help** is the most current source for "is X
+  idiomatic in 0.18". Search before asking.
+
+## Query and Schedule Performance
+
+Established Bevy patterns that win in this codebase and across the
+ecosystem:
+
+- **Narrow queries.** Only request the components you actually use.
+  `Query<&Transform>` is cheaper to iterate than
+  `Query<(&Transform, &Velocity, &Health, &Equipment)>` if you only
+  need the position.
+- **`With<T>` / `Without<T>` for filtering**, not as a column. Filters
+  don't touch the data, just the archetype set.
+- **`Changed<T>` and `Added<T>` filters** prune iteration to the
+  modified subset. Every `&mut T` access flips the change tick;
+  prefer `Mut<T>::set_if_neq` (Bevy 0.13+) to avoid spurious
+  invalidation.
+- **`ParallelIterator` (`Query::par_iter_mut`)** for embarrassingly
+  parallel per-entity work. Setup cost is ~10us; not worth it for
+  <100 entities or work <1us each.
+- **SystemParam bundles** to stay under the 16-param limit and to
+  share borrow patterns across systems. `EntityMap` + spatial grid
+  + dirty-writer bundles are the canonical Endless examples.
+- **Explicit `before` / `after` ordering** over relying on insertion
+  order. Bevy's scheduler is deterministic but not stable across
+  refactors.
+- **`apply_deferred` / `ApplyDeferred`** between systems that spawn
+  and systems that query the spawned entities. Bevy 0.16+ uses
+  `ApplyDeferred` as a system; insert it explicitly when the order
+  matters.
+- **Resource access**: `Res<T>` is read-only and parallel; `ResMut<T>`
+  is exclusive. Many `ResMut`s in one system serialize the schedule.
+  Split into smaller resources or use interior mutability sparingly.
+- **`Local<T>`** for per-system state that doesn't need to be a
+  resource. Cheaper than a `Resource` and not visible to others.
+
+## Change Detection Costs
+
+- Every `&mut T` access invalidates change tick, even if the value
+  didn't change. Use `set_if_neq(new)` (PartialEq required) for
+  cheap deduplication.
+- `Resource` change detection is the same: writing to `ResMut<T>` is
+  considered a mutation, even for a no-op write. Reach for messages
+  / events when "did anything change" is the question.
+- Change ticks wrap every 2^31 ticks. Bevy auto-resets but
+  long-running systems must handle the wrap (`check_change_ticks`).
+
+## Bevy 0.18 Schedule Timing
+
+Approximate per-system overhead on modern hardware (Endless target):
+
+| Work | Approx |
+|------|--------|
+| System dispatch (idle pass) | ~50ns |
+| `Query::iter()` over 10k entities, narrow tuple | ~30us |
+| `Query::par_iter_mut` setup | ~10us |
+| `Commands::spawn()` | ~200ns (deferred; flush at ApplyDeferred) |
+| `world.spawn()` (exclusive system) | ~150ns |
+| `Mut<T>::set_if_neq` (no change) | ~5ns |
+| BRP request roundtrip | ~1-5ms |
+
+Use these as guides, not commitments. Always bench when "it should
+be fast" matters.
+
 ## Performance Rules
 - **Perf fixes require bench tests**: Any PR tagged as a performance fix MUST include a Criterion benchmark in `rust/benches/system_bench.rs` for the affected system before merging. No exceptions.
 
