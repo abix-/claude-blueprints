@@ -5,9 +5,9 @@ allowed-tools: Read
 ---
 Re-read `~/.claude/CLAUDE.md` using the Read tool. Group rules by section. Print a formatted table with one row per rule.
 
-Use this exact format -- the heading is a markdown heading OUTSIDE any code fence. The table is inside a code fence.
+Use this exact format. The heading is a markdown heading OUTSIDE any code fence. The table is inside a code fence.
 
-## /obey -- compliance check
+## /obey. Compliance check
 
 ```
  SECTION                       RULE                                                          STATUS
@@ -23,7 +23,7 @@ Use this exact format -- the heading is a markdown heading OUTSIDE any code fenc
  (none)
 ```
 
-Use ✅ for acknowledged, ❌ for conflict. Condense each rule to a short phrase in the RULE column -- keep it under 60 chars. Do not paraphrase the intent, just shorten.
+Use ✅ for acknowledged, ❌ for conflict. Condense each rule to a short phrase in the RULE column. Keep it under 60 chars. Do not paraphrase the intent, just shorten.
 
 Assign semantic section names based on rule topic: Skills, Git, Formatting, Confidence, Verification, Secrets, Working Directory, Agents, k3s. Use the CLAUDE.md header name for rules under a header. For rules outside a header, choose the best semantic name from that list.
 
