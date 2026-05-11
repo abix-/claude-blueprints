@@ -41,11 +41,11 @@ Infrastructure        ← Physical compute, storage, network
 
 ## The Troubleshooting Loop
 
-1. **Observe** — What exactly is happening? Quantify it.
-2. **Hypothesize** — Based on the layer model, where could this originate?
-3. **Test** — Gather data that proves or disproves the hypothesis.
-4. **Isolate** — Narrow to a single layer, then a single component.
-5. **Fix/Escalate** — Resolve if within scope, or package data for vendor.
+1. **Observe**. What exactly is happening? Quantify it.
+2. **Hypothesize**. Based on the layer model, where could this originate?
+3. **Test**. Gather data that proves or disproves the hypothesis.
+4. **Isolate**. Narrow to a single layer, then a single component.
+5. **Fix/Escalate**. Resolve if within scope, or package data for vendor.
 
 ---
 
