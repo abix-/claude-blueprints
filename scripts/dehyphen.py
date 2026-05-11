@@ -61,35 +61,41 @@ CLI_FLAG_RE = re.compile(r"--[A-Za-z]")  # `--release`, `--foo=bar`, etc.
 def _rewrite_chunk(chunk: str) -> str:
     """Rewrite ` -- ` and em-dash forms inside a non-backtick chunk.
 
-    Strategy:
-    - Plain ` -- X` keeps a capitalization heuristic (next char uppercase -> '. ',
-      otherwise ': '). Useful in technical prose where ` -- ` often joins two
-      independent clauses where '. ' reads better.
-    - Em-dashes always collapse to ': ' (single space). Heuristic-driven
-      em-dash rewrites produced wrong sentence boundaries in titles and
-      list rows in real-world tests; colon is the conservative pick.
-    - Trailing forms collapse to ':' (no trailing space, wrap continues
-      on next line).
-    - Bare em-dash with no surrounding spaces gets ': '.
+    Default: replace with '. ' and capitalize the next word's first letter.
+    Periods and sentences read human; colons everywhere read like a definition
+    list. Reviewer can manually rewrite resulting short fragments into longer
+    natural sentences as needed; the script only removes the offending dashes.
+
+    Trailing forms (line wraps) collapse to '.' so the continuation on the next
+    line starts a new sentence.
+
+    The exceptions are punctuation contexts where '. ' would be ungrammatical:
+    immediately after a backtick / quote (the chunk ends mid-quote), inside a
+    parenthetical clause already opened, etc. Those are rare in practice;
+    the reviewer handles them.
     """
 
-    def pick(next_char: str) -> str:
-        if next_char and next_char.isupper():
-            return ". "
-        return ": "
+    def replace_inline(m: "re.Match[str]") -> str:
+        nxt = m.group(1)
+        # If next char is a letter, capitalize it; otherwise leave alone.
+        if nxt.isalpha():
+            return ". " + nxt.upper()
+        return ". " + nxt
 
     # ' -- X' (space + double-hyphen + space + non-whitespace).
-    chunk = re.sub(r" -- (\S)", lambda m: pick(m.group(1)) + m.group(1), chunk)
+    chunk = re.sub(r" -- (\S)", replace_inline, chunk)
     # Trailing ' --' at end of chunk (line wraps; continuation on next line).
-    chunk = re.sub(r" --$", ":", chunk)
+    chunk = re.sub(r" --$", ".", chunk)
 
-    # Em-dash with surrounding spaces, ANY context: collapse to ': ' (single
-    # space). This is the form that bit us inside chunk-boundary cases.
-    chunk = re.sub(rf" {EMDASH} ", ": ", chunk)
+    # ' — X' with surrounding spaces (em-dash inline in prose).
+    chunk = re.sub(rf" {EMDASH} (\S)", replace_inline, chunk)
+    # ' — ' alone (chunk-boundary case after split-by-backtick; no next char
+    # in this chunk). Collapse to '. ' (single space).
+    chunk = re.sub(rf" {EMDASH} ", ". ", chunk)
     # Trailing ' —' at end of chunk.
-    chunk = re.sub(rf" {EMDASH}$", ":", chunk)
+    chunk = re.sub(rf" {EMDASH}$", ".", chunk)
     # Bare em-dash, no surrounding spaces (e.g. 'a—b').
-    chunk = re.sub(rf"{EMDASH}", ": ", chunk)
+    chunk = re.sub(rf"{EMDASH}", ". ", chunk)
     return chunk
 
 
