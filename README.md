@@ -1,6 +1,6 @@
 # claude-blueprints
 
-**Status: active -- skills and hooks evolve frequently**
+**Status: active. Skills and hooks evolve frequently**
 
 Personal Claude configuration shared across Claude Code instances.
 
@@ -55,7 +55,7 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | [vmware-esxi-performance](skills/vmware-esxi-performance/) | ESXi storage/network performance troubleshooting |
 | [vsphere-influxdb](skills/vsphere-influxdb/) | vSphere VM performance via InfluxDB MCP server |
 | [k3s](skills/k3s/) | k3s cluster on WSL2 Ubuntu 24.04 |
-| [k3sc](skills/k3sc/) | k3sc Go binary -- Claude agent operator, CLI, TUI |
+| [k3sc](skills/k3sc/) | k3sc Go binary. Claude agent operator, CLI, TUI |
 | [wsl](skills/wsl/) | WSL2 Ubuntu 24.04 management on Windows 10 |
 | [debloat](skills/debloat/) | Strip Windows of junk services, AppX, telemetry |
 
@@ -158,7 +158,7 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 
 Prototyped but unfinished work lives in `archive/`. Each subdir has a `STATUS.md`.
 
-- `archive/sanitizer/` -- Go content sanitizer for hooks. Response-side desanitization and full tool-surface coverage were never finished.
+- `archive/sanitizer/`. Go content sanitizer for hooks. Response-side desanitization and full tool-surface coverage were never finished.
 
 ## Claude Web
 
