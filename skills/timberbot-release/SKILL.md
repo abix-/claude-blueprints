@@ -11,13 +11,13 @@ Bump version, run regression tests, build, tag, and publish.
 
 ## Steps
 
-1. **Version bump** -- update both files to `$ARGUMENTS`:
+1. **Version bump**. Update both files to `$ARGUMENTS`:
    - `timberbot/src/Timberbot.csproj` (`<Version>`)
    - `timberbot/src/manifest.json` (`"Version"`)
 
 2. **Build** -- `cd timberbot/src && dotnet build`
 
-3. **Test** -- requires game running with Iron Teeth day-5 save:
+3. **Test**. Requires game running with Iron Teeth day-5 save:
    - `python timberbot/script/test_validation.py`
    - ALL tests must pass. If any fail, STOP.
 
@@ -28,7 +28,7 @@ Bump version, run regression tests, build, tag, and publish.
 
 5. **Release** -- `python timberbot/script/release.py --release`
 
-6. **Release notes** -- update via `gh release edit`:
+6. **Release notes**. Update via `gh release edit`:
    - Flat list only. No headers, no grouping, no summary line. Just `- [tag] description` lines
    - Tags: `[breaking]`, `[feature]`, `[fix]`, `[internal]`
    - Concise, player-facing, no implementation details
@@ -43,7 +43,7 @@ Bump version, run regression tests, build, tag, and publish.
      - [internal] 118 integration tests
      ```
 
-7. **Steam Workshop** -- remind user to upload from Timberborn Mod Manager
+7. **Steam Workshop**. Remind user to upload from Timberborn Mod Manager
 
 ## Repo paths
 
