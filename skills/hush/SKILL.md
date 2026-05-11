@@ -1,11 +1,11 @@
 ---
 name: hush
-description: Hush -- a firewall-style rule engine for Chrome (MV3) with a Rust/WASM detection core and a Leptos UI. Per-site (or global) rules over seven actions: block/allow (network), neuter/silence (script capture + exfil), remove/hide (DOM), spoof (fingerprint APIs). Lives in `abix-/chromium-extensions` repo. Use when modifying Hush detectors, rules, the rule schema, the Rust engine, the popup, the options page, or the seeded site profiles.
+description: Hush: a firewall-style rule engine for Chrome (MV3) with a Rust/WASM detection core and a Leptos UI. Per-site (or global) rules over seven actions: block/allow (network), neuter/silence (script capture + exfil), remove/hide (DOM), spoof (fingerprint APIs). Lives in `abix-/chromium-extensions` repo. Use when modifying Hush detectors, rules, the rule schema, the Rust engine, the popup, the options page, or the seeded site profiles.
 user-invocable: false
 version: "1.0"
 updated: "2026-05-11"
 ---
-# Hush -- Chrome firewall-style rule engine
+# Hush. Chrome firewall-style rule engine
 
 Hush is a Chrome MV3 extension shaped like a software firewall: every
 request, DOM element, and fingerprint probe a page makes is checked
@@ -24,7 +24,7 @@ sub-tree `hush/`.
 
 | Path (repo-relative)                  | What lives there                                      |
 | ------------------------------------- | ----------------------------------------------------- |
-| `hush/manifest.json`                  | MV3 manifest -- permissions, scripts, CSP, key        |
+| `hush/manifest.json`                  | MV3 manifest: permissions, scripts, CSP, key        |
 | `hush/background.js`                  | Service worker shim; bridges chrome.* into the engine |
 | `hush/content.js`                     | Content-script shim; injects mainworld + applies DOM passes |
 | `hush/mainworld.js`                   | `document_start` page-context hooks (fetch/XHR/beacon/WS, addEventListener, fingerprint APIs) |
@@ -38,7 +38,7 @@ sub-tree `hush/`.
 | `hush/src/lib.rs`                     | Crate root; wasm-bindgen exports                      |
 | `hush/src/types.rs`                   | Rule schema, scopes, actions, RuleEntry, SignalPayload|
 | `hush/src/detectors.rs`               | Detector trait + per-tier detector impls              |
-| `hush/src/compute.rs`                 | `compute_suggestions` -- core engine entry point      |
+| `hush/src/compute.rs`                 | `compute_suggestions`: core engine entry point      |
 | `hush/src/bg_logic.rs`                | Service-worker logic ported off background.js         |
 | `hush/src/main_world.rs`              | Page-context hook installer + dispatcher              |
 | `hush/src/canon.rs`                   | URL canonicalization, host extraction                 |
@@ -99,7 +99,7 @@ A rule is a **(scope, action, match)** triple, with optional `disabled`,
 | **spoof**   | fingerprint| mainworld intercepts specific APIs; returns bland identical-across-users values|
 
 **Block rules apply as global URL patterns** at the network layer
-(no `initiatorDomains` -- broken for cross-origin iframes). A rule
+(no `initiatorDomains`: broken for cross-origin iframes). A rule
 keyed by `reddit.com` blocks its target URL wherever requested.
 Per-site BLOCKING is done by making the pattern itself more
 specific, not via DNR `initiatorDomains`.
@@ -132,16 +132,16 @@ for the **per-site first-party** gap.
 
 ## Architecture: where work happens
 
-- **Service worker (Rust/WASM, glued by `background.js`)** -- owns
+- **Service worker (Rust/WASM, glued by `background.js`)**: owns
   DNR ruleset registration, the firewall event log (rule_id +
   per-tab ring buffer + persistent searchable log), rule-pattern
   rehydration on SW wake, suggestion compute, options + popup
   messaging. Engine entry point: `hush::compute::compute_suggestions`.
-- **Content script (Rust/WASM via `content.js`)** -- applies
+- **Content script (Rust/WASM via `content.js`)**: applies
   Remove/Hide DOM passes per-frame; runs `MutationObserver`;
   emits removal evidence (tag + class signature + distinguishing
   attrs + text preview).
-- **Main world (`mainworld.js` + Rust hooks)** -- installed at
+- **Main world (`mainworld.js` + Rust hooks)**: installed at
   `document_start` via `web_accessible_resources`. Wraps fetch/
   XHR/sendBeacon/WebSocket + `addEventListener` + fingerprint
   APIs. Communicates with the content script via
@@ -154,16 +154,16 @@ for the **per-site first-party** gap.
 
 `detectors.rs` defines a `Detector` trait + per-tier impls. Each
 detector inspects DOM/CSS/network/main-world signals and proposes
-**suggestions** -- not auto-applied rules. The user sees them as a
+**suggestions**: not auto-applied rules. The user sees them as a
 yellow `!` badge in the popup; each suggestion has Why? / Evidence
 expandable panels and one-click Add / Dismiss / Allow.
 
 Tiers (see `docs/completed.md` for the full inventory):
-1. Network -- block/allow seed defaults
-2. DOM -- remove/hide candidates (overlays, sticky promos, hidden iframes)
-3. Script capture / exfil -- neuter / silence candidates from initiator-stack analysis
-4. Fingerprinting -- canvas / webgl / audio / font-enum / installed-font probes
-5. Behavioral -- invisible animation loops, rAF burn, hidden iframes
+1. Network: block/allow seed defaults
+2. DOM: remove/hide candidates (overlays, sticky promos, hidden iframes)
+3. Script capture / exfil: neuter / silence candidates from initiator-stack analysis
+4. Fingerprinting: canvas / webgl / audio / font-enum / installed-font probes
+5. Behavioral: invisible animation loops, rAF burn, hidden iframes
 6. Brave-stack baseline gaps (clipboard-read, attention-tracking, hardware device-api, navigator-fp)
 7. Session-replay vendor heuristics
 8. Per-site research (reddit shill detection in flight)
@@ -211,15 +211,15 @@ wasm-pack build --target web --release
   `panic = "abort"`, symbols stripped.
 - `wasm-opt = false` (bundled wasm-opt in `wasm-pack` 0.14 doesn't
   validate rustc 1.95's `i64.trunc_sat_f64_s`).
-- ~1.0-1.5 MB bundle; runtime perf chosen over bundle size --
+- ~1.0-1.5 MB bundle; runtime perf chosen over bundle size:
   bundle loads once per tab session, hot paths run thousands of
   times.
 
 ## Test surface
 
-- `cargo test` -- pure-Rust unit tests via rlib (no wasm needed).
-- `cargo bench` -- Criterion runs vs the pre-port JS baseline.
-- `hush/test/` -- JS-side integration tests; expose internal
+- `cargo test`: pure-Rust unit tests via rlib (no wasm needed).
+- `cargo bench`. Criterion runs vs the pre-port JS baseline.
+- `hush/test/`. JS-side integration tests; expose internal
   helpers via `__hush_mainworld__` for test-only access (e.g.
   `matchesHostPattern`).
 - `clippy -D warnings` is enforced in CI; do not regress.
@@ -228,10 +228,10 @@ wasm-pack build --target web --release
 ## Sibling extensions (same repo)
 
 `chromium-extensions/` also houses:
-- **zoom-extension** -- YouTube fullscreen + scroll-to-preview
+- **zoom-extension**. YouTube fullscreen + scroll-to-preview
   blocker. CSS-injected at `document_start`. Notes in its own
   `README.md` + `CHANGELOG.md`.
-- **filter-anything-everywhere** -- MIT fork; less-actively
+- **filter-anything-everywhere**. MIT fork; less-actively
   maintained, see its README.
 
 No skill for either today; if work concentrates there, file a
@@ -239,7 +239,7 @@ follow-up to split.
 
 ## Session etiquette
 
-- Public repo. Generic code only -- no personal seeds in
+- Public repo. Generic code only: no personal seeds in
   `sites.json` (the seeded examples must be generic and
   reproducible). User-specific rules belong in the user's own
   `chrome.storage.local`, not in the repo.

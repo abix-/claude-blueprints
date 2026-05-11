@@ -1,6 +1,6 @@
 ---
 name: rust
-description: Rust development standards and patterns -- concurrency primitives, zero-alloc hot paths, unsafe + FFI doctrine, async patterns, workspace structure, build profiles, testing, crate preferences. Cites canonical examples in public abix- repos. **Rust is the default language for new work.** Use when writing Rust; for ECS / Bevy code read the `bevy` skill, for WGSL shaders the `wgsl` skill.
+description: Rust development standards and patterns: concurrency primitives, zero-alloc hot paths, unsafe + FFI doctrine, async patterns, workspace structure, build profiles, testing, crate preferences. Cites canonical examples in public abix- repos. **Rust is the default language for new work.** Use when writing Rust; for ECS / Bevy code read the `bevy` skill, for WGSL shaders the `wgsl` skill.
 user-invocable: false
 version: "2.0"
 updated: "2026-05-11"
@@ -25,14 +25,14 @@ For ECS / Bevy code read the `bevy` skill (different idiom).
 For WGSL shaders, the `wgsl` skill. For the abixio S3 server,
 the `abixio` skill. For UE4SS Rust mod doctrine, `ueforge`.
 
-## Concurrency primitives -- which to reach for
+## Concurrency primitives: which to reach for
 
 The std types are rarely the right choice. Default picks:
 
 | Need | Use | Why |
 |---|---|---|
 | Mutex (any) | **`parking_lot::Mutex`** | Faster, smaller, no poison. The standard pick across every project. |
-| Read-mostly hot state | **`arc_swap::ArcSwap<T>`** | Snapshot via `load_full()` -- no lock on hot path. Writers swap an `Arc<T>` atomically. Reference site: ueforge's `ProcessEventHook` snapshots the live handler this way; abixio's hot config. |
+| Read-mostly hot state | **`arc_swap::ArcSwap<T>`** | Snapshot via `load_full()`: no lock on hot path. Writers swap an `Arc<T>` atomically. Reference site: ueforge's `ProcessEventHook` snapshots the live handler this way; abixio's hot config. |
 | Concurrent map | **`dashmap::DashMap`** | Shard-locked. Used for abixio's write cache, read cache, hush's per-host detector state. |
 | String-keyed map (small keys) | **`foldhash::HashMap`** | Faster than std SipHash + FxHash + aHash on small-string keys per maintainer benchmarks. Hush + abixio both swapped to it. |
 | Atomic flag / counter | `std::sync::atomic::Atomic*` | Std is fine. Use `Relaxed` unless you need a memory order. |
@@ -41,7 +41,7 @@ The std types are rarely the right choice. Default picks:
 | Empty-check fast path | `AtomicUsize` shadow | Mirror your real-state length in an atomic so the hot path bails with one `load(Relaxed)` instead of taking the mutex. ueforge's PE_QUEUE does this. |
 
 `Arc<T>` is fine; **do not reach for `Rc`/`Arc` reflexively** to
-work around ownership -- restructure ownership first.
+work around ownership: restructure ownership first.
 
 ## Zero allocations on hot paths
 
@@ -84,7 +84,7 @@ allocator traffic per fire**. To meet that:
 
 Cold paths (init, user clicks, error reporting) can allocate
 freely. Discipline is about hot paths only. Apply from day
-one -- don't ship-then-optimize.
+one: don't ship-then-optimize.
 
 ## Async patterns (tokio)
 
@@ -104,7 +104,7 @@ one -- don't ship-then-optimize.
   network receive.
 - **Ack-after-work, not ack-after-channel.** If a worker
   consumes from a channel, the producer's "success" signal
-  should fire after the worker has done the durable work --
+  should fire after the worker has done the durable work:
   not after `send` returned. Channels are conduits, not
   promises.
 - `tokio::sync::broadcast` for one-to-many fan-out; `watch` for
@@ -202,7 +202,7 @@ workspace = true
 
 Pin shared deps in `[workspace.dependencies]`. Project-wide
 lints in `[workspace.lints]`. Per-tool config goes in
-`[package.metadata.<tool>]` -- the cargo-tool ecosystem reads
+`[package.metadata.<tool>]`: the cargo-tool ecosystem reads
 that section without polluting the public manifest.
 
 ### `rust-toolchain.toml` + `.cargo/config.toml`
@@ -250,7 +250,7 @@ heavy GUI deps the library shouldn't carry).
 
 ### Multiple cdylibs in one workspace: per-crate `target_dir`
 
-Two cdylibs both compile to `main.dll` -- they collide on
+Two cdylibs both compile to `main.dll`: they collide on
 `target/release/main.dll`. Fix:
 
 ```toml
@@ -274,17 +274,17 @@ opt-level = 3
 strip = "symbols"
 ```
 
-- `lto = "fat"` -- whole-program optimization across the crate
+- `lto = "fat"`: whole-program optimization across the crate
   graph. Big win for inlining + dead-code elim.
-- `codegen-units = 1` -- one LLVM unit so the inliner can
+- `codegen-units = 1`: one LLVM unit so the inliner can
   reason across the whole crate. Supersedes `incremental=false`
   for runtime perf (different angles on the same thing).
-- `panic = "abort"` -- no unwinding tables, smaller hot paths,
+- `panic = "abort"`: no unwinding tables, smaller hot paths,
   better icache.
-- `opt-level = 3` -- full auto-vectorization, inlining, loop
+- `opt-level = 3`: full auto-vectorization, inlining, loop
   unrolling. Don't drop to `s` / `z` unless binary size is the
   product goal.
-- `strip = "symbols"` -- smaller binary, better icache.
+- `strip = "symbols"`: smaller binary, better icache.
 
 ### Dev: optimize for debuggability
 
@@ -343,7 +343,7 @@ this trade explicitly, with evidence.
   this can't fail>")` if truly impossible (and the message is
   documentation). Better: restructure to `let-else` or `?`.
   abixio's "unwrap plague" close (commit `29ec3df`) found 530
-  of 533 unwraps were test-only -- the one production unwrap
+  of 533 unwraps were test-only: the one production unwrap
   became `let-else`.
 - Prefer **`let-else`** over `match` / `if let` for the
   "extract or bail" pattern:
@@ -382,11 +382,11 @@ pub static STACKS: StackRegistry =
     StackRegistry::new(&[&MATERIALS_DEF, &CRAFTING_DEF]);
 ```
 
-Bonus: each Def is a named symbol -- better for debug,
+Bonus: each Def is a named symbol: better for debug,
 introspection, and direct ref access from other modules.
 
 For Drop-free Defs (`&'static str`s, primitives, fn pointers),
-`&[Def]` (slice of values) works without the indirection -- pick
+`&[Def]` (slice of values) works without the indirection: pick
 based on whether the Def has Drop-having state.
 
 ### Def → Registry → Instance → Controller (k8s-style)
@@ -396,14 +396,14 @@ behavior" shape (skills, hooks, ops, building types, debug
 selectors, shutdown handlers, etc.), layer it as four roles:
 
 - **Def** (CRD): the schema. Static, immutable, no runtime state.
-  Named `<Subject>Def`. **Always Def-suffixed -- no exceptions.**
+  Named `<Subject>Def`. **Always Def-suffixed: no exceptions.**
 - **Registry** (etcd): the collection. `<Subject>Registry`
   holding `entries: &'static [<Subject>Def]` (or `&[&'static
   <Subject>Def]` for Drop-having Defs). Lookup is
   `registry.def(key) -> Option<&'static <Subject>Def>`.
 - **Instance** (CR): one runtime object derived from a Def.
 - **Controller**: function/system that reads Def + writes
-  Instance. Re-derives at every reconcile -- never caches Def
+  Instance. Re-derives at every reconcile: never caches Def
   fields in Instance.
 
 Naming contract is strict. See ueforge's `architecture.md` for
@@ -431,7 +431,7 @@ Same surface as compile-time registries (`def(key)`,
   file. Test names describe the scenario:
   `fn empty_input_returns_none()`.
 - Integration tests in `tests/`. Each `.rs` is a separate test
-  binary -- structure for parallel compilation.
+  binary: structure for parallel compilation.
 - `assert_eq!` over `assert!(a == b)` for better error messages.
 - **`--test-threads=1` when tests share global state** (a
   process-singleton resource, a running HTTP server, a static
@@ -446,7 +446,7 @@ Same surface as compile-time registries (`def(key)`,
   have an integration test surface (an HTTP debug endpoint, a
   CLI), build a thin Pester-style DSL that expresses
   "do this, expect this state change" as a chain. ueforge's
-  `client::scenario` -- migration from imperative tests cut
+  `client::scenario`: migration from imperative tests cut
   ~340 LoC and added 9 assertions.
 - **Diff helpers for snapshot comparison.** When tests assert
   "X changed and nothing else did", a `client::diff` helper
@@ -463,7 +463,7 @@ Same surface as compile-time registries (`def(key)`,
 
 ## Cargo hygiene
 
-- `cargo clippy -- -D warnings` in CI. Fix; don't suppress.
+- `cargo clippy: -D warnings` in CI. Fix; don't suppress.
   Hush + chromium-extensions land this gate. Annotation
   comments (`#[allow(...)]`) need a reason or a follow-up
   ticket.
@@ -486,7 +486,7 @@ Same surface as compile-time registries (`def(key)`,
 | HTTP client (blocking) | `ureq` |
 | HTTP server (low-ceremony) | `tiny_http` |
 | HTTP server (production) | `hyper` + tower / `s3s` for S3-flavored protocol |
-| Async runtime | `tokio` (multi-thread) -- only if actually needed |
+| Async runtime | `tokio` (multi-thread): only if actually needed |
 | Logging / tracing | `tracing` over `log` |
 | Mutex | `parking_lot::Mutex` |
 | Read-mostly state | `arc_swap::ArcSwap` |
@@ -505,13 +505,13 @@ Same surface as compile-time registries (`def(key)`,
 ## Windows specifics
 
 - `std::path::PathBuf`, not string concat.
-- `std::fs::canonicalize` returns `\\?\` prefix -- handle or
+- `std::fs::canonicalize` returns `\\?\` prefix: handle or
   avoid in user-facing paths.
 - `.lines()` handles `\n` and `\r\n` uniformly.
 - Strip UTF-8 BOM before parsing if you accept user-edited
   files.
 - Loopback TCP connect is ~0.2 ms on Windows vs ~0.03 ms on
-  Linux -- factor into benchmark methodology.
+  Linux: factor into benchmark methodology.
 - Use `127.0.0.1`, never `localhost` (Windows DNS adds ~200 ms).
 - `TCP_NODELAY` must be set explicitly.
 - hyper needs `writev(true)` + `max_buf_size(4 MB)` for
@@ -533,21 +533,21 @@ providers in the tree.
 
 ## Patterns to avoid
 
-- `Rc` / `Arc` as first resort -- restructure ownership first.
+- `Rc` / `Arc` as first resort: restructure ownership first.
 - Channels when a `Mutex` is simpler.
-- Premature `unsafe` -- prove the safe alternative insufficient.
-- `.clone()` to silence borrow errors -- scope the borrow instead.
+- Premature `unsafe`: prove the safe alternative insufficient.
+- `.clone()` to silence borrow errors: scope the borrow instead.
 - `.unwrap()` in production paths.
 - Adding error handling for scenarios that can't happen
   (CLAUDE.md rule). Validate at system boundaries; trust
   internal code + framework guarantees.
 - `#[non_exhaustive]` on workspace-internal types every
-  consumer constructs as a struct literal -- you update
+  consumer constructs as a struct literal: you update
   atomically.
 - Single-letter / cryptic variable names (one-letter loop
   indices are OK).
 - Comments that explain WHAT (the well-named identifier already
-  does). Comments only for WHY -- hidden invariants,
+  does). Comments only for WHY: hidden invariants,
   workarounds, surprising behavior.
 
 ## Hardening doctrine (from kovarex reviews)

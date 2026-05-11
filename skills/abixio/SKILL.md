@@ -26,14 +26,14 @@ Two public GitHub repos, one workspace:
 
 ### Documentation index (in `abix-/abixio` repo)
 
-`docs/` is authoritative -- read these first for whichever subject
+`docs/` is authoritative: read these first for whichever subject
 you are touching:
 
 | File                              | Authoritative on                                          |
 | --------------------------------- | --------------------------------------------------------- |
 | `docs/index.md`                   | Overview + status + what works / what's rough             |
 | `docs/architecture.md`            | End-to-end design + module map                            |
-| `docs/status.md`                  | Scorecard (consensus, clustering, etc.) -- current %      |
+| `docs/status.md`                  | Scorecard (consensus, clustering, etc.): current %      |
 | `docs/write-path.md`              | Canonical PUT flow, tier routing, per-tier timings        |
 | `docs/write-wal.md`               | WAL design + perf (zero-copy hot path, mmap segment, ack-after-append) |
 | `docs/write-cache.md`             | RAM write cache, peer replication semantics               |
@@ -87,7 +87,7 @@ you are touching:
 | ----------------------------------- | --------------------------------------------- |
 | `src/bench/mod.rs`                  | `run()`, CLI arg routing                      |
 | `src/bench/stats.rs`                | BenchResult, Stats, JSON output, baseline compare |
-| `src/bench/l1_disk.rs`              | L1 HTTP ingress (renamed -- PUT flow order)   |
+| `src/bench/l1_disk.rs`              | L1 HTTP ingress (renamed. PUT flow order)   |
 | `src/bench/l2_compute.rs`           | L2 S3 protocol (in-memory pipe, no TCP, isolated) |
 | `src/bench/l3_storage.rs`           | L3 storage pipeline (VolumePool, write-path × cache matrix) |
 | `src/bench/l4_http.rs`              | L4 compute (hashing + RS encode)              |
@@ -98,7 +98,7 @@ you are touching:
 | `src/bench/servers.rs`              | AbixioServer, ExternalServer (RustFS/MinIO)   |
 | `src/bench/clients.rs`              | AwsCliHarness, rclone helpers                 |
 
-## Current architecture (the headline -- circa 2026-05)
+## Current architecture (the headline: circa 2026-05)
 
 ### Two write tiers (the WAL refactor)
 
@@ -106,14 +106,14 @@ The old three-tier model (log_store + write_slot_pool + file) is
 **gone**. `log_store.rs` and `write_slot_pool.rs` were deleted;
 all 19 techniques carried over or improved. Today:
 
-- **WAL tier (`--write-tier=wal`, default)** -- append-only log
+- **WAL tier (`--write-tier=wal`, default)**: append-only log
   with background materialize to the file tier. Zero-copy hot
   path: `MaterializeRequest` uses `Arc<str>`; worker reads from
   mmap instead of receiving data copies. WAL append is ~3 µs at
   4 KB in release (was 26 µs before mmap-write + try_send +
   ack-after-append optimizations). Versioned + has heal path
   (kovarex #4 enforced).
-- **File tier (`--write-tier=file`)** -- direct
+- **File tier (`--write-tier=file`)**: direct
   `mkdir + File::create + write + close`. Default switched to WAL
   per perf wins; file tier remains for ablation + large objects.
 
@@ -128,9 +128,9 @@ rustfs's mpsc pattern + minio's ring-buffer-per-writer design.
 
 ### Read + write caches (RAM)
 
-- **Write cache** -- DashMap, `--write-cache <MB>` flag (default
+- **Write cache**. DashMap, `--write-cache <MB>` flag (default
   256 MB, 0 disables). Peer replication enforced per kovarex #3.
-- **Read cache** -- DashMap, `--read-cache on/off`. Warmed on
+- **Read cache**. DashMap, `--read-cache on/off`. Warmed on
   write so small-object GETs after PUT hit RAM. 4 KB L7 GET p50
   went 1.5 ms → 807 µs at wal+wc+rc canonical stack (1.86x).
   Cold GET populate uses `Bytes::from_owner` of the existing
@@ -155,17 +155,17 @@ flag. Documented as a design gap that was closed.
 
 `openraft` integration is shipped behind `--raft-enable`:
 
-- **Storage** (`raft::storage`) -- on-disk log store + snapshot
+- **Storage** (`raft::storage`): on-disk log store + snapshot
   store + vote persistence with atomic writes and index rebuild.
   Implements openraft storage-v2 traits (log storage + fsm
   storage adapters).
-- **Network** (`raft::network`) -- RaftNetwork + RaftNetworkFactory
+- **Network** (`raft::network`). RaftNetwork + RaftNetworkFactory
   over the existing internode HTTP layer.
-- **Runtime** (`raft::AbixioRaft`) -- single-node bootstrap /
+- **Runtime** (`raft::AbixioRaft`): single-node bootstrap /
   submit / read works (integration test passes). Wired into
   `main.rs` behind `--raft-enable` + `--raft-bootstrap` +
   `--raft-id` + `--raft-dir`. Default raft id is blake3-derived.
-- **HTTP** -- storage server exposes `/raft/append-entries`,
+- **HTTP**: storage server exposes `/raft/append-entries`,
   `/raft/vote`, `/raft/install-snapshot`. Admin server exposes
   `/raft/peers`, `/raft/primary`, `/raft/bootstrap`, `/raft/join`,
   `/raft/leave`, `/raft/snapshot`.
@@ -204,7 +204,7 @@ These items from the kovarex review have landed; do not regress:
 - **#7** lifecycle + bucket policy enforcement
 - **#8.1** read cache (warmed on write)
 - Volume format version assertion
-- Unwrap plague closed -- 530 of 533 were test-only; the sole
+- Unwrap plague closed: 530 of 533 were test-only; the sole
   production unwrap became `let-else`.
 
 ## Build + run
@@ -313,7 +313,7 @@ Pre-run guards: wipe `--tmp-dir` contents + check free space
 
 ## Session etiquette
 
-- Public repo. Generic content -- no machine-specific paths, no
+- Public repo. Generic content: no machine-specific paths, no
   user-identifiable seeds.
 - Always `k3sc cargo-lock` (never bare `cargo`).
 - Always read the authoritative `docs/<subject>.md` before

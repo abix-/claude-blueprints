@@ -1,11 +1,11 @@
 ---
 name: ueforge
-description: ueforge framework -- the base layer every UE4SS Rust mod in the Grounded2Mods workspace builds on. Authoritative on the composition model (Effect/Trigger/Skill), the Def/Registry/Instance/Controller pattern, hot reload, discovery, hardening doctrine, and the five framework modules (rpg, stacks, difficulty, inventory, damage). Use when writing or modifying code under `ueforge/` in abix-/Grounded2Mods, or when promoting a pattern out of a game crate into the framework.
+description: ueforge framework: the base layer every UE4SS Rust mod in the Grounded2Mods workspace builds on. Authoritative on the composition model (Effect/Trigger/Skill), the Def/Registry/Instance/Controller pattern, hot reload, discovery, hardening doctrine, and the five framework modules (rpg, stacks, difficulty, inventory, damage). Use when writing or modifying code under `ueforge/` in abix-/Grounded2Mods, or when promoting a pattern out of a game crate into the framework.
 user-invocable: false
 version: "1.0"
 updated: "2026-05-11"
 ---
-# ueforge -- the framework
+# ueforge: the framework
 
 `ueforge/` is the base crate every UE4SS Rust mod in this
 workspace consumes. It owns the lifecycle, the UE SDK, hooks,
@@ -16,7 +16,7 @@ opinionated set of composition modules.
 Operating principle: **always change ueforge first.** If a need
 is game-specific, prove it; otherwise the pattern belongs here.
 If you find yourself writing the same scaffolding in two game
-crates, that is a missing module -- promote it.
+crates, that is a missing module: promote it.
 
 `ueforge/docs/architecture.md` is the contract. Read it before
 adding a new module.
@@ -45,7 +45,7 @@ Three concerns, three vocabularies, each with its own Def:
   `EffectDef { kind, imp: &'static dyn Effect }`.
 
 - **`Trigger`** (the WHEN): `TriggerDef { kind, imp: &'static dyn
-  Trigger }`. Today: `ON_SLOT_CHANGE` (passive -- fires on level /
+  Trigger }`. Today: `ON_SLOT_CHANGE` (passive: fires on level /
   spend / refund / toggle). Future variants: kill / damage / fall
   / periodic event triggers. `TriggerCtx` is the typed event
   payload passed to `Effect::apply`.
@@ -81,7 +81,7 @@ reconcile. Instances never cache Def fields.
 
 ### Naming contract (mandatory)
 
-- Schema: `<Subject>Def`. **Always Def-suffixed -- no exceptions.**
+- Schema: `<Subject>Def`. **Always Def-suffixed: no exceptions.**
   (`SkillDef`, `StackDef`, `StatusDef`, `HookDef`, `OpDef`,
   `SelectorDef`, `ShutdownHandlerDef`, `BuildingDef`, `TabDef`,
   `ModDef`, `TriggerDef`, `EffectDef`, `CreatureDef`,
@@ -119,7 +119,7 @@ pub static STACKS: StackRegistry =
     StackRegistry::new(&[StackDef::new(...)]);
 ```
 
-The canonical pattern -- not a workaround -- is each Def as its
+The canonical pattern: not a workaround: is each Def as its
 own named `static` + the registry stores `&[&'static <Subject>Def]`:
 
 ```rust
@@ -138,7 +138,7 @@ slice-of-values shape.
 `ueforge/docs/architecture.md` carries the full table. Current
 state: Skills, Triggers, Effects, Creatures, Tabs, Mod, Stacks,
 Difficulty, Data tables, Statuses, Debug ops, Selectors,
-Shutdown handlers, Hooks all sit at 100% (Hooks at 90% --
+Shutdown handlers, Hooks all sit at 100% (Hooks at 90%:
 imperatively populated). Buildings is designed-100%, not yet
 built. Counters and PE-queue jobs are documented carve-outs.
 
@@ -147,7 +147,7 @@ built. Counters and PE-queue jobs are documented carve-outs.
 Each wraps a low-level primitive with the universal apply-loop +
 atomic-knob + status-counter pattern. Game crates pick from the
 menu and write only game-specific knobs (class names, offsets,
-parm shapes). Heterogeneous adoption is supported -- a pure
+parm shapes). Heterogeneous adoption is supported: a pure
 stack-size mod consumes only `stacks`; an RPG-only mod only
 `rpg`.
 
@@ -197,7 +197,7 @@ in `docs/todo.md` rather than re-inventing in a game crate.
 
 ## UE4SS CPPMod loading
 
-ueforge ships `cpp/ueforge_shim.cpp` -- a generic UE4SS factory
+ueforge ships `cpp/ueforge_shim.cpp`: a generic UE4SS factory
 that subclasses `RC::CppUserModBase`. The game's `build.rs` calls
 `ueforge::build::CppShim::new().compile()` to link it. UE4SS
 loads `main.dll`, invokes the shim's `start_mod` factory, the
@@ -230,7 +230,7 @@ DllMain forwarder.
 `ModDef` is **not** `#[non_exhaustive]`. Every consumer
 constructs it as a struct literal. Adding a field IS a
 breaking change for all consumers but the monorepo updates
-atomically -- document new fields in `changelog.md`.
+atomically: document new fields in `changelog.md`.
 
 ### `extern "C"` ImGui bridge
 
@@ -245,7 +245,7 @@ UE4SS deps.
 `cargo deploy install` writes `main-new.dll` next to the
 running `main.dll`. Three paths from there:
 
-1. **Game running, focused** -- `hot_reload::spawn_watcher`
+1. **Game running, focused**: `hot_reload::spawn_watcher`
    polls every 1.5 s. On detection it synthesizes Ctrl+R via
    `SendInput` to whichever window has foreground. UE4SS's
    keybind handler calls into `ueforge_mod_shutdown`, which
@@ -254,14 +254,14 @@ running `main.dll`. Three paths from there:
      `LoadLibraryExW` opens with `FILE_SHARE_DELETE`).
    - `rename main-new.dll -> main.dll`.
    - On failure of step 2, roll back step 1.
-   - UE4SS then `LoadLibraryExW` -- picks up the new image.
+   - UE4SS then `LoadLibraryExW`: picks up the new image.
 
-2. **Game closed when deployed** -- `apply_pending_swap_at_init`
+2. **Game closed when deployed**: `apply_pending_swap_at_init`
    runs on the next launch's `ueforge_mod_unreal_init`. Current
    generation runs from the renamed `main-old.dll` mapping; the
    next Ctrl+R or relaunch picks up the new code.
 
-3. **`main-old.dll` cleanup** -- `cleanup_old_dll` removes the
+3. **`main-old.dll` cleanup**: `cleanup_old_dll` removes the
    leftover at init.
 
 Caveats:
@@ -281,7 +281,7 @@ The macro's `ueforge_mod_shutdown` order:
    (hooks=100, http=200, settings=300, freeze sweeper=400).
 3. `SHUTDOWN_REGISTRY.run_all()` sorts by `order`, runs each,
    logs.
-4. `finalize_hot_reload_swap()` -- side-file rename so UE4SS's
+4. `finalize_hot_reload_swap()`: side-file rename so UE4SS's
    next `LoadLibraryExW` picks up the new image.
 
 Game-specific cleanup goes via `SHUTDOWN_REGISTRY.register(
@@ -304,7 +304,7 @@ Any consumer mod gets them by adding them to `MOD_INFO.tabs`.
 `describe_*` ops accept `name=` to fetch a single entry.
 Auto-generated `list_*` ops surface the registry contents.
 
-### Crash hardening (mandatory -- do not regress)
+### Crash hardening (mandatory: do not regress)
 
 The discovery walk visits ~150K UObjects. Several were unsafe
 to read; the following hardening landed and must stay:
@@ -316,12 +316,12 @@ to read; the following hardening landed and must stay:
 - **`is_a` super-chain capped at 64** + super pointer guarded
   (prevents infinite loop in OWS GObjects walk).
 - **FString walk caps total bytes + detects cycles.**
-- **`catch_unwind` per object** during discovery iteration --
+- **`catch_unwind` per object** during discovery iteration:
   one bad object never kills the walk.
 - **Op dispatch happens OUTSIDE the registry mutex** so a SEH
   inside a handler does not poison the lock for every future
   op.
-- **`describe_data_table` is eager-slim** -- returns just the
+- **`describe_data_table` is eager-slim**: returns just the
   name + super_path. The schema walk is on-demand; this was a
   fix for an OWS crash at object 27152 during eager-deep walk.
 
@@ -339,15 +339,15 @@ UE5 games routinely route every gear bonus / perk / food buff
 / debuff through a `UStatusEffectComponent` reading a single
 master data table (in Grounded 2:
 `/Game/Blueprints/Attacks/Table_StatusEffects.Table_StatusEffects`).
-`UStatusEffect` is **row-driven** -- the value lives in the
+`UStatusEffect` is **row-driven**: the value lives in the
 data-table row, not the instance.
 
 ueforge ships:
 - `StatusDef { id, table_finder, row_fname, value_offset,
-   vanilla: AtomicU32 (f32 bits) }` -- row identity decoupled
+   vanilla: AtomicU32 (f32 bits) }`: row identity decoupled
    from the operation.
-- `StatusRegistry` -- the two-static pattern.
-- `StatusEffectApply` Effect -- mutates the row Value +
+- `StatusRegistry`: the two-static pattern.
+- `StatusEffectApply` Effect: mutates the row Value +
   invokes `CreateAndAddEffect` via PE call.
 - Future: `StatusEffectClear`, `StatusEffectMutate`.
 
@@ -396,16 +396,16 @@ All three are closure-populated singleton registries with a
 discovery, and `register_builtins()` registration at worker
 init:
 
-- `OP_REGISTRY` -- `OpDef { name, summary, args, handler }`.
+- `OP_REGISTRY`: `OpDef { name, summary, args, handler }`.
   Replaced three match dispatchers (`handle_builtin`,
   `dispatch_standard_op`, `dispatch_pe_ops`). New op = one
   `OP_REGISTRY.register(OpDef::new(...))` line. Game-side ops
   register from their `debug.rs`.
-- `SELECTOR_REGISTRY` -- `SelectorDef { prefix, summary,
+- `SELECTOR_REGISTRY`: `SelectorDef { prefix, summary,
   resolver: fn }`. Framework ships `addr:`, `class:`,
   `first_class:`, `singleton:`. Game crates extend without
   touching framework code.
-- `SHUTDOWN_REGISTRY` -- `ShutdownHandlerDef { name, order,
+- `SHUTDOWN_REGISTRY`: `ShutdownHandlerDef { name, order,
   run: fn() }`. See the lifecycle section.
 
 ## `cargo deploy`
@@ -427,7 +427,7 @@ matching `[package.metadata.ueforge].game_name_regex`
 containing `game_sub_path`. Per-mod `target_dir` keeps two
 cdylibs from colliding on `target/release/main.dll`.
 
-## Hardening doctrine (kovarex review outcomes -- do not regress)
+## Hardening doctrine (kovarex review outcomes: do not regress)
 
 These landed across the kovarex P0/P1 waves; new code must
 respect them:
@@ -438,17 +438,17 @@ respect them:
 - Hot paths use `try_runtime` + soft fallback (no allocs on
   miss).
 - Address-validated, selector-recoverable freeze ops.
-- `arc_swap` for `DisabledSkills` -- cheap clone, no Mutex on
+- `arc_swap` for `DisabledSkills`: cheap clone, no Mutex on
   read.
 - `SlotPoller` returns a `PollerHandle` with stop flag + panic
-  counter + last_panic + named thread -- no orphaned threads.
+  counter + last_panic + named thread: no orphaned threads.
 - `SlotStore::save -> io::Result`, fsync temp before rename,
   slot-path validation, `last_error` surface.
 - `SkillsState` has a `schema_version` field and **non-pub**
   `spend` / `refund`; mutation only through `Tracker`.
 - `Curve` upper guard against absurd XP values.
 - Workspace lint `clippy::undocumented_unsafe_blocks = "warn"`
-  -- every new `unsafe { ... }` needs a `// SAFETY:` comment.
+ : every new `unsafe { ... }` needs a `// SAFETY:` comment.
 
 ## Performance principle: zero allocations on hot paths
 
@@ -498,7 +498,7 @@ Public repo: `abix-/Grounded2Mods`. The framework crate is
 `ueforge/` at the repo root. All paths below are relative to the
 crate root unless noted.
 
-### Documentation (`ueforge/docs/`) -- read these first
+### Documentation (`ueforge/docs/`): read these first
 
 | File                 | Authoritative on                                      |
 | -------------------- | ----------------------------------------------------- |
@@ -588,7 +588,7 @@ crate root unless noted.
 | `health.rs`       | `HealthBinding` + `register()`                        |
 | `std_effect.rs`   | `StandardEffect` variant menu                         |
 | `tab.rs`          | Framework ImGui RPG tab (consumers wire it via `MOD_INFO.tabs`) |
-| `ops.rs`          | `register()` -- adds skill_toggle/spend/refund/etc to OP_REGISTRY |
+| `ops.rs`          | `register()`: adds skill_toggle/spend/refund/etc to OP_REGISTRY |
 
 ### C++ (`ueforge/cpp/`)
 
@@ -618,7 +618,7 @@ crate root unless noted.
   output.
 - Commits on `main`, lowercase concise message, push
   immediately, NO Co-Authored-By trailer.
-- **Never run the game yourself** -- no GPU, no display. Mark
+- **Never run the game yourself**: no GPU, no display. Mark
   unverified work "untested" in docs and stop.
 - All meaningful sessions update `.claude/project_state.md` at
   end (git-tracked, no secrets).

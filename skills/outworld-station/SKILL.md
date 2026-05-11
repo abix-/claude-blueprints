@@ -1,17 +1,17 @@
 ---
 name: outworld-station
-description: Modding Outworld Station (Spacescape Salvage Station, UE 5.4.4 + UE4SS). Authoritative on OWS-specific facts -- the Steam exe, image-relative offsets, GObjects layout (WrappedChunked), DataTable cache-propagation gotcha, deploy folder, the shipped feature inventory. Mod code is the `outworld-station-tweaks` crate in `abix-/Grounded2Mods`. For ueforge framework doctrine, read the `ueforge` skill. Not for playing the game.
+description: Modding Outworld Station (Spacescape Salvage Station, UE 5.4.4 + UE4SS). Authoritative on OWS-specific facts: the Steam exe, image-relative offsets, GObjects layout (WrappedChunked), DataTable cache-propagation gotcha, deploy folder, the shipped feature inventory. Mod code is the `outworld-station-tweaks` crate in `abix-/Grounded2Mods`. For ueforge framework doctrine, read the `ueforge` skill. Not for playing the game.
 user-invocable: false
 version: "1.0"
 updated: "2026-05-11"
 ---
-# Outworld Station -- modding
+# Outworld Station: modding
 
 Per-game modding skill for **Outworld Station** (UE 5.4.4 +
 UE4SS). Authoritative on what is specific to this game: exe,
 image-relative offsets, the GObjects layout variant, the
 DataTable mutation-timing finding, deploy folder. Framework
-doctrine (`ueforge`) is a separate skill -- no overlap.
+doctrine (`ueforge`) is a separate skill: no overlap.
 
 The mod is a multi-feature scaffold (`outworld-station-tweaks`),
 not single-purpose. First feature live: 4x item stack tweak
@@ -50,7 +50,7 @@ base.
   - `AppendString` (`FName::ToString`): `0x010DF9D0`
   - `ProcessEvent`: `0x012AF540`
   - `ProcessEventIdx`: `0x4C` (stable across UE 5.x)
-- **GObjects layout**: `GObjectsLayout::WrappedChunked` --
+- **GObjects layout**: `GObjectsLayout::WrappedChunked`:
   `FUObjectArray` wraps `FChunkedFixedUObjectArray` at `+0x10`.
   Verified live: `NumElements=142650`, `NumChunks=3`.
 - **`g_names` / `g_world`**: not yet logged by UE4SS scanner on
@@ -85,15 +85,15 @@ that by mutating early enough that no widget has copied yet.
 
 1. Find the DataTable + row-struct field offset (SDK dump grep).
 2. Spawn a worker from `on_unreal_init` that polls for the DT
-   (up to ~30 s -- DTs can lazy-load).
+   (up to ~30 s. DTs can lazy-load).
 3. On first sight, write all rows.
-4. One pass is enough -- DT memory persists for the session;
+4. One pass is enough. DT memory persists for the session;
    later widget creations cache the mutated values.
 
 Belt-and-suspenders for lazy-loaded DTs: hook
 `UFunctionWeWantToOverride` via UE4SS-style RegisterPostHook and
 override the return value directly. Bulletproof against any
-caching path. Backlog item -- not needed for stacks since
+caching path. Backlog item: not needed for stacks since
 on-init mutation works for OWS.
 
 ueforge's `ueforge::stacks` module wraps exactly this pattern:
@@ -109,7 +109,7 @@ Per the `ueforge/README.md` "Bootstrapping a new game" checklist:
 | ----------------------------------- | -------------- | ------------------------------------------------- |
 | Engine version known                | yes            | UE 5.4.4 (exe `FileVersion`)                      |
 | Anti-cheat                          | none observed  | no EAC / BattlEye folders in install              |
-| UE4SS installed                     | yes            | `OutworldStation/Binaries/Win64/ue4ss/` -- main HEAD commit `06474186`, built 2026-05-08 |
+| UE4SS installed                     | yes            | `OutworldStation/Binaries/Win64/ue4ss/`: main HEAD commit `06474186`, built 2026-05-08 |
 | `UE4SS.lib` regenerated             | yes            | ~4063 exports; tracked in `abix-/Grounded2Mods`   |
 | Mod scaffold                        | yes            | `outworld-station-tweaks/`                        |
 | `/debug` endpoint                   | yes            | `127.0.0.1:17172`, smoke test passes 3/3          |
@@ -142,13 +142,13 @@ from colliding with the other workspace cdylib).
 
 ## Tabs (ImGui)
 
-OWS-Tweaks registers (current state -- see `src/lib.rs` for the
+OWS-Tweaks registers (current state: see `src/lib.rs` for the
 live list):
 
-- **Tweaks** -- the OWS-specific feature controls
-- **Scanner** -- ueforge's built-in Cheat-Engine-style scanner
+- **Tweaks**: the OWS-specific feature controls
+- **Scanner**: ueforge's built-in Cheat-Engine-style scanner
   (`ueforge::ui_scanner::render`)
-- **Tables** / **Classes** / **Structs** -- ueforge's browsers
+- **Tables** / **Classes** / **Structs**: ueforge's browsers
   reading the discovery cache
 
 The browsers are reference consumers of ueforge's discovery
@@ -157,7 +157,7 @@ present and discovery walks succeed.
 
 ## Debug HTTP endpoint
 
-`POST 127.0.0.1:17172/debug` -- see the `runtime-control-http`
+`POST 127.0.0.1:17172/debug`: see the `runtime-control-http`
 skill for the pattern. OWS-specific ops registered from
 `src/debug.rs` into `OP_REGISTRY`; built-in ops
 (`read_bytes`/`write_bytes`/`walk_class`/`discover_*`/`scan_*`/
@@ -165,12 +165,12 @@ skill for the pattern. OWS-specific ops registered from
 
 ## Session etiquette
 
-- Public repo. Generic content -- no machine-specific paths.
+- Public repo. Generic content: no machine-specific paths.
 - Read `outworld-station-tweaks/docs/research.md` first when
   adding a new feature; it carries the per-game lessons learned.
 - For framework doctrine (composition model, k8s pattern,
   hot reload, discovery, modules), read the `ueforge` skill.
 - For the HTTP debug endpoint, read `runtime-control-http`.
 - ASCII source/docs/commits; commits lowercase, push immediately.
-- **Never run the game yourself** -- no GPU, no display from
+- **Never run the game yourself**: no GPU, no display from
   the agent. Mark unverified work "untested" and stop.

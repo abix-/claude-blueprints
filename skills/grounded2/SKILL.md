@@ -1,18 +1,18 @@
 ---
 name: grounded2
-description: Modding Grounded 2 (Obsidian survival, UE5 + UE4SS). Authoritative on Grounded 2 game specifics -- exes, image-relative offsets, ASurvivalCharacter/UHealthComponent field layouts, three damage paths (combat / fall / env), Table_StatusEffects, deploy folder, the mod inventory. Mod code lives in `abix-/Grounded2Mods` (the `grounded2-rpg` crate is the current shipped mod). For ueforge framework doctrine (composition model, k8s pattern, hot reload, discovery), read the `ueforge` skill. Not for playing the game.
+description: Modding Grounded 2 (Obsidian survival, UE5 + UE4SS). Authoritative on Grounded 2 game specifics: exes, image-relative offsets, ASurvivalCharacter/UHealthComponent field layouts, three damage paths (combat / fall / env), Table_StatusEffects, deploy folder, the mod inventory. Mod code lives in `abix-/Grounded2Mods` (the `grounded2-rpg` crate is the current shipped mod). For ueforge framework doctrine (composition model, k8s pattern, hot reload, discovery), read the `ueforge` skill. Not for playing the game.
 user-invocable: false
 version: "5.0"
 updated: "2026-05-11"
 ---
-# Grounded 2 -- modding
+# Grounded 2: modding
 
 Per-game modding skill for **Grounded 2** (Obsidian, UE5 5.x +
 UE4SS). Authoritative on what is specific to this game: exes,
 image-relative offsets, key class field layouts, damage pipeline,
 status-effect table, deploy folder. Framework doctrine (the
 `ueforge` crate that this game's mod is built on) is in the
-`ueforge` skill -- no overlap.
+`ueforge` skill: no overlap.
 
 Repo: `abix-/Grounded2Mods`. Current shipped mod is the
 `grounded2-rpg` crate (a Factorio-style RPG / level-up mod);
@@ -121,7 +121,7 @@ Tested against Steam build `++Augusta+release-0.4.0.2-CL-2673661`.
   - RequiredDamageTypeFlags   @+0xFC
   - MaxHealth                 @+0x328
 - **AInGameGameState**: PlaythroughGuid @+0x32C (stable across
-  save renames -- canonical slot key).
+  save renames: canonical slot key).
 - **USurvivalGameModeSettings.FallDamageMultiplier** @+0x008C.
 - **USurvivalModeManagerComponent.CustomSettings** @+0x0114
   (FCustomGameModeSettings struct, 0x20 bytes;
@@ -132,7 +132,7 @@ Tested against Steam build `++Augusta+release-0.4.0.2-CL-2673661`.
 
 Layout primitives (workspace-wide, restated here for grep):
 UObject vtable@0, flags@8, index@0xC, class@0x10, name@0x18,
-outer@0x20, size=0x28. **TMap stride is 24 not 16** -- see
+outer@0x20, size=0x28. **TMap stride is 24 not 16**: see
 ueforge skill for the rationale.
 
 ## Damage pipeline (load-bearing)
@@ -142,19 +142,19 @@ Grounded 2 has three distinct damage paths. **Read
 damage-related.** It captures every approach that did NOT work
 and why.
 
-1. **Combat damage** (creature hits) -- `ApplyDamage` with
+1. **Combat damage** (creature hits): `ApplyDamage` with
    non-zero `type_flags`. Routes through
    `MulticastHandleEffectsWithDamageFlags`. This is the path
    the status-effect system (DamageReduction, AttackDamage)
    already covers.
-2. **Fall damage** -- separate native `ApplyFallDamage` reading
+2. **Fall damage**: separate native `ApplyFallDamage` reading
    `CharMovementComponent.Velocity.Z`. Mitigation: velocity-
-   stomp in `OnLanded` (PE hook in `fall_hook.rs`) -- scale
+   stomp in `OnLanded` (PE hook in `fall_hook.rs`): scale
    `CMC.Velocity.Z` by `(1 - reduction)` before native
    `ApplyFallDamage` runs. Plus writes to GMS / SMMC fields +
    `UpdateCustomSettings` UFunction call to refresh the
    native cache.
-3. **Environmental / hazard / impact damage** -- also through
+3. **Environmental / hazard / impact damage**: also through
    `ApplyDamage` but with `type_flags = 0`. Currently
    mitigated by writing `RequiredDamageTypeFlags = 0xFFFFFFFF`
    to player `UHealthComponent`; the native gate rejects
@@ -173,7 +173,7 @@ matching `EStatusEffectType`.
 
 Every status effect flows through ONE data table:
 **`/Game/Blueprints/Attacks/Table_StatusEffects.Table_StatusEffects`**.
-`UStatusEffect` is row-driven -- the value lives in the row,
+`UStatusEffect` is row-driven: the value lives in the row,
 not the instance. Migration plan: resolve the table, pick a
 row, mutate `Value` (and add a row if a new effect), call
 `AddEffect` via process_event. Long-term backing for nearly
@@ -214,7 +214,7 @@ Current Effect instances used by the catalog (see
 | `SubcomponentU32MaskEffect`    | (planned) impact_resistance once on status-effect path |
 | `ClassFieldsMultiplyEffect`    | (planned) crowd-effect skills                         |
 | `RuntimeEffect`                | lifesteal, impact_resistance (today)                  |
-| `StatusEffectApply`            | (migration target -- not wired into Grounded 2 catalog yet)|
+| `StatusEffectApply`            | (migration target: not wired into Grounded 2 catalog yet)|
 
 Game-specific Effect impls live in
 `grounded2-rpg/src/rpg/effects.rs`. If a new Effect shape would
@@ -226,7 +226,7 @@ apply to another UE5 game, promote it to `ueforge` first.
 `<DLL_dir>/saves/<playthrough-guid>.json` (via
 `SlotStore`). GUID resolved by
 `ueforge::rpg::SlotKeyResolver` reading
-`AInGameGameState.PlaythroughGuid` at `+0x32C` -- stable across
+`AInGameGameState.PlaythroughGuid` at `+0x32C`: stable across
 save renames.
 
 Schema is open (`#[serde(default)]`) + has a `schema_version`
@@ -254,7 +254,7 @@ Files in `dlls/`:
 | `main.dll`            | Built mod (cdylib)                                    |
 | `main-new.dll`        | Transient: present between deploy and hot reload (see `ueforge` skill) |
 | `main-old.dll`        | Transient: cleaned at next init                       |
-| `grounded2_rpg.log`   | Mod log -- `ueforge::log` writes here, per-line flush |
+| `grounded2_rpg.log`   | Mod log: `ueforge::log` writes here, per-line flush |
 | `settings.json`       | Live settings the mod reads at load                   |
 | `saves/`              | Per-playthrough JSON: `<playthrough-guid>.json`       |
 
@@ -297,7 +297,7 @@ cargo test --test debug_snapshot -- --test-threads=1 --nocapture
 ```
 
 Tests skip cleanly when `BBP_DEBUG_PORT` is unset.
-**Always pass `--test-threads=1`** -- the tests share global
+**Always pass `--test-threads=1`**: the tests share global
 game state.
 
 `grounded2-rpg/docs/testing.md` is authoritative on per-test
@@ -310,7 +310,7 @@ expectations.
   Safe for read-only GObjects walks.
 - The ImGui tab callback (`rpg::tab::render`) runs on UE4SS's
   render-loop thread. Heavy GObjects walks + native UFunction
-  calls from there are risky -- queue work to `bbp::debug::PE_QUEUE`
+  calls from there are risky: queue work to `bbp::debug::PE_QUEUE`
   and drain from `kill_hook` instead.
 - `process_event` calls inside `inv_hook` run from the
   inventory PE trampoline (already on the game thread when
@@ -326,10 +326,10 @@ expectations.
   `docs/todo.md` "RPG: Status-effect-backed skill rewrite".
 - **Live-instance writes** for remaining combat skills (movement
   already does this).
-- **pkg(0) instigator bug** -- some legitimate player kills
+- **pkg(0) instigator bug**: some legitimate player kills
   attribute to `/Script/CoreUObject (Package)`, losing XP.
 - **Catalog expansion** (Crit, Evasion, Stamina, Gear Hardiness,
-  Thorns, Climb Speed) -- target ~25 skills.
+  Thorns, Climb Speed): target ~25 skills.
 - **Distribution polish.** Vortex / Nexus packaging refinements.
 
 ## Where to look when X is broken
@@ -346,7 +346,7 @@ expectations.
 | deploy fails                     | `cargo deploy install -p grounded2-rpg` output      |
 | browser tab empty                | discovery cache not built? check init logs          |
 | hot reload didn't fire           | game window focus + `hot_reload:` watcher log line  |
-| damage skill behaves binary      | `docs/damage.md` -- type_flags gate or wrong path?  |
+| damage skill behaves binary      | `docs/damage.md`: type_flags gate or wrong path?  |
 
 ## Session etiquette
 
@@ -364,6 +364,6 @@ expectations.
   immediately**, NO Co-Authored-By trailer.
 - ASCII in source/docs/commits. Unicode allowed in terminal
   output.
-- **Never run the game yourself** -- no GPU, no display. In-game
+- **Never run the game yourself**: no GPU, no display. In-game
   witness is the user's job. When work needs validation, mark
   it "untested" in docs and stop.
