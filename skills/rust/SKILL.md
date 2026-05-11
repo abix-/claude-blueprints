@@ -596,7 +596,7 @@ When uncertain, these are authoritative:
   take `&self` or `&mut self` and have no generic parameters or
   `Self` returns (with exceptions). If you want `dyn Trait`, design
   for object safety from the start.
-- **Marker traits** (`Send`, `Sync`, `Copy`, etc.) -- never add a
+- **Marker traits** (`Send`, `Sync`, `Copy`, etc.). Never add a
   marker trait of your own. Use `PhantomData` to express affinity.
 - **Sealed traits** (`pub trait X: sealed::Sealed`) when the trait
   is part of your public API but you don't want downstream impls.
@@ -612,7 +612,7 @@ When uncertain, these are authoritative:
 | Dispatch | static (monomorphized) | dynamic (vtable) |
 | Code size | grows per type instantiation | constant |
 | Inlining | yes | no |
-| Hot path | yes | no -- one indirect call per use |
+| Hot path | yes | no. One indirect call per use |
 | Stored in struct field | need a type param | `Box<dyn Trait>` works directly |
 | Heterogeneous collection | no | yes (`Vec<Box<dyn Trait>>`) |
 
@@ -681,7 +681,7 @@ Know what each std type costs. Pick deliberately.
 
 - **Iterator chains compile to tight loops** when LLVM can see all
   the closures. Adding `.collect::<Vec<_>>()` mid-chain breaks
-  fusion -- inline the work instead.
+  fusion. Inline the work instead.
 - **`iter().copied()`** to convert `&T` to `T` when `T: Copy`.
   Faster and clearer than `.map(|x| *x)`.
 - **`.fold(init, f)`** over `for` loops when you're accumulating.
