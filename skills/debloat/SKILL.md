@@ -11,10 +11,10 @@ Audit and remove Windows bloat. Run as admin PowerShell via scripts (bash mangle
 
 ## Workflow
 
-1. **Audit** -- scan for junk in each category
-2. **Present** -- show the user what to kill vs keep, with brief explanations
-3. **Confirm** -- get approval before disabling
-4. **Verify** -- confirm each target is dead
+1. **Audit**. Scan for junk in each category
+2. **Present**. Show the user what to kill vs keep, with brief explanations
+3. **Confirm**. Get approval before disabling
+4. **Verify**. Confirm each target is dead
 
 ## PowerShell via Bash
 
@@ -32,7 +32,7 @@ Delete scripts after use. Never use `$PID` (reserved). Use `$procId` instead.
 Get-Service | Where-Object Status -eq Running | Select-Object Name, DisplayName, StartType | Sort-Object DisplayName
 ```
 
-**Disable method** -- registry is authoritative, `Set-Service` often doesn't stick:
+**Disable method**. Registry is authoritative, `Set-Service` often doesn't stick:
 ```powershell
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$svc" -Name 'Start' -Value 4
 Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
@@ -46,7 +46,7 @@ Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\OneSyncSvc" -Nam
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\OneSyncSvc_89f2f" -Name 'Start' -Value 4
 ```
 
-**Stop with timeout** -- some services hang on stop:
+**Stop with timeout**. Some services hang on stop:
 ```powershell
 $s = Get-Service -Name $svc -ErrorAction SilentlyContinue
 if ($s -and $s.Status -eq 'Running') {
@@ -65,8 +65,8 @@ if ($s -and $s.Status -eq 'Running') {
 - lfsvc (geolocation)
 - RmSvc (radio management)
 - SEMgrSvc (NFC payments)
-- WbioSrvc (biometric -- unless fingerprint reader)
-- TabletInputService (touch keyboard -- desktop)
+- WbioSrvc (biometric. Unless fingerprint reader)
+- TabletInputService (touch keyboard. Desktop)
 - SSDPSRV (UPnP discovery)
 - iphlpsvc (IPv6 transition)
 - DusmSvc (data usage tracking)
@@ -82,16 +82,16 @@ if ($s -and $s.Status -eq 'Running') {
 - UserDataSvc, UnistoreSvc (Mail/Calendar backend)
 - WpnService + WpnUserService (Store push notifications)
 - DoSvc (P2P update delivery)
-- cbdhsvc (clipboard history -- if unused)
-- SysMain (Superfetch -- debatable on SSD, re-enable if cold starts slow)
-- LanmanServer (SMB sharing -- unless sharing folders)
+- cbdhsvc (clipboard history. If unused)
+- SysMain (Superfetch. Debatable on SSD, re-enable if cold starts slow)
+- LanmanServer (SMB sharing. Unless sharing folders)
 - ShellHWDetection (autoplay)
 - TokenBroker (web account manager for Store apps)
 - WinHttpAutoProxySvc (WPAD proxy detection)
 - seclogon (secondary logon / runas)
 - WebClient (WebDAV)
 - QWAVE (QoS streaming)
-- RasMan, SstpSvc (VPN client -- unless using Windows VPN)
+- RasMan, SstpSvc (VPN client. Unless using Windows VPN)
 - ClickToRunSvc (Office updates)
 - InstallService (Store app installs)
 - OptionsPlusUpdaterService (Logi updater)
@@ -107,7 +107,7 @@ Get-AppxPackage -AllUsers -Name 'Microsoft.GamingServices' | Remove-AppxPackage 
 Get-AppxPackage | Select-Object Name | Sort-Object Name
 ```
 
-**Remove method** -- deprovision + per-user removal (works even with InstallService disabled):
+**Remove method**. Deprovision + per-user removal (works even with InstallService disabled):
 ```powershell
 Get-AppxProvisionedPackage -Online | Where-Object DisplayName -eq $pkg | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
 Get-AppxPackage -Name $pkg | Remove-AppxPackage -ErrorAction SilentlyContinue
@@ -158,7 +158,7 @@ Get-ScheduledTask | Where-Object State -eq Ready | Select-Object TaskName, TaskP
 - OobeDiscovery
 - Any Logi/Logitech updater tasks
 
-UpdateOrchestrator tasks are TrustedInstaller-protected -- disable via registry workaround or accept they're neutered once their parent services/apps are removed.
+UpdateOrchestrator tasks are TrustedInstaller-protected. Disable via registry workaround or accept they're neutered once their parent services/apps are removed.
 
 ### 4. Startup / Registry
 ```powershell
