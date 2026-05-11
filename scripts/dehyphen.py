@@ -59,22 +59,36 @@ CLI_FLAG_RE = re.compile(r"--[A-Za-z]")  # `--release`, `--foo=bar`, etc.
 
 
 def _rewrite_chunk(chunk: str) -> str:
-    """Rewrite ` -- ` and em-dash forms inside a non-backtick chunk."""
+    """Rewrite ` -- ` and em-dash forms inside a non-backtick chunk.
+
+    Strategy:
+    - Plain ` -- X` keeps a capitalization heuristic (next char uppercase -> '. ',
+      otherwise ': '). Useful in technical prose where ` -- ` often joins two
+      independent clauses where '. ' reads better.
+    - Em-dashes always collapse to ': ' (single space). Heuristic-driven
+      em-dash rewrites produced wrong sentence boundaries in titles and
+      list rows in real-world tests; colon is the conservative pick.
+    - Trailing forms collapse to ':' (no trailing space, wrap continues
+      on next line).
+    - Bare em-dash with no surrounding spaces gets ': '.
+    """
 
     def pick(next_char: str) -> str:
-        # New sentence if the next character is uppercase; explanation otherwise.
         if next_char and next_char.isupper():
             return ". "
         return ": "
 
-    # ' -- X' and ' — X' (space + dash + space + non-whitespace).
+    # ' -- X' (space + double-hyphen + space + non-whitespace).
     chunk = re.sub(r" -- (\S)", lambda m: pick(m.group(1)) + m.group(1), chunk)
-    chunk = re.sub(rf" {EMDASH} (\S)", lambda m: pick(m.group(1)) + m.group(1), chunk)
-    # Trailing ' --' / ' —' at end of chunk (line wrap; continuation next line).
-    # Replace with ':' so the wrap reads as a list continuation.
+    # Trailing ' --' at end of chunk (line wraps; continuation on next line).
     chunk = re.sub(r" --$", ":", chunk)
+
+    # Em-dash with surrounding spaces, ANY context: collapse to ': ' (single
+    # space). This is the form that bit us inside chunk-boundary cases.
+    chunk = re.sub(rf" {EMDASH} ", ": ", chunk)
+    # Trailing ' —' at end of chunk.
     chunk = re.sub(rf" {EMDASH}$", ":", chunk)
-    # Embedded em-dash with no spaces ('a—b'): treat as ': '.
+    # Bare em-dash, no surrounding spaces (e.g. 'a—b').
     chunk = re.sub(rf"{EMDASH}", ": ", chunk)
     return chunk
 
