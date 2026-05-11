@@ -7,13 +7,28 @@ updated: "2026-05-11"
 ---
 # TypeScript / JavaScript
 
-Source repos: [`abix-/chromium-extensions/filter-anything-everywhere`](https://github.com/abix-/chromium-extensions)
-(TS, jQuery, jest), [`abix-/chromium-extensions/hush`](https://github.com/abix-/chromium-extensions) (plain JS shims
-fronting a Rust/WASM core).
+**Provenance note:** User-authored TypeScript across all repos is
+near-zero. The 31K TS that GitHub reports under
+[`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions)
+lives in the `filter-anything-everywhere/` subdirectory, which is
+a vendored copy of an upstream extension (the standalone fork at
+[`abix-/filter-anything-everywhere`](https://github.com/abix-/filter-anything-everywhere)
+mirrors it). The TS examples in this skill are kept because they
+illustrate good patterns, but the style is canonical / upstream,
+not "this user's preferences."
+
+Source surfaces (mixed authorship):
+
+- [`abix-/chromium-extensions/filter-anything-everywhere`](https://github.com/abix-/chromium-extensions/tree/main/filter-anything-everywhere)
+  -- vendored TS/jQuery/Jest extension. Reference patterns for
+  `tsconfig.json`, narrowing, MV2/3 layout.
+- [`abix-/chromium-extensions/hush`](https://github.com/abix-/chromium-extensions/tree/main/hush)
+  -- user-authored. Plain JS shims fronting a Rust/WASM core
+  (`mainworld.js`, `background.js`, `content.js`). No TypeScript.
 
 The decision between TS and plain JS in this codebase is **not**
-"always TS." Tiny bootstrap shims and content scripts are written in
-plain JS because adding a build step costs more than it saves.
+"always TS." Tiny bootstrap shims and content scripts are written
+in plain JS because adding a build step costs more than it saves.
 
 ## When to pick TS vs JS
 

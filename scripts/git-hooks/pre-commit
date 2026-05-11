@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Pre-commit hook: block prose em-dash / double-hyphen violations.
+#
+# Runs scripts/dehyphen.py --check on staged files (only the file types
+# the script knows: .md, .rs, .py, .cs, .go, .toml, .sh, .bash, .js,
+# .ts, .tsx, .jsx, .mjs, .cjs, .wgsl, .yaml, .yml, .txt, .rst).
+# Exits non-zero if any staged file would change after a dehyphen run.
+#
+# Install:
+#   bash scripts/install-git-hooks.sh <path-to-repo>
+# Or manually:
+#   cp scripts/git-hooks/pre-commit <repo>/.git/hooks/pre-commit
+#   chmod +x <repo>/.git/hooks/pre-commit
+#
+# The hook expects to find dehyphen.py via DEHYPHEN env var, OR by
+# searching upward from the hook's location, OR at the conventional
+# C:/code/claude-blueprints/scripts/dehyphen.py path. Override with
+# DEHYPHEN=/abs/path/to/dehyphen.py.
+
+set -e
+
+DEHYPHEN="${DEHYPHEN:-}"
+if [ -z "$DEHYPHEN" ]; then
+    for candidate in \
+        "$(git rev-parse --show-toplevel)/../claude-blueprints/scripts/dehyphen.py" \
+        "$HOME/code/claude-blueprints/scripts/dehyphen.py" \
+        "/c/code/claude-blueprints/scripts/dehyphen.py" \
+        "C:/code/claude-blueprints/scripts/dehyphen.py"
+    do
+        if [ -f "$candidate" ]; then
+            DEHYPHEN="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -z "$DEHYPHEN" ] || [ ! -f "$DEHYPHEN" ]; then
+    echo "pre-commit (dehyphen): dehyphen.py not found." >&2
+    echo "Set DEHYPHEN=/path/to/dehyphen.py to enable the check." >&2
+    exit 0  # skip rather than block when the tool is unavailable
+fi
+
+# Collect staged files (added, copied, modified, renamed). Filter by
+# extension to the set dehyphen.py supports.
+mapfile -t staged < <(
+    git diff --cached --name-only --diff-filter=ACMR -z \
+        | tr '\0' '\n' \
+        | grep -iE '\.(md|markdown|rs|py|pyi|cs|go|toml|sh|bash|js|mjs|cjs|ts|tsx|jsx|wgsl|yaml|yml|txt|rst)$' \
+        || true
+)
+
+if [ ${#staged[@]} -eq 0 ]; then
+    exit 0
+fi
+
+violators=()
+for f in "${staged[@]}"; do
+    [ -f "$f" ] || continue
+    result=$(python "$DEHYPHEN" --check "$f" 2>&1 || true)
+    if echo "$result" | grep -q "prose violation"; then
+        violators+=("$result")
+    fi
+done
+
+if [ ${#violators[@]} -ne 0 ]; then
+    echo "pre-commit (dehyphen): prose violations in staged files:" >&2
+    printf '  %s\n' "${violators[@]}" >&2
+    echo "" >&2
+    echo "Fix:" >&2
+    echo "  python $DEHYPHEN <files>     # rewrite" >&2
+    echo "  git add <files>" >&2
+    echo "  git commit                    # retry" >&2
+    echo "" >&2
+    echo "Or bypass once (NOT recommended):" >&2
+    echo "  git commit --no-verify" >&2
+    exit 1
+fi
+
+exit 0

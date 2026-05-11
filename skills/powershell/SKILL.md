@@ -7,10 +7,20 @@ updated: "2026-05-11"
 ---
 # PowerShell
 
-Source repo: [`abix-/powershell-practical/Aluminium`](https://github.com/abix-/powershell-practical) (vSphere /
-Windows automation module, ~10k LOC). Style is **pragmatic
-PowerCLI**: function-per-file in flat layout, comment-based help on
-every cmdlet, `PSCustomObject` outputs that pipe cleanly.
+Source repo: [`abix-/powershell-practical/Aluminium`](https://github.com/abix-/powershell-practical)
+(vSphere / Windows automation module, ~10K LOC). Style is
+**pragmatic PowerCLI**: function-per-file in flat layout,
+comment-based help on every cmdlet, `PSCustomObject` outputs that
+pipe cleanly.
+
+**Provenance note:** `Aluminium/vmware-community.ps1` (~1100
+lines) hosts community-authored PowerCLI functions (Luc Dekens,
+Alan Renouf, Shay Levy, David Pasek, etc.) with credit in the
+`.NOTES` blocks. Those are NOT user style; treat them as
+reference implementations only. The rest of the module
+(`vmware.ps1`, `vmware-reporting.ps1`, `vmware-monitoring.ps1`,
+`automation.ps1`, `internal.ps1`) is user-authored. User-authored
+PowerShell is roughly **700K bytes**, not the 757K GitHub reports.
 
 ## Edition and platform
 
