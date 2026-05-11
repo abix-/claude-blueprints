@@ -435,6 +435,175 @@ def _check_python(text: str) -> int:
 
 
 # ----------------------------------------------------------------------
+# C# processor
+# ----------------------------------------------------------------------
+
+
+def _tokenize_csharp(text: str) -> list[tuple[str, str]]:
+    """Split a C# source file into (kind, text) tokens.
+
+    Kinds: 'code', 'line_comment', 'block_comment', 'string'. Only the
+    comment kinds get rewritten. C# block comments do NOT nest (unlike
+    Rust). String forms handled:
+
+      - "..."           regular (backslash escapes)
+      - @"..."          verbatim ("" for embedded ", no backslash escapes)
+      - $"..."          interpolated
+      - $@"..." / @$"..."  interpolated verbatim
+      - "..."           C# 11+ raw strings (3+ quotes) handled by triple form
+      - 'x'             char literal (handled as a 3-char span, conservative)
+    """
+    i = 0
+    n = len(text)
+    out: list[tuple[str, str]] = []
+    code_start = 0
+
+    def flush_code(end: int) -> None:
+        nonlocal code_start
+        if end > code_start:
+            out.append(("code", text[code_start:end]))
+
+    def _csharp_prefix_len(pos: int) -> int:
+        # Look at up to 2 chars before pos for a string prefix: @, $, @$, $@.
+        prefix_chars = "@$"
+        plen = 0
+        if pos - 1 >= 0 and text[pos - 1] in prefix_chars:
+            plen = 1
+            if pos - 2 >= 0 and text[pos - 2] in prefix_chars and text[pos - 2] != text[pos - 1]:
+                plen = 2
+        if plen > 0:
+            preceding = pos - plen - 1
+            if preceding >= 0 and (text[preceding].isalnum() or text[preceding] == "_"):
+                plen = 0
+        return plen
+
+    while i < n:
+        c = text[i]
+
+        # Block comment (not nested in C#).
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            flush_code(i)
+            j = text.find("*/", i + 2)
+            if j < 0:
+                j = n
+            else:
+                j += 2
+            out.append(("block_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Line comment (incl. /// doc-comment).
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            flush_code(i)
+            j = text.find("\n", i)
+            if j < 0:
+                j = n
+            out.append(("line_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # C# 11+ raw string literal (3 or more quotes). Conservative: only
+        # exactly three quotes handled; 4+ quote raw strings are rare.
+        if text[i : i + 3] == '"""':
+            plen = _csharp_prefix_len(i)
+            flush_code(i - plen)
+            j = text.find('"""', i + 3)
+            if j < 0:
+                j = n
+            else:
+                j += 3
+            out.append(("string", text[i - plen : j]))
+            i = j
+            code_start = i
+            continue
+
+        # Verbatim string @"..." (also $@"..." / @$"..."). In a verbatim
+        # string, `""` is an embedded quote; backslashes are literal.
+        # We rely on the prefix detection to set the right span.
+        if c == '"':
+            plen = _csharp_prefix_len(i)
+            verbatim = plen > 0 and "@" in text[i - plen : i]
+            flush_code(i - plen)
+            j = i + 1
+            if verbatim:
+                while j < n:
+                    if text[j] == '"':
+                        if j + 1 < n and text[j + 1] == '"':
+                            j += 2  # escaped embedded quote
+                        else:
+                            j += 1
+                            break
+                    else:
+                        j += 1
+            else:
+                # Regular interpolated or plain string. Backslash escapes.
+                while j < n:
+                    if text[j] == "\\" and j + 1 < n:
+                        j += 2
+                    elif text[j] == "\n":
+                        break
+                    elif text[j] == '"':
+                        j += 1
+                        break
+                    else:
+                        j += 1
+            out.append(("string", text[i - plen : j]))
+            i = j
+            code_start = i
+            continue
+
+        # Char literal. Conservative match: same as Rust's, plus the C#
+        # surrogate escapes (e.g. '\uXXXX'). Anything ambiguous falls
+        # through to code.
+        if c == "'":
+            m = re.match(
+                r"""'(?:\\u[0-9a-fA-F]{4}|\\x[0-9a-fA-F]{1,4}|\\[\\nrt0'"abfv]|[^'\\\n])'""",
+                text[i:],
+            )
+            if m:
+                flush_code(i)
+                out.append(("char", m.group(0)))
+                i += len(m.group(0))
+                code_start = i
+                continue
+
+        i += 1
+
+    flush_code(n)
+    return out
+
+
+def _process_csharp(text: str) -> tuple[str, int]:
+    tokens = _tokenize_csharp(text)
+    out_parts: list[str] = []
+    remaining = 0
+    for kind, chunk in tokens:
+        if kind in ("line_comment", "block_comment"):
+            lines = chunk.split("\n")
+            new_chunk = "\n".join(_rewrite_prose(ln) for ln in lines)
+            if _line_would_change(new_chunk):
+                remaining += 1
+            out_parts.append(new_chunk)
+        else:
+            out_parts.append(chunk)
+    return "".join(out_parts), remaining
+
+
+def _check_csharp(text: str) -> int:
+    tokens = _tokenize_csharp(text)
+    count = 0
+    for kind, chunk in tokens:
+        if kind not in ("line_comment", "block_comment"):
+            continue
+        for ln in chunk.split("\n"):
+            if _line_would_change(ln):
+                count += 1
+    return count
+
+
+# ----------------------------------------------------------------------
 # Plain processor (whole file is prose)
 # ----------------------------------------------------------------------
 
@@ -465,6 +634,7 @@ LANG_BY_EXT = {
     ".rs": "rust",
     ".py": "python",
     ".pyi": "python",
+    ".cs": "csharp",
     ".txt": "plain",
     ".rst": "plain",
 }
@@ -478,6 +648,7 @@ PROCESSORS = {
     "markdown": _process_markdown,
     "rust": _process_rust,
     "python": _process_python,
+    "csharp": _process_csharp,
     "plain": _process_plain,
 }
 
@@ -485,6 +656,7 @@ CHECKERS = {
     "markdown": _check_markdown,
     "rust": _check_rust,
     "python": _check_python,
+    "csharp": _check_csharp,
     "plain": _check_plain,
 }
 
