@@ -16,7 +16,7 @@ Always use endless-cli instead of raw curl for BRP queries.
 
 The CLI prepends `endless/` to the command name automatically. The registered Rust BRP methods use verb prefixes (`get_`, `set_`, `create_`, etc.).
 
-**IMPORTANT**: The CLI shorthand names in the help text do NOT match the registered BRP methods. Use the full method names below. The CLI accepts any method name -- just type it after `endless-cli`.
+**IMPORTANT**: The CLI shorthand names in the help text do NOT match the registered BRP methods. Use the full method names below. The CLI accepts any method name. Just type it after `endless-cli`.
 
 ### Read
 
@@ -85,6 +85,6 @@ done
 
 ## Caveats
 
-- k3s pods have no GPU/display -- endless-cli won't work there.
+- k3s pods have no GPU/display. Endless-cli won't work there.
 - Connection refused = game not running.
 - Silent placement failure: `create_building` may silently fail on occupied/water/OOB cells.
