@@ -22,13 +22,15 @@ set -e
 DEHYPHEN="${DEHYPHEN:-}"
 if [ -z "$DEHYPHEN" ]; then
     for candidate in \
-        "$(git rev-parse --show-toplevel)/../claude-blueprints/scripts/dehyphen.py" \
-        "$HOME/code/claude-blueprints/scripts/dehyphen.py" \
         "/c/code/claude-blueprints/scripts/dehyphen.py" \
-        "C:/code/claude-blueprints/scripts/dehyphen.py"
+        "C:/code/claude-blueprints/scripts/dehyphen.py" \
+        "$HOME/code/claude-blueprints/scripts/dehyphen.py" \
+        "$(git rev-parse --show-toplevel)/../claude-blueprints/scripts/dehyphen.py"
     do
         if [ -f "$candidate" ]; then
-            DEHYPHEN="$candidate"
+            # Resolve to canonical absolute path so error messages don't
+            # show traversals like `<repo>/../claude-blueprints/scripts/...`.
+            DEHYPHEN="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
             break
         fi
     done

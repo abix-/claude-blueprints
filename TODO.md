@@ -85,20 +85,25 @@ double-hyphens as punctuation in prose. The cleanup script lives at
 
 ### Still open
 
-- [ ] **Pre-commit hook** in `claude-blueprints/hooks/` that runs
-      `dehyphen.py --check` on staged files. Block commit if any
-      prose violation. Wire into install instructions.
-
-- [ ] **Cross-repo sweep helper** `scripts/dehyphen_sweep.py` (or
-      `.sh`): given a list of repo paths, find supported files,
-      run dehyphen, summarize per-repo changes, commit per-file
-      with the standard message format. The kind of tool we wished
-      we had at the start of this rollout.
-
 - [ ] **Docstring rewriting** for Python (currently OFF for safety).
       If user wants their module docstrings cleaned automatically,
       add `--lang python --include-docstrings` opt-in flag. Risk:
       multi-line string fixtures inside test files get mangled.
+
+### Done (this push)
+
+- [x] **Pre-commit hook** at `scripts/git-hooks/pre-commit`. Runs
+      `dehyphen.py --check` on staged files of supported types.
+      Blocks commit on any prose violation. Installed via
+      `scripts/install-git-hooks.sh [<repo> ...] | --all`.
+      Now active on all 8 owned repos.
+
+- [x] **Cross-repo sweep helper** at `scripts/dehyphen_sweep.py`.
+      Walks `git ls-files` per repo (respects .gitignore, skips
+      untracked + dirty), audits in `--check` mode (default),
+      rewrites + per-file-commits in `--apply` mode, pushes after.
+      `--all` defaults to the 8 owned-repo list. Hardware test
+      passed: 0 violations across all 8 repos.
 
 ### Known gaps documented
 
