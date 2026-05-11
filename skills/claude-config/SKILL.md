@@ -108,22 +108,22 @@ so that code pops out near-final on the first try. They must encode
    - Build / release patterns (CI, profiles, features)
 
    Canonical repos by language:
-   - **Rust:** `abix-/endless`, `abix-/abixio`, `abix-/abixio-ui`,
-     `abix-/terse`, `abix-/Grounded2Mods`, `abix-/chromium-extensions`.
-   - **Go:** `abix-/k3sc`.
-   - **PowerShell:** `abix-/powershell-practical`, `abix-/Join-Object`.
-   - **C#:** `abix-/TimberbornMods`, `abix-/Schedule1Mods`.
-   - **Python:** `abix-/TimberbornMods`, `abix-/endless/scripts`,
+   - **Rust:** [`abix-/endless`](https://github.com/abix-/endless), [`abix-/abixio`](https://github.com/abix-/abixio), [`abix-/abixio-ui`](https://github.com/abix-/abixio-ui),
+     [`abix-/terse`](https://github.com/abix-/terse), [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods), [`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions).
+   - **Go:** [`abix-/k3sc`](https://github.com/abix-/k3sc).
+   - **PowerShell:** [`abix-/powershell-practical`](https://github.com/abix-/powershell-practical), [`abix-/Join-Object`](https://github.com/abix-/Join-Object).
+   - **C#:** [`abix-/TimberbornMods`](https://github.com/abix-/TimberbornMods), [`abix-/Schedule1Mods`](https://github.com/abix-/Schedule1Mods).
+   - **Python:** [`abix-/TimberbornMods`](https://github.com/abix-/TimberbornMods), [`abix-/endless/scripts`](https://github.com/abix-/endless),
      `claude-blueprints/scripts`.
-   - **TypeScript / JS:** `abix-/chromium-extensions`,
-     `abix-/filter-anything-everywhere`.
-   - **Bash:** `abix-/k3sc`, `abix-/awx-operator`, `abix-/ascender-install`.
-   - **Jinja / Ansible:** `abix-/awx`, `abix-/awx-operator`.
+   - **TypeScript / JS:** [`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions),
+     [`abix-/filter-anything-everywhere`](https://github.com/abix-/filter-anything-everywhere).
+   - **Bash:** [`abix-/k3sc`](https://github.com/abix-/k3sc), [`abix-/awx-operator`](https://github.com/abix-/awx-operator), [`abix-/ascender-install`](https://github.com/abix-/ascender-install).
+   - **Jinja / Ansible:** [`abix-/awx`](https://github.com/abix-/awx), [`abix-/awx-operator`](https://github.com/abix-/awx-operator).
    - **YAML:** any of the above, especially CI workflows.
-   - **AHK:** `abix-/Ahk-For-accordion-In-Atlas`.
-   - **Lua:** `abix-/Fluid-Void-Extra`, `abix-/CustomizableContainers`,
+   - **AHK:** [`abix-/Ahk-For-accordion-In-Atlas`](https://github.com/abix-/Ahk-For-accordion-In-Atlas).
+   - **Lua:** [`abix-/Fluid-Void-Extra`](https://github.com/abix-/Fluid-Void-Extra), [`abix-/CustomizableContainers`](https://github.com/abix-/CustomizableContainers),
      `claude-blueprints/wezterm`.
-   - **Assembly / RE:** `abix-/Grounded2Mods` (image-relative offsets,
+   - **Assembly / RE:** [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods) (image-relative offsets,
      UE4SS struct layouts, hook trampolines).
 
 2. **Validate against canonical best-practices.** After the codebase

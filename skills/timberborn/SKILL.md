@@ -12,7 +12,7 @@ This skill is for DEVELOPING the Timberbot mod (C# code, Python client, tests, d
 ## Project Layout
 
 ```
-C:/code/timberborn/               # repo: abix-/TimberbornMods
+C:/code/timberborn/               # repo: [abix-/TimberbornMods](https://github.com/abix-/TimberbornMods)
   timberbot/
     src/                              # C# Unity mod (official mod system)
       TimberbotConfigurator.cs            # Bindito DI, [Context("Game")]

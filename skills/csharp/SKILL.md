@@ -1,6 +1,6 @@
 ---
 name: csharp
-description: C# development standards. Use when writing C# code, .NET projects, Unity mods, or NuGet packages. Sourced from abix-/TimberbornMods (Timberbot, Bindito DI, publicizer) and abix-/Schedule1Mods (MelonLoader + Harmony + Il2CppInterop).
+description: C# development standards. Use when writing C# code, .NET projects, Unity mods, or NuGet packages. Sourced from [abix-/TimberbornMods](https://github.com/abix-/TimberbornMods) (Timberbot, Bindito DI, publicizer) and [abix-/Schedule1Mods](https://github.com/abix-/Schedule1Mods) (MelonLoader + Harmony + Il2CppInterop).
 user-invocable: false
 version: "1.1"
 updated: "2026-05-11"
@@ -292,7 +292,7 @@ LINQ is fine in per-request code and one-time initialization.
 
 Schedule 1 mods use a different stack from Timberborn: IL2CPP Unity +
 MelonLoader runtime + HarmonyLib for patching + Il2CppInterop for
-managed bindings. Reference: `abix-/Schedule1Mods/EmployeeReset`.
+managed bindings. Reference: [`abix-/Schedule1Mods/EmployeeReset`](https://github.com/abix-/Schedule1Mods).
 
 ### Mod entry point
 

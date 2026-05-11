@@ -1,6 +1,6 @@
 ---
 name: abixio
-description: AbixIO Rust S3-compatible erasure-coded object server. Single binary, two-tier write path (WAL + file), per-object FTT, multi-volume + multi-node, openraft control plane. Lives in `abix-/abixio` (server) and `abix-/abixio-ui` (CLI + benchmark harness). Use when working on the core (storage, EC, WAL, write cache, read cache, TLS, S3 protocol, raft, metrics, lifecycle, healing), the abixio-ui CLI / benchmark harness, or the docs.
+description: AbixIO Rust S3-compatible erasure-coded object server. Single binary, two-tier write path (WAL + file), per-object FTT, multi-volume + multi-node, openraft control plane. Lives in [`abix-/abixio`](https://github.com/abix-/abixio) (server) and [`abix-/abixio-ui`](https://github.com/abix-/abixio-ui) (CLI + benchmark harness). Use when working on the core (storage, EC, WAL, write cache, read cache, TLS, S3 protocol, raft, metrics, lifecycle, healing), the abixio-ui CLI / benchmark harness, or the docs.
 version: "3.0"
 updated: "2026-05-11"
 ---
@@ -12,7 +12,7 @@ control plane, optional read + write caches. Built and benchmarked
 on Windows against MinIO and RustFS.
 
 > Experimental research project. Not production-ready. Expect
-> breaking changes and data loss. Repo `abix-/abixio` carries the
+> breaking changes and data loss. Repo [`abix-/abixio`](https://github.com/abix-/abixio) carries the
 > warning prominently in its README.
 
 ## Repos + where things live
@@ -21,10 +21,10 @@ Two public GitHub repos, one workspace:
 
 | Repo                 | Crate            | Role                                                  |
 | -------------------- | ---------------- | ----------------------------------------------------- |
-| `abix-/abixio`       | `abixio`         | Server binary + library. Storage, S3 protocol, raft, EC, WAL, caches, healing, lifecycle. |
-| `abix-/abixio-ui`    | `abixio-ui`      | CLI + benchmark harness. Depends on `abixio` as a path dep. |
+| [`abix-/abixio`](https://github.com/abix-/abixio)       | `abixio`         | Server binary + library. Storage, S3 protocol, raft, EC, WAL, caches, healing, lifecycle. |
+| [`abix-/abixio-ui`](https://github.com/abix-/abixio-ui)    | `abixio-ui`      | CLI + benchmark harness. Depends on `abixio` as a path dep. |
 
-### Documentation index (in `abix-/abixio` repo)
+### Documentation index (in [`abix-/abixio`](https://github.com/abix-/abixio) repo)
 
 `docs/` is authoritative: read these first for whichever subject
 you are touching:
@@ -62,7 +62,7 @@ you are touching:
 | `docs/todo.md`                    | Open work, ranked                                         |
 | `docs/img/`                       | Diagrams                                                  |
 
-### Source layout (`abix-/abixio`)
+### Source layout ([`abix-/abixio`](https://github.com/abix-/abixio))
 
 | Module                         | Subject                                                |
 | ------------------------------ | ------------------------------------------------------ |
@@ -81,7 +81,7 @@ you are touching:
 | `src/metrics/*`                | Prometheus registry + per-subject collectors           |
 | `src/admin/*`                  | `/_admin/*` route handlers                             |
 
-### Source layout (`abix-/abixio-ui`)
+### Source layout ([`abix-/abixio-ui`](https://github.com/abix-/abixio-ui))
 
 | Module                              | Subject                                       |
 | ----------------------------------- | --------------------------------------------- |
@@ -256,7 +256,7 @@ tokio_rustls::rustls::crypto::ring::default_provider()
 
 ## Benchmarks
 
-All benchmarks live in `abix-/abixio-ui` under `src/bench/`. Run
+All benchmarks live in [`abix-/abixio-ui`](https://github.com/abix-/abixio-ui) under `src/bench/`. Run
 via `abixio-ui bench`. Layer naming follows PUT flow order:
 L1=HTTP, L2=S3, L3=storage, L4=compute, L5=disk, L6=S3+storage,
 L7=e2e.

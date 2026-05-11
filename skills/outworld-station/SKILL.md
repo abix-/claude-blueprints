@@ -1,6 +1,6 @@
 ---
 name: outworld-station
-description: Modding Outworld Station (Spacescape Salvage Station, UE 5.4.4 + UE4SS). Authoritative on OWS-specific facts: the Steam exe, image-relative offsets, GObjects layout (WrappedChunked), DataTable cache-propagation gotcha, deploy folder, the shipped feature inventory. Mod code is the `outworld-station-tweaks` crate in `abix-/Grounded2Mods`. For ueforge framework doctrine, read the `ueforge` skill. Not for playing the game.
+description: Modding Outworld Station (Spacescape Salvage Station, UE 5.4.4 + UE4SS). Authoritative on OWS-specific facts: the Steam exe, image-relative offsets, GObjects layout (WrappedChunked), DataTable cache-propagation gotcha, deploy folder, the shipped feature inventory. Mod code is the `outworld-station-tweaks` crate in [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods). For ueforge framework doctrine, read the `ueforge` skill. Not for playing the game.
 user-invocable: false
 version: "1.0"
 updated: "2026-05-11"
@@ -19,7 +19,7 @@ not single-purpose. First feature live: 4x item stack tweak
 scaffold (hunger / thirst / inventory / movement tweaks, all
 driven through DataTable mutations + CDO writes).
 
-Repo: `abix-/Grounded2Mods` (same workspace as Grounded 2; the
+Repo: [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods) (same workspace as Grounded 2; the
 mods share the ueforge framework). Crate path:
 `outworld-station-tweaks/`.
 
@@ -110,7 +110,7 @@ Per the `ueforge/README.md` "Bootstrapping a new game" checklist:
 | Engine version known                | yes            | UE 5.4.4 (exe `FileVersion`)                      |
 | Anti-cheat                          | none observed  | no EAC / BattlEye folders in install              |
 | UE4SS installed                     | yes            | `OutworldStation/Binaries/Win64/ue4ss/`: main HEAD commit `06474186`, built 2026-05-08 |
-| `UE4SS.lib` regenerated             | yes            | ~4063 exports; tracked in `abix-/Grounded2Mods`   |
+| `UE4SS.lib` regenerated             | yes            | ~4063 exports; tracked in [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods)   |
 | Mod scaffold                        | yes            | `outworld-station-tweaks/`                        |
 | `/debug` endpoint                   | yes            | `127.0.0.1:17172`, smoke test passes 3/3          |
 | SDK dump                            | yes            | `OutworldStation/Binaries/Win64/ue4ss/CXXHeaderDump/` (956 .hpp files, 8.4 MB) |

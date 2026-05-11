@@ -1,6 +1,6 @@
 ---
 name: hush
-description: Hush: a firewall-style rule engine for Chrome (MV3) with a Rust/WASM detection core and a Leptos UI. Per-site (or global) rules over seven actions: block/allow (network), neuter/silence (script capture + exfil), remove/hide (DOM), spoof (fingerprint APIs). Lives in `abix-/chromium-extensions` repo. Use when modifying Hush detectors, rules, the rule schema, the Rust engine, the popup, the options page, or the seeded site profiles.
+description: Hush: a firewall-style rule engine for Chrome (MV3) with a Rust/WASM detection core and a Leptos UI. Per-site (or global) rules over seven actions: block/allow (network), neuter/silence (script capture + exfil), remove/hide (DOM), spoof (fingerprint APIs). Lives in [`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions) repo. Use when modifying Hush detectors, rules, the rule schema, the Rust engine, the popup, the options page, or the seeded site profiles.
 user-invocable: false
 version: "1.0"
 updated: "2026-05-11"
@@ -17,7 +17,7 @@ Chrome (DNR, DOM, CSS, prototype hooks).
 The detection engine and rule logic are Rust compiled to WASM
 (`wasm-pack --target web`). Chrome API glue stays in thin JS shims
 (`background.js`, `content.js`, `mainworld.js`). Options and popup
-UIs are Leptos. Public repo: `abix-/chromium-extensions`, extension
+UIs are Leptos. Public repo: [`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions), extension
 sub-tree `hush/`.
 
 ## Repo + where things live

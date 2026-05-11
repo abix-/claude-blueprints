@@ -40,7 +40,6 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | [rust](skills/rust/) | Rust standards, concurrency, unsafe/FFI, async, workspaces (default language, 6.1M bytes) |
 | [bevy](skills/bevy/) | Bevy 0.18 ECS patterns (Rust framework, Endless project) |
 | [wgsl](skills/wgsl/) | WGSL shader patterns for Bevy compute and instanced rendering |
-| [lua](skills/lua/) | Lua scripting (Project Zomboid B42, Factorio, WezTerm) -- 764K bytes |
 | [powershell](skills/powershell/) | PowerShell, VMware PowerCLI, Pester (757K bytes, powershell-practical) |
 | [csharp](skills/csharp/) | C# / .NET / Unity mods / MelonLoader+Harmony (640K bytes) |
 | [python](skills/python/) | Python standards and Windows env (393K bytes) |
@@ -48,9 +47,10 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | [typescript](skills/typescript/) | TypeScript / JavaScript (chromium-extensions, MV3 patterns) |
 | [bash](skills/bash/) | Bash scripting standards for shell scripts and CI |
 | [yaml](skills/yaml/) | YAML standards (configs, Ansible, k8s, Actions) |
-| [ansible](skills/ansible/) | Ansible playbook and role standards |
+| [ansible](skills/ansible/) | Ansible playbook and role standards (canonical, no user repos) |
 | [jinja](skills/jinja/) | Jinja2 templating (Ansible, AWX) |
 | [assembly](skills/assembly/) | x86-64 disassembly, RVAs, struct/vtable layout, hook trampolines |
+| [lua](skills/lua/) | Lua scripting (WezTerm config only; PZ/Factorio mods vendored) |
 | [godot](skills/godot/) | Godot 4.x, GDScript, NPC optimization |
 | [ahk](skills/ahk/) | AutoHotkey v2 scripting (Windows automation, game macros) |
 

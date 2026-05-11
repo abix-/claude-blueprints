@@ -1,6 +1,6 @@
 ---
 name: schedule1
-description: Modding Schedule 1 (TVGS, IL2CPP Unity + MelonLoader + Harmony). Authoritative on Schedule 1 game specifics: engine type, MelonLoader/Il2CppInterop references, eMployee mod root-cause findings, vanilla CookRoutine + StartMixingStationBehaviour internals, certainty-tracking discipline. Mod code lives in `abix-/Schedule1Mods` (the `EmployeeReset` sidecar is the current shipped mod). Not for playing the game.
+description: Modding Schedule 1 (TVGS, IL2CPP Unity + MelonLoader + Harmony). Authoritative on Schedule 1 game specifics: engine type, MelonLoader/Il2CppInterop references, eMployee mod root-cause findings, vanilla CookRoutine + StartMixingStationBehaviour internals, certainty-tracking discipline. Mod code lives in [`abix-/Schedule1Mods`](https://github.com/abix-/Schedule1Mods) (the `EmployeeReset` sidecar is the current shipped mod). Not for playing the game.
 user-invocable: false
 version: "1.0"
 updated: "2026-05-11"
@@ -15,7 +15,7 @@ ueforge, no Rust cdylib. Mods are C# DLLs (.NET 6) referencing
 the IL2CPP-interop assemblies that MelonLoader generates from
 the game's IL2CPP metadata.
 
-Repo: `abix-/Schedule1Mods`. Current shipped mod: `EmployeeReset`
+Repo: [`abix-/Schedule1Mods`](https://github.com/abix-/Schedule1Mods). Current shipped mod: `EmployeeReset`
 (a sidecar that fixes two chemist bugs caused by the
 community `eMployee` v2.2.4 mod).
 

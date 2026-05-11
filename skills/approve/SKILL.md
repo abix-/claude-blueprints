@@ -15,7 +15,7 @@ Human-only approval command. Merges a PR that passed /review.
 - `/approve <PR>`. Approve PR #{PR} in endless
 - `/approve <repo> <PR>`. Approve PR #{PR} in the specified repo
 
-Repo mapping: `endless` -> `abix-/endless`, `k3sc` -> `abix-/k3sc`
+Repo mapping: `endless` -> [`abix-/endless`](https://github.com/abix-/endless), `k3sc` -> [`abix-/k3sc`](https://github.com/abix-/k3sc)
 
 ## Steps
 

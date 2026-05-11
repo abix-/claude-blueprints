@@ -1,13 +1,13 @@
 ---
 name: powershell
-description: PowerShell standards covering function shape, VMware PowerCLI, modules, and Pester testing. Sourced from abix-/powershell-practical (Aluminium module, 10k LOC vSphere automation). Use when writing PowerShell.
+description: PowerShell standards covering function shape, VMware PowerCLI, modules, and Pester testing. Sourced from [abix-/powershell-practical](https://github.com/abix-/powershell-practical) (Aluminium module, 10k LOC vSphere automation). Use when writing PowerShell.
 user-invocable: false
 version: "2.0"
 updated: "2026-05-11"
 ---
 # PowerShell
 
-Source repo: `abix-/powershell-practical/Aluminium` (vSphere /
+Source repo: [`abix-/powershell-practical/Aluminium`](https://github.com/abix-/powershell-practical) (vSphere /
 Windows automation module, ~10k LOC). Style is **pragmatic
 PowerCLI**: function-per-file in flat layout, comment-based help on
 every cmdlet, `PSCustomObject` outputs that pipe cleanly.

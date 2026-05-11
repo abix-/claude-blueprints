@@ -92,8 +92,8 @@ NEVER recommend merge unless ALL acceptance criteria checkboxes are satisfied. T
 - `issue repo N`: issue number in specified repo
 
 Repo mapping:
-- `endless` -> `abix-/endless`
-- `k3sc` -> `abix-/k3sc`
+- `endless` -> [`abix-/endless`](https://github.com/abix-/endless)
+- `k3sc` -> [`abix-/k3sc`](https://github.com/abix-/k3sc)
 
 All `gh` commands must use `--repo {owner/repo}`.
 

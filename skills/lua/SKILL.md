@@ -1,16 +1,26 @@
 ---
 name: lua
-description: Lua scripting standards for game modding (Project Zomboid Build 42, Factorio) and WezTerm configuration. Sourced from abix-/CustomizableContainers (PZ B42), abix-/Fluid-Void-Extra (Factorio), and claude-blueprints/wezterm/.wezterm.lua.
+description: Lua scripting standards for game modding (Project Zomboid Build 42, Factorio) and WezTerm configuration. The only user-authored Lua in scope is the WezTerm config; the PZ + Factorio repos here are vendored Steam Workshop / community-mod uploads, used as reference patterns, not as user-style sources.
 user-invocable: false
-version: "1.0"
+version: "1.1"
 updated: "2026-05-11"
 ---
 # Lua
 
-Source repos: `abix-/CustomizableContainers` (Project Zomboid Build
-42 mod, 750K), `abix-/Fluid-Void-Extra` (Factorio mod, 11K),
-`claude-blueprints/wezterm/.wezterm.lua` (WezTerm config). Three
-very different Lua environments; this skill covers all three.
+**Provenance note:** Of the three Lua surfaces below, only the
+WezTerm config is user-authored. The PZ Build 42 and Factorio
+samples come from vendored community mods uploaded for backup; they
+are reference patterns for the respective engines, not user style.
+
+Source surfaces:
+
+- [claude-blueprints/wezterm/.wezterm.lua](https://github.com/abix-/claude-blueprints/blob/main/wezterm/.wezterm.lua)
+  -- the only user-authored Lua. WezTerm 5.4, full standard library,
+  event hooks.
+- [abix-/CustomizableContainers](https://github.com/abix-/CustomizableContainers)
+  -- vendored Project Zomboid Build 42 mod (Kahlua, PZ event API).
+- [abix-/Fluid-Void-Extra](https://github.com/abix-/Fluid-Void-Extra)
+  -- vendored Factorio mod (Lua 5.2, sandboxed, data + control phases).
 
 ## Target versions
 

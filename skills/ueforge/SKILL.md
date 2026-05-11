@@ -1,6 +1,6 @@
 ---
 name: ueforge
-description: ueforge framework: the base layer every UE4SS Rust mod in the Grounded2Mods workspace builds on. Authoritative on the composition model (Effect/Trigger/Skill), the Def/Registry/Instance/Controller pattern, hot reload, discovery, hardening doctrine, and the five framework modules (rpg, stacks, difficulty, inventory, damage). Use when writing or modifying code under `ueforge/` in abix-/Grounded2Mods, or when promoting a pattern out of a game crate into the framework.
+description: ueforge framework: the base layer every UE4SS Rust mod in the Grounded2Mods workspace builds on. Authoritative on the composition model (Effect/Trigger/Skill), the Def/Registry/Instance/Controller pattern, hot reload, discovery, hardening doctrine, and the five framework modules (rpg, stacks, difficulty, inventory, damage). Use when writing or modifying code under `ueforge/` in [abix-/Grounded2Mods](https://github.com/abix-/Grounded2Mods), or when promoting a pattern out of a game crate into the framework.
 user-invocable: false
 version: "1.0"
 updated: "2026-05-11"
@@ -494,7 +494,7 @@ crate's `ue/offsets.rs`, not here.
 
 ## Where things live (index)
 
-Public repo: `abix-/Grounded2Mods`. The framework crate is
+Public repo: [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods). The framework crate is
 `ueforge/` at the repo root. All paths below are relative to the
 crate root unless noted.
 

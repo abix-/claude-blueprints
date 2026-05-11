@@ -15,7 +15,7 @@ Close a PR that failed /review, post findings on the linked issue, and reset.
 - `/reject <PR> <issue>`. Endless repo (default)
 - `/reject <repo> <PR> <issue>`. Explicit repo
 
-Repo mapping: `endless` -> `abix-/endless`, `k3sc` -> `abix-/k3sc`
+Repo mapping: `endless` -> [`abix-/endless`](https://github.com/abix-/endless), `k3sc` -> [`abix-/k3sc`](https://github.com/abix-/k3sc)
 
 ## Steps
 

@@ -7,7 +7,7 @@ updated: "2026-05-11"
 ---
 # Go
 
-Source repo: `abix-/k3sc` (12K LOC, Go 1.25). When in doubt, match how
+Source repo: [`abix-/k3sc`](https://github.com/abix-/k3sc) (12K LOC, Go 1.25). When in doubt, match how
 k3sc does it. Quoted examples below are real file paths in that repo.
 
 ## Project layout

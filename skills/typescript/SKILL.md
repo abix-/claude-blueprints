@@ -1,14 +1,14 @@
 ---
 name: typescript
-description: TypeScript and JavaScript standards. Sourced from abix-/chromium-extensions (Hush + filter-anything-everywhere). Use when writing TS/JS, including browser extension bootstrap shims, MV3 service workers, and small web frontends.
+description: TypeScript and JavaScript standards. Sourced from [abix-/chromium-extensions](https://github.com/abix-/chromium-extensions) (Hush + filter-anything-everywhere). Use when writing TS/JS, including browser extension bootstrap shims, MV3 service workers, and small web frontends.
 user-invocable: false
 version: "2.0"
 updated: "2026-05-11"
 ---
 # TypeScript / JavaScript
 
-Source repos: `abix-/chromium-extensions/filter-anything-everywhere`
-(TS, jQuery, jest), `abix-/chromium-extensions/hush` (plain JS shims
+Source repos: [`abix-/chromium-extensions/filter-anything-everywhere`](https://github.com/abix-/chromium-extensions)
+(TS, jQuery, jest), [`abix-/chromium-extensions/hush`](https://github.com/abix-/chromium-extensions) (plain JS shims
 fronting a Rust/WASM core).
 
 The decision between TS and plain JS in this codebase is **not**

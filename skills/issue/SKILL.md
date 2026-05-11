@@ -1,6 +1,6 @@
 ---
 name: issue
-description: Create, claim, and work GitHub issues across project repos (abix-/endless, abix-/k3sc). Use when the user invokes `issue` with an explicit issue number, wants the next eligible issue claimed, or wants to create new issues. For claim/work flows, read and execute `C:/code/endless/docs/ai-collab-workflow.md`.
+description: Create, claim, and work GitHub issues across project repos ([abix-/endless](https://github.com/abix-/endless), [abix-/k3sc](https://github.com/abix-/k3sc)). Use when the user invokes `issue` with an explicit issue number, wants the next eligible issue claimed, or wants to create new issues. For claim/work flows, read and execute `C:/code/endless/docs/ai-collab-workflow.md`.
 argument-hint: "[repo issue-number | issue-number | description of issues to create]"
 disable-model-invocation: false
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write
@@ -16,8 +16,8 @@ When `$ARGUMENTS` is freeform text (not a bare number), create issues. Determine
 
 | Repo | When |
 |------|------|
-| `abix-/endless` | Rust/Bevy code, gameplay, ECS, shaders, game features |
-| `abix-/k3sc` | Go CLI, k8s manifests, operator, TUI, agent pods, Docker image |
+| [`abix-/endless`](https://github.com/abix-/endless) | Rust/Bevy code, gameplay, ECS, shaders, game features |
+| [`abix-/k3sc`](https://github.com/abix-/k3sc) | Go CLI, k8s manifests, operator, TUI, agent pods, Docker image |
 
 Use `gh issue create -R <owner/repo>` with `--title` and `--body`. The `-R` flag means you can run this from any directory. Do NOT cd to the target repo. Include acceptance criteria as `- [ ]` checkboxes when the scope is clear. Add labels if obvious (bug, feature, etc.).
 

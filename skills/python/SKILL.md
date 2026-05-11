@@ -7,7 +7,7 @@ updated: "2026-05-11"
 ---
 # Python
 
-Source repos: `abix-/abixio` (build + e2e), `abix-/endless/scripts`,
+Source repos: [`abix-/abixio`](https://github.com/abix-/abixio) (build + e2e), [`abix-/endless/scripts`](https://github.com/abix-/endless),
 `claude-blueprints/scripts`. Style is **stdlib-first, script-shaped,
 no virtualenvs**. Real CPython on the machine, used directly.
 

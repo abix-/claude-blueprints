@@ -15,10 +15,10 @@ codebase has gravity). When a task could be done in Rust OR
 another language and there's no environmental constraint,
 pick Rust.
 
-Distilled from doing it across `abix-/Grounded2Mods` (`ueforge`
-+ consumer mods), `abix-/abixio` + `abix-/abixio-ui` (S3
-server), `abix-/chromium-extensions` (Rust/WASM extension),
-and `abix-/endless` (Bevy game). When you need a concrete
+Distilled from doing it across [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods) (`ueforge`
++ consumer mods), [`abix-/abixio`](https://github.com/abix-/abixio) + [`abix-/abixio-ui`](https://github.com/abix-/abixio-ui) (S3
+server), [`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions) (Rust/WASM extension),
+and [`abix-/endless`](https://github.com/abix-/endless) (Bevy game). When you need a concrete
 canonical example, look in those repos.
 
 For ECS / Bevy code read the `bevy` skill (different idiom).
@@ -710,6 +710,6 @@ Know what each std type costs. Pick deliberately.
   (terse functions, no over-engineering, no comments-as-what).
 - Read the `try-harder` skill for response calibration.
 - Concrete examples of every pattern above live in
-  `abix-/Grounded2Mods` (ueforge crate), `abix-/abixio`, or
-  `abix-/chromium-extensions` (hush crate). Grep for the
+  [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods) (ueforge crate), [`abix-/abixio`](https://github.com/abix-/abixio), or
+  [`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions) (hush crate). Grep for the
   pattern name.
