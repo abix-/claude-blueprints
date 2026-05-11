@@ -2,7 +2,8 @@
 
 ## dehyphen rollout (em-dash + double-hyphen sweep)
 
-Status: Markdown handling validated. Source-file handling not built.
+Status: source-file support shipped for the languages we actually
+use. Pre-commit hook and cross-repo sweep tooling still open.
 
 The user's rule (CLAUDE.md "Absolute rules"): no em-dashes and no
 double-hyphens as punctuation in prose. The cleanup script lives at
@@ -18,91 +19,105 @@ double-hyphens as punctuation in prose. The cleanup script lives at
       cargo separator stays intact).
 - [x] `--check` mode uses rewriter-equivalence (no substring false
       positives from `---` containing ` -- `).
-- [x] Swept session skills clean: `ueforge`, `grounded2`,
-      `outworld-station`, `schedule1`, `abixio`, `hush`, `rust`.
+- [x] Default replacement is period + capitalize next word
+      (was colon; periods read more human).
 
-### Next: Markdown sweep across all repos
+- [x] **Markdown sweep across all owned repos**:
+      `abix-/claude-blueprints`, `abix-/Grounded2Mods`,
+      `abix-/abixio`, `abix-/abixio-ui`, `abix-/chromium-extensions`,
+      `abix-/Schedule1Mods`, `abix-/endless`, `abix-/k3sc`.
+      ~130 markdown files, ~2200 prose violations rewritten.
 
-Run the script on every `.md` in every owned repo, review the diff per
-repo, commit per repo. Reverse-chronological priority (skills are
-public; user-facing docs next; internal notes last).
+- [x] **`--lang rust`** shipped. Tokenizer handles `//`, `///`, `//!`,
+      `/* ... */` (nested), preserves `"..."` strings, raw strings
+      `r"..."` / `r#"..."#` (any hash count), char literals, lifetimes
+      vs char literal disambiguation.
 
-Repos to sweep (Markdown only, this pass):
+- [x] **`--lang python`** shipped. Rewrites `#` line comments. Preserves
+      all strings (single/triple, with `r`/`b`/`f`/`u` prefixes).
+      Triple-string docstrings intentionally NOT rewritten so test
+      fixtures and regexes stay intact.
 
-- [ ] `abix-/claude-blueprints` (skills not yet swept: bevy, code,
-      try-harder, abixio is already done, others; plus `README.md`,
-      `CLAUDE.md` if appropriate)
-- [ ] `abix-/Grounded2Mods` (`docs/`, every crate's `docs/`,
-      `README.md`s, `CHANGELOG.md`s)
-- [ ] `abix-/abixio` (huge `docs/` tree)
-- [ ] `abix-/abixio-ui`
-- [ ] `abix-/chromium-extensions` (each extension's `docs/` and
-      `README.md`, especially `hush/`)
-- [ ] `abix-/Schedule1Mods` (`docs/` and per-mod `README.md`s)
-- [ ] `abix-/endless` (any remaining docs)
-- [ ] `abix-/k3sc` (if any prose docs)
+- [x] **`--lang csharp`** shipped. Handles `//`, `///` (XML doc),
+      `/* ... */` (not nested). Preserves regular, verbatim `@"..."`,
+      interpolated `$"..."`, verbatim-interpolated, raw `"""..."""`
+      (C# 11+), and char literals.
 
-Process per repo: `python <path>/dehyphen.py <glob>` then `git diff`
-review, then commit. The user expects ALL of them.
+- [x] **`--lang go`** shipped. Handles `//`, `/* ... */`. Preserves
+      interpreted strings, raw backtick strings (multi-line),
+      rune literals.
 
-### Next: source-file support
+- [x] **`--lang toml`** shipped. Handles `#` line comments. Preserves
+      `"..."`, `'...'`, triple-double, triple-single string forms.
 
-Extend the script to handle non-Markdown files where prose lives in
-comments and docstrings. Risk: mangling actual code (`x--` in C-family,
-`a -- b` in Haskell pragmas, etc.).
+- [x] **`--lang shell`** shipped. Handles `#` comments (only at
+      whitespace boundary so `${foo#bar}` parameter expansion stays
+      code). Preserves `"..."` and `'...'` strings.
 
-Plan: add a `--lang <kind>` flag with these modes. Default stays
-markdown.
+- [x] **`--lang js`** shipped (covers `.js`, `.mjs`, `.cjs`, `.ts`,
+      `.tsx`, `.jsx`). Handles `//`, `/* ... */`. Preserves
+      `"..."`, `'...'`, and template literals `` `...` `` with
+      balanced `${...}` interpolation.
 
-- [ ] `--lang rust`: rewrite inside `//`, `///`, `//!`, `/* ... */`
-      block comments only. Skip string literals (`"..."`, `r"..."`,
-      `r#"..."#`). Skip code outside comments entirely.
-- [ ] `--lang python`: rewrite inside `#` line comments and docstrings
-      (`"""..."""`, `'''...'''`). Skip string literals.
-- [ ] `--lang go`: rewrite inside `//` and `/* ... */` comments only.
-- [ ] `--lang csharp`: rewrite inside `//`, `///`, `/* ... */` comments.
-- [ ] `--lang shell`: rewrite inside `#` comments. Skip strings.
-- [ ] `--lang toml`: rewrite inside `#` comments. Leave values alone.
-- [ ] `--lang plain`: treat whole file as prose. For `.txt`, `.rst`.
+- [x] **`--lang wgsl`** shipped. Comments-only (no strings in WGSL).
 
-Test fixture for each lang in `scripts/test/dehyphen/<lang>.<ext>`
-with golden output.
+- [x] **`--lang yaml`** shipped. `#` comments at whitespace boundary;
+      basic and literal scalars preserved.
 
-### Next: auto-detect file type
+- [x] **`--lang plain`** shipped. Whole file is prose.
 
-- [ ] By extension: `.md`/`.markdown` -> markdown; `.rs` -> rust;
-      `.py` -> python; etc. Drop `--lang` from common call sites.
-- [ ] `--mode strict` for the audit: any prose violation in any
-      supported file type is an error.
+- [x] **Auto-detect** by file extension. `.md`, `.rs`, `.py`, `.cs`,
+      `.go`, `.toml`, `.sh`, `.bash`, `.js`/`.ts`/etc, `.wgsl`,
+      `.yaml`/`.yml`, `.txt`/`.rst`. Override via `--lang`.
 
-### Next: pre-commit hook
+- [x] **Source-file sweep across all owned repos**:
+      Rust: 238 files (`grounded2mods` 108, `abixio` 35,
+      `abixio-ui` 19, `endless` 76, plus `chromium-extensions/hush`
+      after audit caught it).
+      Go: k3sc 9, endless 1.
+      Python: 2 in claude-blueprints scripts.
+      C#: 1 in Schedule1Mods.
+      Shell: 2 (claude-blueprints, k3sc).
+      JS/TS: ~6 in chromium-extensions.
+      WGSL: 3 in endless.
+      YAML: 1 in k3sc.
+      All clean on final audit.
 
-- [ ] Optional pre-commit hook in `hooks/` that runs
-      `dehyphen.py --check` on staged Markdown files. Block the
-      commit if any prose violation. Document in README.
+### Still open
 
-### Next: cross-repo sweep tooling
+- [ ] **Pre-commit hook** in `claude-blueprints/hooks/` that runs
+      `dehyphen.py --check` on staged files. Block commit if any
+      prose violation. Wire into install instructions.
 
-- [ ] `scripts/sweep_repos.sh` (or `.py`): given a list of repo paths,
-      run dehyphen on every supported file type, summarize per-repo
-      changes, commit per repo with a standard message. The user
-      expects to run this once to clean up all 30 days of damage.
+- [ ] **Cross-repo sweep helper** `scripts/dehyphen_sweep.py` (or
+      `.sh`): given a list of repo paths, find supported files,
+      run dehyphen, summarize per-repo changes, commit per-file
+      with the standard message format. The kind of tool we wished
+      we had at the start of this rollout.
 
-### Known gaps to document
+- [ ] **Docstring rewriting** for Python (currently OFF for safety).
+      If user wants their module docstrings cleaned automatically,
+      add `--lang python --include-docstrings` opt-in flag. Risk:
+      multi-line string fixtures inside test files get mangled.
 
-- The script's prose-rewrite heuristic picks `. ` (next char uppercase)
-  or `: ` (otherwise). Sometimes a comma would be more natural. Reviewer
-  responsibility, not script responsibility. Reviewing is cheap; the
-  script never lengthens content.
-- Inline triple-dash `Three --- dashes` is left alone (correct: not
-  the same rule).
-- Numeric ranges `2020--2025` are left alone (correct).
+### Known gaps documented
+
+- Rust: char-literal recognizer is conservative. Lifetimes vs char
+  literals: we err on NOT treating ambiguous `'X` as char literals
+  (walked as code, which is safe because code is never rewritten).
+- Shell: heredoc bodies are treated as code. Prose violations inside
+  a heredoc are missed but also never mangled.
+- The period-vs-colon heuristic is not perfect. Sometimes a comma
+  would read more natural. Reviewer responsibility; the script
+  never lengthens content so reviewing is cheap.
+- Inline triple-dash `Three --- dashes` is left alone (not the same
+  rule).
+- Numeric ranges `2020--2025` are left alone (no spaces).
+- Vendored content (e.g. `ueforge/cpp/imgui/`,
+  `abixio/site/assets/javascripts/lunr/`) is excluded from sweeps.
 
 ### Acceptance
 
-The sweep is done when:
-
-1. `python scripts/dehyphen.py --check <every committed .md across all
-   owned repos>` exits 0.
-2. Same for source files after `--lang` support lands.
-3. Pre-commit hook prevents new violations from landing.
+1. `python scripts/dehyphen.py --check <every committed file across
+   all owned repos>` exits 0. **DONE** for the file types we sweep.
+2. Pre-commit hook prevents new violations from landing. **OPEN.**
