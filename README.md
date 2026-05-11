@@ -54,7 +54,7 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | TypeScript | 0 | 0.0% |
 | **Total** | **8,611,135** | **100%** |
 
-**Rust attribution by repo** (6.14M / 71.3% of total; all user-authored, verified clean of vendored/generated code):
+**Rust attribution by repo** (6.14M / 71.3% of total; all user-authored, verified clean of vendored/generated code). [Endless](https://github.com/abix-/endless) alone is 2.46M bytes. 40% of all Rust output and 29% of every byte across every language:
 
 | Repo | Bytes | % of Rust | Project |
 |------|------:|----------:|---------|
