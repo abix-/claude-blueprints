@@ -311,6 +311,130 @@ def _check_rust(text: str) -> int:
 
 
 # ----------------------------------------------------------------------
+# Python processor
+# ----------------------------------------------------------------------
+
+
+def _tokenize_python(text: str) -> list[tuple[str, str]]:
+    """Split a Python source file into (kind, text) tokens.
+
+    Kinds: 'code', 'line_comment', 'string'. Only line_comment gets
+    rewritten by the caller. Triple-strings and single-line strings
+    (including prefixed r/b/f/u variants) are all kept intact under
+    'string'; conservatively never rewrite inside any string literal.
+
+    Best-effort. Handles: # line comments, '...' / "..." single-line
+    strings with backslash escapes, '''...''' / \"\"\"...\"\"\" triple
+    strings, prefixed strings (r/R/b/B/f/F/u/U + 1-2 char combinations).
+    """
+    i = 0
+    n = len(text)
+    out: list[tuple[str, str]] = []
+    code_start = 0
+
+    def flush_code(end: int) -> None:
+        nonlocal code_start
+        if end > code_start:
+            out.append(("code", text[code_start:end]))
+
+    def _string_prefix_len(pos: int) -> int:
+        # Look at up to 2 chars before `pos` to detect a string prefix
+        # like r, b, f, rb, br, fr, rf, etc. The prefix must be a complete
+        # identifier (i.e. NOT preceded by another identifier char).
+        prefix_chars = "rRbBfFuU"
+        plen = 0
+        if pos - 1 >= 0 and text[pos - 1] in prefix_chars:
+            plen = 1
+            if pos - 2 >= 0 and text[pos - 2] in prefix_chars:
+                plen = 2
+        if plen > 0:
+            preceding = pos - plen - 1
+            if preceding >= 0 and (text[preceding].isalnum() or text[preceding] == "_"):
+                plen = 0
+        return plen
+
+    while i < n:
+        c = text[i]
+
+        # `#` line comment.
+        if c == "#":
+            flush_code(i)
+            j = text.find("\n", i)
+            if j < 0:
+                j = n
+            out.append(("line_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Triple-quoted string.
+        if text[i : i + 3] in ('"""', "'''"):
+            plen = _string_prefix_len(i)
+            flush_code(i - plen)
+            quote = text[i : i + 3]
+            j = text.find(quote, i + 3)
+            if j < 0:
+                j = n
+            else:
+                j += 3
+            out.append(("string", text[i - plen : j]))
+            i = j
+            code_start = i
+            continue
+
+        # Single-line string. Handles escape sequences and stops at unescaped
+        # newline (Python doesn't allow unescaped newlines in single-line strings).
+        if c in ('"', "'"):
+            plen = _string_prefix_len(i)
+            flush_code(i - plen)
+            quote = c
+            j = i + 1
+            while j < n:
+                if text[j] == "\\" and j + 1 < n:
+                    j += 2
+                elif text[j] == "\n":
+                    break  # unterminated, bail
+                elif text[j] == quote:
+                    j += 1
+                    break
+                else:
+                    j += 1
+            out.append(("string", text[i - plen : j]))
+            i = j
+            code_start = i
+            continue
+
+        i += 1
+
+    flush_code(n)
+    return out
+
+
+def _process_python(text: str) -> tuple[str, int]:
+    tokens = _tokenize_python(text)
+    out_parts: list[str] = []
+    remaining = 0
+    for kind, chunk in tokens:
+        if kind == "line_comment":
+            new_chunk = _rewrite_prose(chunk)
+            if _line_would_change(new_chunk):
+                remaining += 1
+            out_parts.append(new_chunk)
+        else:
+            out_parts.append(chunk)
+    return "".join(out_parts), remaining
+
+
+def _check_python(text: str) -> int:
+    tokens = _tokenize_python(text)
+    return sum(
+        1
+        for kind, chunk in tokens
+        if kind == "line_comment" and _line_would_change(chunk)
+    )
+
+
+# ----------------------------------------------------------------------
 # Plain processor (whole file is prose)
 # ----------------------------------------------------------------------
 
@@ -339,6 +463,8 @@ LANG_BY_EXT = {
     ".md": "markdown",
     ".markdown": "markdown",
     ".rs": "rust",
+    ".py": "python",
+    ".pyi": "python",
     ".txt": "plain",
     ".rst": "plain",
 }
@@ -351,12 +477,14 @@ def _detect_lang(path: pathlib.Path) -> str:
 PROCESSORS = {
     "markdown": _process_markdown,
     "rust": _process_rust,
+    "python": _process_python,
     "plain": _process_plain,
 }
 
 CHECKERS = {
     "markdown": _check_markdown,
     "rust": _check_rust,
+    "python": _check_python,
     "plain": _check_plain,
 }
 
