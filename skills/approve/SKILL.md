@@ -11,9 +11,9 @@ Human-only approval command. Merges a PR that passed /review.
 
 ## Arguments
 
-- `/approve` -- approve the most recently reviewed PR in this conversation
-- `/approve <PR>` -- approve PR #{PR} in endless
-- `/approve <repo> <PR>` -- approve PR #{PR} in the specified repo
+- `/approve`. Approve the most recently reviewed PR in this conversation
+- `/approve <PR>`. Approve PR #{PR} in endless
+- `/approve <repo> <PR>`. Approve PR #{PR} in the specified repo
 
 Repo mapping: `endless` -> `abix-/endless`, `k3sc` -> `abix-/k3sc`
 
