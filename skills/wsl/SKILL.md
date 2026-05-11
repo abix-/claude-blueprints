@@ -64,7 +64,7 @@ Edit `C:\Users\Abix\.wslconfig`. Requires `wsl --shutdown` and relaunch.
 
 - k3s (kubernetes) -- `sudo k3s kubectl ...`
 - nerdctl 2.0.4 -- `sudo nerdctl --address /run/k3s/containerd/containerd.sock ...`
-- BuildKit -- systemd service, uses k3s containerd with namespace k8s.io
+- BuildKit. Systemd service, uses k3s containerd with namespace k8s.io
 - kubectl (Windows): `C:\Users\Abix\AppData\Local\Microsoft\WinGet\Packages\Kubernetes.kubectl_Microsoft.Winget.Source_8wekyb3d8bbwe\kubectl.exe`
 
 ## Troubleshooting
