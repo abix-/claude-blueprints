@@ -11,7 +11,7 @@ user-invocable: true
 |---------|-------------|-------------|
 | `/issue [N]` | Create issues with `ready` label, or claim and implement an issue | Create bugs/features or start work on an issue |
 | `/done` | Update docs, changelog, commit, push. Also runs as part of /review when docs are missing | After finishing feature work, or standalone |
-| `/review [repo] [N]` | Full review with all gates: compliance, acceptance, spec, DRY, regression tests, benchmarks | Review a PR before merge -- all review logic lives here |
+| `/review [repo] [N]` | Full review with all gates: compliance, acceptance, spec, DRY, regression tests, benchmarks | Review a PR before merge. All review logic lives here |
 | `/approve [N]` | Merge a PR that passed /review | After /review says ready to merge |
 | `/reject [N]` | Close failed PR, comment on issue, reset | After /review says needs work |
 | `/n` | Peek at next item needing review (read-only, no reservation) | Quick look at what needs attention |
