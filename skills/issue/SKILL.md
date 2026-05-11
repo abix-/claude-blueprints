@@ -19,7 +19,7 @@ When `$ARGUMENTS` is freeform text (not a bare number), create issues. Determine
 | `abix-/endless` | Rust/Bevy code, gameplay, ECS, shaders, game features |
 | `abix-/k3sc` | Go CLI, k8s manifests, operator, TUI, agent pods, Docker image |
 
-Use `gh issue create -R <owner/repo>` with `--title` and `--body`. The `-R` flag means you can run this from any directory -- do NOT cd to the target repo. Include acceptance criteria as `- [ ]` checkboxes when the scope is clear. Add labels if obvious (bug, feature, etc.).
+Use `gh issue create -R <owner/repo>` with `--title` and `--body`. The `-R` flag means you can run this from any directory. Do NOT cd to the target repo. Include acceptance criteria as `- [ ]` checkboxes when the scope is clear. Add labels if obvious (bug, feature, etc.).
 
 **Always add `--label ready`** so the k3sc operator can dispatch the issue to agents.
 
@@ -28,12 +28,12 @@ For batch creation (multiple issues at once), create them sequentially and repor
 ### 2. Claim/work mode (`/issue [repo] <number>` or `/issue` with no args)
 
 **Repo detection from arguments:**
-- `/issue 42` -- bare number, repo = `endless` (default)
-- `/issue endless 42` -- explicit repo
-- `/issue k3sc 8` -- explicit repo
-- `/issue` -- no args, auto-pick from all repos
+- `/issue 42`. Bare number, repo = `endless` (default)
+- `/issue endless 42`. Explicit repo
+- `/issue k3sc 8`. Explicit repo
+- `/issue`. No args, auto-pick from all repos
 
-When repo is specified, add `-R abix-/<repo>` to ALL `gh issue` and `gh pr` commands. This is critical -- without `-R`, gh defaults to the cwd's repo which may be wrong.
+When repo is specified, add `-R abix-/<repo>` to ALL `gh issue` and `gh pr` commands. This is critical. Without `-R`, gh defaults to the cwd's repo which may be wrong.
 
 **Repo-specific behavior:**
 - **endless**: full workflow with compliance docs, cargo-lock, spec gate, regression tests
@@ -78,7 +78,7 @@ Before creating a branch or PR for an issue, check for existing work:
 1. Check for an existing PR: `gh pr list --head issue-{N} --state open --json number,title`
 2. Check for an existing remote branch: `git ls-remote --heads origin issue-{N}`
 
-If an open PR already exists for the issue, work on that PR's branch -- do not create a new branch or PR. Check it out with `git fetch origin issue-{N} && git checkout issue-{N}`.
+If an open PR already exists for the issue, work on that PR's branch. Do not create a new branch or PR. Check it out with `git fetch origin issue-{N} && git checkout issue-{N}`.
 
 Never create duplicate issue branches (e.g., `issue-{N}-v2`). One issue = one branch = one PR.
 
@@ -95,7 +95,7 @@ After checking out an existing `issue-{N}` branch (whether resuming your own wor
 3. If `mergeable` is `MERGEABLE` or `mergeStateStatus` is `CLEAN`, proceed normally.
 4. If the PR has no mergeable status yet (`UNKNOWN`), wait a few seconds and retry once.
 
-Do not begin implementation or review work on a branch with merge conflicts -- fix them first.
+Do not begin implementation or review work on a branch with merge conflicts. Fix them first.
 
 ## Branch model
 
@@ -133,7 +133,7 @@ If the issue has another agent's owner label, do not act on it.
 - prefer one `gh issue list` to identify a candidate, then one `gh issue view <number> --comments` for the selected issue
 - reuse existing approval if GitHub access is already approved
 
-## Label management -- operator only
+## Label management. Operator only
 
 **Agents do NOT touch GitHub labels.** The k3sc operator owns all label transitions:
 - Operator adds owner label when dispatching
@@ -154,11 +154,11 @@ Agents NEVER merge PRs, close issues, or delete remote branches. Only the human 
 - Include the PR link in handoff comments.
 - Do not hand off, request review, or transition labels until the issue branch is pushed and `origin/issue-{N}` verifies locally.
 - Complete one workflow step end-to-end before stopping: tests or an explicit blocker, GitHub comment, and label transition.
-- Do NOT merge PRs, close issues, or delete remote branches -- human only.
+- Do NOT merge PRs, close issues, or delete remote branches. Human only.
 
 ### endless repo execution
 - Always run `k3sc cargo-lock fmt` before committing any code changes.
-- Always run `k3sc cargo-lock clippy --release -- -D warnings` before committing. Fix all warnings before commit -- this matches the CI build gate.
+- Always run `k3sc cargo-lock clippy --release -- -D warnings` before committing. Fix all warnings before commit. This matches the CI build gate.
 - Use `k3sc cargo-lock` for all cargo commands (build, check, clippy, fmt, test) to serialize builds across agents sharing one target dir.
 
 ### k3sc repo execution
