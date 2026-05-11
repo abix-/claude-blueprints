@@ -807,7 +807,7 @@ Check `if shooter < 0` to skip XP/aggro logic.
   Indent with tabs, snake_case, prefix private with `_`.
 - **GDScript performance** (docs "Optimization using servers"). The
   authoritative page on bypassing the scene tree for hot loops.
-- **godotengine/godot-demo-projects** -- official examples per
+- **godotengine/godot-demo-projects**. Official examples per
   topic. Match the branch (`master`, `3.x`, `4.0-stable`, etc.).
 - **godot-proposals** repo: track upcoming API changes before they
   land.
@@ -975,7 +975,7 @@ if button.pressed.is_connected(_on_button_pressed):
 - Spawning / freeing nodes for cheap effects. Use pools.
 - Custom signals when a built-in (`tree_entered`, `child_entered_tree`)
   would do.
-- `connect` without storing the target Callable -- can't disconnect
+- `connect` without storing the target Callable. Can't disconnect
   cleanly.
 - `_unhandled_input` doing heavy work; it runs every input event.
 - Mixing `_process` and `_physics_process` for the same state.
