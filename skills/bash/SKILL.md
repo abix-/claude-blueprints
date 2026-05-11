@@ -28,7 +28,7 @@ IFS=$'\n\t'
 - `-u` error on unset variable expansion.
 - `-o pipefail` propagate failure through pipes (without it, `false | true`
   is success).
-- `IFS=$'\n\t'` -- avoid space-splitting traps when reading lines.
+- `IFS=$'\n\t'`. Avoid space-splitting traps when reading lines.
   Adds discipline; some scripts that intentionally word-split need to
   un-set this locally.
 - `-x` for debugging; remove before shipping.
@@ -85,7 +85,7 @@ print_config() {
 - Declare with `name() { ... }`. No `function` keyword (POSIX).
 - `local` for all internal vars. Without it, you mutate caller's
   scope.
-- `local x="$1"` -- quote even the assignment.
+- `local x="$1"`. Quote even the assignment.
 - Return status via exit code (`return N`), data via stdout. Mixing
   the two is a common bug.
 - Capture output: `result="$(my_func arg)"`. The `$(...)` strips
@@ -291,10 +291,10 @@ Run `shellcheck script.sh` on every file. Common rules to fix
 - SC2068: `$@` instead of `"$@"`.
 - SC2206/SC2207: assigning command output to an array splits on
   whitespace; use `mapfile`.
-- SC2164: `cd` without `||` -- if it fails, the rest of the script
+- SC2164: `cd` without `||`. If it fails, the rest of the script
   ruins your day.
 
-Disable inline with `# shellcheck disable=SC#### # reason` -- always
+Disable inline with `# shellcheck disable=SC#### # reason`. Always
 with a reason.
 
 ## Avoid
@@ -306,8 +306,8 @@ with a reason.
 - `[ $? -eq 0 ]`. Use `if cmd; then ...; fi`.
 - Long inline scripts in CI YAML. Extract to `scripts/foo.sh` and
   call it; CI YAML lacks the editing affordances of a real script.
-- `for x in $list` -- word splits, glob expands. Use arrays.
-- `bash -c "cmd $var"` -- injection. Pass args, don't interpolate.
+- `for x in $list`. Word splits, glob expands. Use arrays.
+- `bash -c "cmd $var"`. Injection. Pass args, don't interpolate.
 - Two passes of `sed` when one `awk` does it.
 - Building strings with repeated `+=` in a tight loop. Use printf to
   a buffer or just collect in an array.
