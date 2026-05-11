@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-dehyphen.py: strip em-dashes and prose double-hyphens from Markdown.
+dehyphen.py: strip em-dashes and prose double-hyphens from text files.
 
 Why this exists
 ---------------
@@ -9,38 +9,45 @@ The rule lives in ~/.claude/CLAUDE.md under "Absolute rules" and as a
 feedback memory. Drafts still leak them; this script catches the leaks
 and rewrites them as natural punctuation.
 
-What it does
-------------
-For each .md file passed on the command line, walk lines top-to-bottom:
+Languages supported
+-------------------
+- `markdown` (default for .md files). Skips fenced code blocks, HR rules,
+  YAML front-matter, inline backtick code spans, and ` -- ` inside
+  CLI flag patterns. Rewrites prose only.
+- `rust` (default for .rs files). Tokenizes the file to find line comments,
+  block comments, and doc-comments. Rewrites prose only inside comments.
+  Never touches code, string literals, raw strings, or char literals.
+- `plain` (default for .txt). Treats the whole file as prose.
 
-  1. Skip fenced code blocks (between ``` fences).
-  2. Skip lines that look like CLI flag tables (`--release`, `--foo=bar`).
-  3. In remaining "prose" content, rewrite:
-       ' -- '  ->  '. ' or ': ' (heuristic on the next character)
-       ' — '  ->  '. ' or ': '
-       '—'    -> '. '
-     If the character after the dash is uppercase, use '. ' (new sentence).
-     Otherwise use ': ' (explanation).
-  4. Leaves '--<word>' (CLI flag form, no leading space) untouched.
-  5. Leaves '---' lines (YAML front-matter and HR rules) untouched.
-  6. Leaves table-cell '|' separators alone.
+Rewrite rule (any language)
+---------------------------
+Default replacement for both ` -- ` and ` — ` is '. ' with the next word's
+first letter capitalized. Trailing ` --` / ` —` at line end becomes '.'.
+Bare em-dash with no surrounding spaces becomes '. ' as well.
+CLI flag forms like `--release` (no leading space) stay untouched.
 
-Idempotent: running again on cleaned files is a no-op.
+Idempotent. Running again on cleaned files is a no-op.
 
 Usage
 -----
-    python scripts/dehyphen.py path/to/file.md [more.md ...]
-    python scripts/dehyphen.py --check path/to/file.md   # exit 1 if any prose violations remain
+    python scripts/dehyphen.py path/to/file
+    python scripts/dehyphen.py --check path/to/file        # exit 1 on violations
+    python scripts/dehyphen.py --lang rust path/to/file.rs # override auto-detect
 
 Audit before committing:
-    grep -rnE ' -- | — ' skills/ docs/
+    python scripts/dehyphen.py --check $(git diff --cached --name-only)
 
 Limitations
 -----------
-The heuristic is not perfect. A '. ' / ': ' replacement may sometimes be
-wrong (a list continuation might want a comma). Review the diff after
-running, especially around bullet lists. The script never lengthens
-content, so reviewing is cheap.
+- Rust: char-literal detection is best-effort. Lifetimes vs char literals
+  is the usual ambiguity. We err on the side of NOT treating ambiguous
+  `'X` constructs as char literals (they're then walked as code, which is
+  the safe choice because code is never rewritten anyway).
+- Rust: a `/` inside an unclosed line comment at the very end of file
+  with no trailing newline gets handled correctly.
+- The heuristic-driven rewrite may sometimes pick a less-natural
+  punctuation. Review the diff after running. The script never lengthens
+  content, so reviewing is cheap.
 """
 
 from __future__ import annotations
@@ -50,140 +57,339 @@ import pathlib
 import re
 import sys
 
-EMDASH = "—"  # actual em-dash char
+EMDASH = "—"
 
-# A line is "code-like" if it starts with one of these (already in a code
-# block, OR a CLI invocation, OR a YAML / HR rule). We keep these intact.
+# A line is treated as an HR rule (and skipped in markdown mode) if it
+# matches /^\s*---+\s*$/. This also catches YAML front-matter delimiters.
 HR_RULE_RE = re.compile(r"^\s*-{3,}\s*$")
-CLI_FLAG_RE = re.compile(r"--[A-Za-z]")  # `--release`, `--foo=bar`, etc.
+
+# Char literal recognizer for Rust: an opening ' followed by either a
+# single non-quote, non-backslash char, or a backslash escape, then closing '.
+# Conservative: only matches obvious char literals. Anything that doesn't
+# match here gets treated as a lifetime / regular code.
+RUST_CHAR_LITERAL_RE = re.compile(
+    r"""'(?:\\u\{[0-9a-fA-F]+\}|\\x[0-9a-fA-F]{2}|\\[\\nrt0'"]|[^'\\\n])'"""
+)
+
+# Raw string opener: r followed by zero or more '#' then '"'.
+RUST_RAW_STRING_OPEN_RE = re.compile(r"r(#*)\"")
 
 
-def _rewrite_chunk(chunk: str) -> str:
-    """Rewrite ` -- ` and em-dash forms inside a non-backtick chunk.
+def _rewrite_line(line: str) -> str:
+    """Rewrite ` -- ` and em-dash forms on a single line of prose.
 
     Default: replace with '. ' and capitalize the next word's first letter.
-    Periods and sentences read human; colons everywhere read like a definition
-    list. Reviewer can manually rewrite resulting short fragments into longer
-    natural sentences as needed; the script only removes the offending dashes.
-
-    Trailing forms (line wraps) collapse to '.' so the continuation on the next
-    line starts a new sentence.
-
-    The exceptions are punctuation contexts where '. ' would be ungrammatical:
-    immediately after a backtick / quote (the chunk ends mid-quote), inside a
-    parenthetical clause already opened, etc. Those are rare in practice;
-    the reviewer handles them.
+    Trailing forms collapse to '.' so the continuation on the next line
+    starts a new sentence. Bare em-dash with no surrounding spaces gets '. '.
     """
 
     def replace_inline(m: "re.Match[str]") -> str:
         nxt = m.group(1)
-        # If next char is a letter, capitalize it; otherwise leave alone.
         if nxt.isalpha():
             return ". " + nxt.upper()
         return ". " + nxt
 
     # ' -- X' (space + double-hyphen + space + non-whitespace).
-    chunk = re.sub(r" -- (\S)", replace_inline, chunk)
-    # Trailing ' --' at end of chunk (line wraps; continuation on next line).
-    chunk = re.sub(r" --$", ".", chunk)
-
-    # ' — X' with surrounding spaces (em-dash inline in prose).
-    chunk = re.sub(rf" {EMDASH} (\S)", replace_inline, chunk)
-    # ' — ' alone (chunk-boundary case after split-by-backtick; no next char
-    # in this chunk). Collapse to '. ' (single space).
-    chunk = re.sub(rf" {EMDASH} ", ". ", chunk)
-    # Trailing ' —' at end of chunk.
-    chunk = re.sub(rf" {EMDASH}$", ".", chunk)
-    # Bare em-dash, no surrounding spaces (e.g. 'a—b').
-    chunk = re.sub(rf"{EMDASH}", ". ", chunk)
-    return chunk
+    line = re.sub(r" -- (\S)", replace_inline, line)
+    # Trailing ' --' at end of line (wraps to a continuation).
+    line = re.sub(r" --$", ".", line)
+    # ' — X' (em-dash inline).
+    line = re.sub(rf" {EMDASH} (\S)", replace_inline, line)
+    # ' — ' alone (em-dash sandwiched between spaces, no next-char in chunk).
+    line = re.sub(rf" {EMDASH} ", ". ", line)
+    # Trailing ' —' at end of line.
+    line = re.sub(rf" {EMDASH}$", ".", line)
+    # Bare em-dash (no surrounding spaces, e.g. 'a—b').
+    line = re.sub(rf"{EMDASH}", ". ", line)
+    return line
 
 
-def _replace_prose_dashes(line: str) -> str:
-    """Rewrite in-line ` -- ` and em-dash forms to '. ' / ': '.
+def _rewrite_prose(text: str) -> str:
+    """Rewrite a stretch of prose, preserving inline backtick code spans.
 
-    Preserves anything inside backtick spans (`…`) so that inline code
-    examples like `` `cargo test -- --nocapture` `` keep their literal `--`.
-    Splits the line on backticks, alternating: outside, inside, outside, inside.
+    Splits on backticks; only rewrites outside-backtick chunks.
     """
-    parts = line.split("`")
-    for i in range(0, len(parts), 2):  # even indexes are outside-backtick chunks
-        parts[i] = _rewrite_chunk(parts[i])
+    parts = text.split("`")
+    for i in range(0, len(parts), 2):
+        # Process this chunk line-by-line so trailing `$` regexes match
+        # end-of-line, not just end-of-chunk.
+        lines = parts[i].split("\n")
+        parts[i] = "\n".join(_rewrite_line(ln) for ln in lines)
     return "`".join(parts)
 
 
-def _scan_violations(line: str) -> bool:
-    """True if a re-run of the rewriter would still change this line.
-
-    Matches the contract of the `--check` mode so the post-rewrite count
-    in normal mode agrees with audit results.
-    """
-    return _replace_prose_dashes(line) != line
+def _line_would_change(line: str) -> bool:
+    """True if a re-run of the rewriter would change this line."""
+    return _rewrite_prose(line) != line
 
 
-def process(text: str) -> tuple[str, int]:
-    """Return (rewritten_text, remaining_violation_count_outside_code_blocks)."""
+# ----------------------------------------------------------------------
+# Markdown processor
+# ----------------------------------------------------------------------
+
+
+def _process_markdown(text: str) -> tuple[str, int]:
+    """Return (rewritten_text, violation_count_outside_code_blocks)."""
     out: list[str] = []
     in_code = False
     remaining = 0
     for raw in text.split("\n"):
         stripped = raw.lstrip()
-        # Fenced-code toggle. Note: we must NOT mistake an HR rule for a fence.
         if stripped.startswith("```"):
             in_code = not in_code
             out.append(raw)
             continue
-        if in_code:
+        if in_code or HR_RULE_RE.match(raw):
             out.append(raw)
             continue
-        # YAML front-matter delimiter and Markdown HR rules: leave alone.
-        if HR_RULE_RE.match(raw):
-            out.append(raw)
-            continue
-        # Indented-code lines (4+ leading spaces) we treat as prose by default;
-        # if they contain CLI flags those stay safe (no ' -- ' surrounding).
-        line = _replace_prose_dashes(raw)
-        if _scan_violations(line):
+        line = _rewrite_prose(raw)
+        if _line_would_change(line):
             remaining += 1
         out.append(line)
     return "\n".join(out), remaining
 
 
+def _check_markdown(text: str) -> int:
+    """Count lines that would change. Mirrors the rewrite contract."""
+    count = 0
+    in_code = False
+    for ln in text.split("\n"):
+        stripped = ln.lstrip()
+        if stripped.startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code or HR_RULE_RE.match(ln):
+            continue
+        if _line_would_change(ln):
+            count += 1
+    return count
+
+
+# ----------------------------------------------------------------------
+# Rust processor
+# ----------------------------------------------------------------------
+
+
+def _tokenize_rust(text: str) -> list[tuple[str, str]]:
+    """Split a Rust source file into (kind, text) tokens.
+
+    Kinds: 'code', 'line_comment', 'block_comment', 'string', 'raw_string',
+    'char'. Only the comment kinds get rewritten by the caller.
+
+    Best-effort tokenizer. It tracks just enough state to keep prose
+    rewriting from leaking into string literals or code. Handles nested
+    block comments per the Rust reference.
+    """
+    i = 0
+    n = len(text)
+    out: list[tuple[str, str]] = []
+    code_start = 0
+
+    def flush_code(end: int) -> None:
+        nonlocal code_start
+        if end > code_start:
+            out.append(("code", text[code_start:end]))
+        code_start = -1  # invalidate; caller will reset when re-entering code
+
+    while i < n:
+        c = text[i]
+
+        # Block comment (nested per Rust reference).
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            flush_code(i)
+            depth = 1
+            j = i + 2
+            while j < n and depth > 0:
+                if text[j] == "/" and j + 1 < n and text[j + 1] == "*":
+                    depth += 1
+                    j += 2
+                elif text[j] == "*" and j + 1 < n and text[j + 1] == "/":
+                    depth -= 1
+                    j += 2
+                else:
+                    j += 1
+            out.append(("block_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Line comment (incl. doc forms /// and //!).
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            flush_code(i)
+            j = text.find("\n", i)
+            if j < 0:
+                j = n
+            out.append(("line_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Raw string r#*"..."#*. Must not be preceded by an identifier char.
+        if c == "r" and i + 1 < n and text[i + 1] in '#"':
+            prev_ok = i == 0 or not (text[i - 1].isalnum() or text[i - 1] == "_")
+            if prev_ok:
+                m = RUST_RAW_STRING_OPEN_RE.match(text, i)
+                if m:
+                    flush_code(i)
+                    hashes = m.group(1)
+                    close = '"' + hashes
+                    j = text.find(close, m.end())
+                    if j < 0:
+                        j = n
+                    else:
+                        j += len(close)
+                    out.append(("raw_string", text[i:j]))
+                    i = j
+                    code_start = i
+                    continue
+
+        # Regular string literal.
+        if c == '"':
+            flush_code(i)
+            j = i + 1
+            while j < n:
+                if text[j] == "\\" and j + 1 < n:
+                    j += 2
+                elif text[j] == '"':
+                    j += 1
+                    break
+                else:
+                    j += 1
+            out.append(("string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Char literal (or lifetime). Only consume if it matches our
+        # conservative char-literal regex; otherwise treat as code.
+        if c == "'":
+            m = RUST_CHAR_LITERAL_RE.match(text, i)
+            if m:
+                flush_code(i)
+                out.append(("char", m.group(0)))
+                i = m.end()
+                code_start = i
+                continue
+
+        i += 1
+
+    # Flush any trailing code.
+    if code_start >= 0 and code_start < n:
+        out.append(("code", text[code_start:]))
+    return out
+
+
+def _process_rust(text: str) -> tuple[str, int]:
+    tokens = _tokenize_rust(text)
+    out_parts: list[str] = []
+    remaining = 0
+    for kind, chunk in tokens:
+        if kind in ("line_comment", "block_comment"):
+            # Process line-by-line so '$' trailing patterns work as expected
+            # across multi-line block comments.
+            lines = chunk.split("\n")
+            new_lines = [_rewrite_prose(ln) for ln in lines]
+            new_chunk = "\n".join(new_lines)
+            if _line_would_change(new_chunk):
+                remaining += 1
+            out_parts.append(new_chunk)
+        else:
+            out_parts.append(chunk)
+    return "".join(out_parts), remaining
+
+
+def _check_rust(text: str) -> int:
+    tokens = _tokenize_rust(text)
+    count = 0
+    for kind, chunk in tokens:
+        if kind not in ("line_comment", "block_comment"):
+            continue
+        for ln in chunk.split("\n"):
+            if _line_would_change(ln):
+                count += 1
+    return count
+
+
+# ----------------------------------------------------------------------
+# Plain processor (whole file is prose)
+# ----------------------------------------------------------------------
+
+
+def _process_plain(text: str) -> tuple[str, int]:
+    out_lines: list[str] = []
+    remaining = 0
+    for ln in text.split("\n"):
+        new = _rewrite_prose(ln)
+        if _line_would_change(new):
+            remaining += 1
+        out_lines.append(new)
+    return "\n".join(out_lines), remaining
+
+
+def _check_plain(text: str) -> int:
+    return sum(1 for ln in text.split("\n") if _line_would_change(ln))
+
+
+# ----------------------------------------------------------------------
+# Dispatch
+# ----------------------------------------------------------------------
+
+
+LANG_BY_EXT = {
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".rs": "rust",
+    ".txt": "plain",
+    ".rst": "plain",
+}
+
+
+def _detect_lang(path: pathlib.Path) -> str:
+    return LANG_BY_EXT.get(path.suffix.lower(), "markdown")
+
+
+PROCESSORS = {
+    "markdown": _process_markdown,
+    "rust": _process_rust,
+    "plain": _process_plain,
+}
+
+CHECKERS = {
+    "markdown": _check_markdown,
+    "rust": _check_rust,
+    "plain": _check_plain,
+}
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("files", nargs="+", type=pathlib.Path, help="Markdown files to clean")
+    ap.add_argument("files", nargs="+", type=pathlib.Path, help="Files to clean")
     ap.add_argument(
         "--check",
         action="store_true",
         help="Do not write. Exit 1 if any file has remaining prose violations.",
     )
+    ap.add_argument(
+        "--lang",
+        choices=sorted(PROCESSORS.keys()),
+        default=None,
+        help="Override auto-detect (by extension). Default: markdown for unknown extensions.",
+    )
     args = ap.parse_args(argv)
 
     bad = 0
     for path in args.files:
+        lang = args.lang or _detect_lang(path)
         original = path.read_text(encoding="utf-8")
-        rewritten, remaining = process(original)
         if args.check:
-            # A line is a violation iff the rewriter would change it.
-            # That matches the contract exactly and dodges false positives
-            # from substrings (e.g. ` -- ` appearing inside ` --- `).
-            live_remaining = 0
-            in_code = False
-            for ln in original.split("\n"):
-                stripped = ln.lstrip()
-                if stripped.startswith("```"):
-                    in_code = not in_code
-                    continue
-                if in_code or HR_RULE_RE.match(ln):
-                    continue
-                if _replace_prose_dashes(ln) != ln:
-                    live_remaining += 1
+            live_remaining = CHECKERS[lang](original)
             if live_remaining:
-                print(f"{path}: {live_remaining} prose violation(s)")
+                print(f"{path}: {live_remaining} prose violation(s) [{lang}]")
                 bad += 1
             else:
-                print(f"{path}: clean")
+                print(f"{path}: clean [{lang}]")
             continue
+        rewritten, remaining = PROCESSORS[lang](original)
         if rewritten != original:
             path.write_text(rewritten, encoding="utf-8")
             changed = sum(
@@ -191,9 +397,12 @@ def main(argv: list[str]) -> int:
                 for a, b in zip(original.split("\n"), rewritten.split("\n"))
                 if a != b
             )
-            print(f"{path}: rewrote {changed} line(s); {remaining} suspicious line(s) remain")
+            print(
+                f"{path}: rewrote {changed} line(s); "
+                f"{remaining} suspicious line(s) remain [{lang}]"
+            )
         else:
-            print(f"{path}: clean")
+            print(f"{path}: clean [{lang}]")
 
     return 1 if bad else 0
 

@@ -1,9 +1,9 @@
 ---
 name: csharp
-description: C# development standards. Use when writing C# code, .NET projects, Unity mods, or NuGet packages.
+description: C# development standards. Use when writing C# code, .NET projects, Unity mods, or NuGet packages. Sourced from abix-/TimberbornMods (Timberbot, Bindito DI, publicizer) and abix-/Schedule1Mods (MelonLoader + Harmony + Il2CppInterop).
 user-invocable: false
-version: "1.0"
-updated: "2026-03-24"
+version: "1.1"
+updated: "2026-05-11"
 ---
 # C# Development
 
@@ -287,6 +287,137 @@ tile["occupants"] = stacked;
 ```
 
 LINQ is fine in per-request code and one-time initialization.
+
+## MelonLoader + Harmony (Schedule 1)
+
+Schedule 1 mods use a different stack from Timberborn: IL2CPP Unity +
+MelonLoader runtime + HarmonyLib for patching + Il2CppInterop for
+managed bindings. Reference: `abix-/Schedule1Mods/EmployeeReset`.
+
+### Mod entry point
+
+```csharp
+using HarmonyLib;
+using Il2CppInterop.Runtime.InteropTypes;
+using MelonLoader;
+using Il2CppScheduleOne.NPCs.Behaviour;
+
+namespace EmployeeReset;
+
+public class Mod : MelonMod
+{
+    private const string PrefCategory = "EmployeeReset";
+    private static MelonPreferences_Category _prefs;
+    private static MelonPreferences_Entry<KeyCode> _hotkeyPref;
+
+    public override void OnInitializeMelon()
+    {
+        _prefs = MelonPreferences.CreateCategory(PrefCategory, "Display Name");
+        _hotkeyPref = _prefs.CreateEntry("Hotkey", KeyCode.F8,
+            "Hotkey", "Press to ...");
+
+        TryPatchSomething();
+        MelonLogger.Msg($"{nameof(EmployeeReset)} initialized");
+    }
+}
+```
+
+- `class Mod : MelonMod`, `OnInitializeMelon` override is the entry.
+- `MelonPreferences` for user config. Each entry is typed; the value
+  persists to `UserData/MelonPreferences.cfg`.
+- `MelonLogger.Msg` / `Warning` / `Error` for output. Routes to the
+  MelonLoader console with the mod's color.
+
+### Manual Harmony patching
+
+Prefer manual `HarmonyInstance.Patch(...)` over `[HarmonyPatch]`
+attributes when the target type is in an Il2Cpp namespace, because
+attribute-based patches resolve at load time and can't easily handle
+type-not-found gracefully. Manual patches let you wrap in try/catch:
+
+```csharp
+private void TryPatchCanStartMix()
+{
+    try
+    {
+        MethodInfo target = typeof(MixingStation).GetMethod(
+            "CanStartMix", BindingFlags.Public | BindingFlags.Instance);
+        if (target == null)
+        {
+            MelonLogger.Warning("CanStartMix not found; skipping patch");
+            return;
+        }
+        MethodInfo postfix = typeof(Mod).GetMethod(
+            nameof(CanStartMixIngredientGatePostfix),
+            BindingFlags.NonPublic | BindingFlags.Static);
+        HarmonyInstance.Patch(target, postfix: new HarmonyMethod(postfix));
+    }
+    catch (Exception e)
+    {
+        MelonLogger.Error($"failed to patch CanStartMix: {e}");
+    }
+}
+
+private static void CanStartMixIngredientGatePostfix(
+    MixingStation __instance, ref bool __result)
+{
+    if (!__result) return;  // already false; nothing to add
+    if (SomeExtraCheck(__instance)) return;
+    __result = false;
+}
+```
+
+- `__instance` is the target object. `__result` is the return value,
+  passed by ref so a postfix can mutate it.
+- Static patch methods only. Harmony can't call instance methods.
+- `BindingFlags.NonPublic | BindingFlags.Static` to discover the
+  postfix on your own type.
+- Wrap every patch attempt in try/catch with a Warning log; one
+  broken patch should never break the rest of the mod.
+
+### Il2CppInterop quirks
+
+- Game types live under `Il2CppScheduleOne.*` namespaces. Use
+  `using Il2CppScheduleOne.X.Y;` and import individually.
+- Name clashes: `Il2CppScheduleOne.NPCs.Behaviour.Behaviour` collides
+  with `UnityEngine.Behaviour`. Alias one:
+  ```csharp
+  using SBehaviour = Il2CppScheduleOne.NPCs.Behaviour.Behaviour;
+  ```
+- Arrays from Il2Cpp use `Il2CppReferenceArray<T>` /
+  `Il2CppStructArray<T>`. Convert with `.ToArray()` for managed code.
+- Field access works via Il2CppInterop's generated bindings; you
+  don't need a publicizer like in Timberborn. But fields that are
+  private in C# source may need to be reached via reflection if the
+  binding skipped them.
+
+### Iteration comments
+
+Schedule 1 modding is empirical: you observe behavior, hypothesize,
+patch, repeat. The convention in `EmployeeReset/Mod.cs` is to leave
+numbered iteration markers explaining WHY a piece of code is the way
+it is, with the failed alternatives:
+
+```csharp
+// ITERATION 14: default to FALSE. Recovered IL from Cpp2IL revealed
+// that our SmartReset's StopCook and Deactivate calls internally
+// invoke MixingStation.SetNPCUser(null), nulling state vanilla
+// expects intact. Default off; opt-in for users who genuinely
+// need the post-eMployee cleanup.
+```
+
+This is doctrine, not bloat. Each iteration note ties a decision to
+the empirical finding (Cpp2IL output, F8 telemetry, crash dump) that
+forced it. When in doubt, leave the note.
+
+### Logging discipline
+
+- `MelonLogger.Msg` for normal events. One line. Identify the mod.
+- `MelonLogger.Warning` for "didn't crash, but we degraded".
+- `MelonLogger.Error` for caught exceptions, with `$"{e}"` (the full
+  stack). Never swallow without logging.
+- Verbose / diagnostic logs go behind a `_verboseLogPref.Value`
+  guard. Default off. Turn on for instrumentation passes.
 
 ## Auto-Deploy Pattern
 
