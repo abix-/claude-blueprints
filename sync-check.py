@@ -86,7 +86,7 @@ def sync(rows, direction):
                 print(f"  {name}: local -> repo")
                 copied += 1
             elif status == "GIT-ONLY":
-                # exists in repo but not local -- skip on push
+                # exists in repo but not local. Skip on push
                 pass
         elif direction == "pull":
             if status in ("GIT-AHEAD", "GIT-ONLY", "DIFF"):
@@ -96,7 +96,7 @@ def sync(rows, direction):
                 print(f"  {name}: repo -> local")
                 copied += 1
             elif status == "LOCAL-ONLY":
-                # exists locally but not in repo -- skip on pull
+                # exists locally but not in repo. Skip on pull
                 pass
 
     return copied

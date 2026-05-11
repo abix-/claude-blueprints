@@ -89,17 +89,17 @@ def _rewrite_line(line: str) -> str:
             return ". " + nxt.upper()
         return ". " + nxt
 
-    # ' -- X' (space + double-hyphen + space + non-whitespace).
+    # `<space><dash><dash><space><nonspace>` form.
     line = re.sub(r" -- (\S)", replace_inline, line)
-    # Trailing ' --' at end of line (wraps to a continuation).
+    # Trailing `<space><dash><dash>` at end of line (continuation wraps).
     line = re.sub(r" --$", ".", line)
-    # ' — X' (em-dash inline).
+    # `<space><emdash><space><nonspace>` inline form.
     line = re.sub(rf" {EMDASH} (\S)", replace_inline, line)
-    # ' — ' alone (em-dash sandwiched between spaces, no next-char in chunk).
+    # Bare `<space><emdash><space>` with nothing useful after (chunk boundary).
     line = re.sub(rf" {EMDASH} ", ". ", line)
-    # Trailing ' —' at end of line.
+    # Trailing em-dash at end of line.
     line = re.sub(rf" {EMDASH}$", ".", line)
-    # Bare em-dash (no surrounding spaces, e.g. 'a—b').
+    # Bare em-dash with no surrounding spaces (e.g. `a<emdash>b`).
     line = re.sub(rf"{EMDASH}", ". ", line)
     return line
 
