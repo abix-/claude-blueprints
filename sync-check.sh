@@ -39,7 +39,7 @@ for rel in $all_skills; do
         continue
     fi
 
-    # files differ -- check which is newer
+    # files differ. Check which is newer
     live_ts=$(stat -c %Y "$live_file" 2>/dev/null || stat -f %m "$live_file" 2>/dev/null)
     repo_ts=$(stat -c %Y "$repo_file" 2>/dev/null || stat -f %m "$repo_file" 2>/dev/null)
 

@@ -844,6 +844,110 @@ def _check_toml(text: str) -> int:
 
 
 # ----------------------------------------------------------------------
+# Shell processor
+# ----------------------------------------------------------------------
+
+
+def _tokenize_shell(text: str) -> list[tuple[str, str]]:
+    """Tokenize a POSIX-ish shell script.
+
+    Kinds: 'code', 'line_comment', 'string'. Only line_comment is rewritten.
+
+    Best-effort. Handles `#` comments, `"..."` double-quoted strings,
+    and `'...'` single-quoted (literal) strings. Backtick command
+    substitution and `$(...)` are treated as code. Heredoc bodies are
+    treated as code, which means prose violations inside heredocs are
+    missed but also never mangled. Pre-commit hook will catch those if
+    they matter.
+    """
+    i = 0
+    n = len(text)
+    out: list[tuple[str, str]] = []
+    code_start = 0
+
+    def flush_code(end: int) -> None:
+        nonlocal code_start
+        if end > code_start:
+            out.append(("code", text[code_start:end]))
+
+    while i < n:
+        c = text[i]
+
+        # `#` line comment. Must be at start-of-line or after whitespace
+        # (otherwise it's part of a parameter expansion like `${foo#bar}`).
+        if c == "#":
+            is_comment = i == 0 or text[i - 1] in (" ", "\t", "\n")
+            if is_comment:
+                flush_code(i)
+                j = text.find("\n", i)
+                if j < 0:
+                    j = n
+                out.append(("line_comment", text[i:j]))
+                i = j
+                code_start = i
+                continue
+
+        # Single-quoted literal string (no escapes; ends at next ').
+        if c == "'":
+            flush_code(i)
+            j = text.find("'", i + 1)
+            if j < 0:
+                j = n
+            else:
+                j += 1
+            out.append(("string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Double-quoted string (backslash escapes, but `#` is literal).
+        if c == '"':
+            flush_code(i)
+            j = i + 1
+            while j < n:
+                if text[j] == "\\" and j + 1 < n:
+                    j += 2
+                elif text[j] == '"':
+                    j += 1
+                    break
+                else:
+                    j += 1
+            out.append(("string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        i += 1
+
+    flush_code(n)
+    return out
+
+
+def _process_shell(text: str) -> tuple[str, int]:
+    tokens = _tokenize_shell(text)
+    out_parts: list[str] = []
+    remaining = 0
+    for kind, chunk in tokens:
+        if kind == "line_comment":
+            new_chunk = _rewrite_prose(chunk)
+            if _line_would_change(new_chunk):
+                remaining += 1
+            out_parts.append(new_chunk)
+        else:
+            out_parts.append(chunk)
+    return "".join(out_parts), remaining
+
+
+def _check_shell(text: str) -> int:
+    tokens = _tokenize_shell(text)
+    return sum(
+        1
+        for kind, chunk in tokens
+        if kind == "line_comment" and _line_would_change(chunk)
+    )
+
+
+# ----------------------------------------------------------------------
 # Plain processor (whole file is prose)
 # ----------------------------------------------------------------------
 
@@ -877,6 +981,8 @@ LANG_BY_EXT = {
     ".cs": "csharp",
     ".go": "go",
     ".toml": "toml",
+    ".sh": "shell",
+    ".bash": "shell",
     ".txt": "plain",
     ".rst": "plain",
 }
@@ -893,6 +999,7 @@ PROCESSORS = {
     "csharp": _process_csharp,
     "go": _process_go,
     "toml": _process_toml,
+    "shell": _process_shell,
     "plain": _process_plain,
 }
 
@@ -903,6 +1010,7 @@ CHECKERS = {
     "csharp": _check_csharp,
     "go": _check_go,
     "toml": _check_toml,
+    "shell": _check_shell,
     "plain": _check_plain,
 }
 
