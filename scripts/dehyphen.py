@@ -58,8 +58,8 @@ HR_RULE_RE = re.compile(r"^\s*-{3,}\s*$")
 CLI_FLAG_RE = re.compile(r"--[A-Za-z]")  # `--release`, `--foo=bar`, etc.
 
 
-def _replace_prose_dashes(line: str) -> str:
-    """Rewrite in-line ` -- ` and em-dash forms to '. ' / ': '."""
+def _rewrite_chunk(chunk: str) -> str:
+    """Rewrite ` -- ` and em-dash forms inside a non-backtick chunk."""
 
     def pick(next_char: str) -> str:
         # New sentence if the next character is uppercase; explanation otherwise.
@@ -68,15 +68,28 @@ def _replace_prose_dashes(line: str) -> str:
         return ": "
 
     # ' -- X' and ' — X' (space + dash + space + non-whitespace).
-    line = re.sub(r" -- (\S)", lambda m: pick(m.group(1)) + m.group(1), line)
-    line = re.sub(rf" {EMDASH} (\S)", lambda m: pick(m.group(1)) + m.group(1), line)
-    # Trailing ' --' at end of line (continuation on next line).
+    chunk = re.sub(r" -- (\S)", lambda m: pick(m.group(1)) + m.group(1), chunk)
+    chunk = re.sub(rf" {EMDASH} (\S)", lambda m: pick(m.group(1)) + m.group(1), chunk)
+    # Trailing ' --' / ' —' at end of chunk (line wrap; continuation next line).
     # Replace with ':' so the wrap reads as a list continuation.
-    line = re.sub(r" --$", ":", line)
-    line = re.sub(rf" {EMDASH}$", ":", line)
+    chunk = re.sub(r" --$", ":", chunk)
+    chunk = re.sub(rf" {EMDASH}$", ":", chunk)
     # Embedded em-dash with no spaces ('a—b'): treat as ': '.
-    line = re.sub(rf"{EMDASH}", ": ", line)
-    return line
+    chunk = re.sub(rf"{EMDASH}", ": ", chunk)
+    return chunk
+
+
+def _replace_prose_dashes(line: str) -> str:
+    """Rewrite in-line ` -- ` and em-dash forms to '. ' / ': '.
+
+    Preserves anything inside backtick spans (`…`) so that inline code
+    examples like `` `cargo test -- --nocapture` `` keep their literal `--`.
+    Splits the line on backticks, alternating: outside, inside, outside, inside.
+    """
+    parts = line.split("`")
+    for i in range(0, len(parts), 2):  # even indexes are outside-backtick chunks
+        parts[i] = _rewrite_chunk(parts[i])
+    return "`".join(parts)
 
 
 def _scan_violations(line: str) -> bool:
@@ -129,7 +142,9 @@ def main(argv: list[str]) -> int:
         original = path.read_text(encoding="utf-8")
         rewritten, remaining = process(original)
         if args.check:
-            # Count only prose violations (skip fenced code blocks + HR rules).
+            # A line is a violation iff the rewriter would change it.
+            # That matches the contract exactly and dodges false positives
+            # from substrings (e.g. ` -- ` appearing inside ` --- `).
             live_remaining = 0
             in_code = False
             for ln in original.split("\n"):
@@ -139,7 +154,7 @@ def main(argv: list[str]) -> int:
                     continue
                 if in_code or HR_RULE_RE.match(ln):
                     continue
-                if " -- " in ln or " --" == ln[-3:] or EMDASH in ln:
+                if _replace_prose_dashes(ln) != ln:
                     live_remaining += 1
             if live_remaining:
                 print(f"{path}: {live_remaining} prose violation(s)")
