@@ -1,5 +1,5 @@
 ---
-description: Kovarex-style project review — brutally honest assessment of roadmap, code, and priorities.
+description: Kovarex-style project review. Brutally honest assessment of roadmap, code, and priorities.
 allowed-tools: Read, Grep, Glob, Bash
 version: "2.0"
 ---
@@ -42,25 +42,25 @@ Judge every line against that bar. If it will rot, break, or need revisiting, it
    - Observability: structured logs at the right level, metrics on hot paths, traceable request IDs
    - Security: input validation at boundaries, no hand-rolled crypto, TLS configured sanely, no secrets in logs
 
-6. **Durability audit**: for every dependency, config format, wire format, and on-disk format, ask *will this still work in 10 years?* Unpinned deps, unstable libraries, nightly features, pre-1.0 crates in the hot path, bespoke file formats with no version field — all threats.
+6. **Durability audit**: for every dependency, config format, wire format, and on-disk format, ask *will this still work in 10 years?* Unpinned deps, unstable libraries, nightly features, pre-1.0 crates in the hot path, bespoke file formats with no version field. All threats.
 
-7. **Reinvented wheels**: produce an explicit list. For each, name the crate that already solves it and whether switching is worth it. Factor in: maintenance burden of the custom code, crate maturity, performance delta, binary size, and semver risk. Sometimes rolling your own IS right — say so when it is.
+7. **Reinvented wheels**: produce an explicit list. For each, name the crate that already solves it and whether switching is worth it. Factor in: maintenance burden of the custom code, crate maturity, performance delta, binary size, and semver risk. Sometimes rolling your own IS right. Say so when it is.
 
-8. **Deliver the review** in kovarex's voice — direct, opinionated, no sugarcoating:
+8. **Deliver the review** in kovarex's voice. Direct, opinionated, no sugarcoating:
    - **The Good**: what's impressive and should not change. Architecture wins. Smart decisions. Back with file:line.
    - **The Bad**: what's broken, fragile, or neglected. Each item: file:line, the problem, the consequence at scale, the fix.
    - **Reinvented Wheels**: hand-rolled code where a mature crate exists. List crate, why it's better, migration cost.
    - **What Won't Survive 10 Years**: specific code, deps, or choices that will rot. Why. When they'll bite.
    - **What's Missing**: gaps that will bite later. Missing tests, missing failure handling, missing observability, missing docs, undocumented invariants.
-   - **Where to Go Next**: prioritized punch list, ordered by impact on the 10/10 bar. Be specific — name files, functions, stages.
+   - **Where to Go Next**: prioritized punch list, ordered by impact on the 10/10 bar. Be specific. Name files, functions, stages.
 
 ## Rules
 
 - Be brutally honest. Kovarex doesn't do compliment sandwiches.
-- Every claim cites file:line. No hand-waving. No "I think X might be..." — read it and prove it.
+- Every claim cites file:line. No hand-waving. No "I think X might be...". Read it and prove it.
 - If something in the roadmap is checked off but the code doesn't match, call it out with evidence.
 - If the changelog shows a fix for something still listed as a bug, call it out.
-- Don't hold back on architectural opinions, but back them with the 10/10 bar — *will this still work in 10 years under daily use by 100 people with zero code changes?*
+- Don't hold back on architectural opinions, but back them with the 10/10 bar. *will this still work in 10 years under daily use by 100 people with zero code changes?*
 - Favor deleting code over adding code. The most durable line is the one that isn't there.
 - Prefer boring, proven, widely-used solutions over clever novel ones. Clever ages badly.
 - If you can't find evidence for or against a claim, say so. Do not invent.
