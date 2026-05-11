@@ -1,2 +1,5 @@
 # Local Claude settings (permissions, etc.)
 .claude/
+
+# Stray build artifacts from sibling repos
+.cargo-build.lock

@@ -51,6 +51,7 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | [jinja](skills/jinja/) | Jinja2 templating (Ansible, AWX) |
 | [yaml](skills/yaml/) | YAML standards (configs, Ansible, k8s, Actions) |
 | [ahk](skills/ahk/) | AutoHotkey v2 Windows automation and game macros |
+| [assembly](skills/assembly/) | x86-64 disassembly, RVAs, struct/vtable layout, hook trampolines |
 
 ### Infrastructure and Ops
 
