@@ -747,11 +747,9 @@ def _tokenize_toml(text: str) -> list[tuple[str, str]]:
 
     Kinds: 'code', 'line_comment', 'string'. Only line_comment gets rewritten.
 
-    TOML strings:
-      - "..."         basic (backslash escapes)
-      - '...'         literal (no escapes; ends at next ')
-      - "..."""       multi-line basic
-      - '...'''       multi-line literal
+    TOML string forms handled (triple-double-quoted and triple-single-quoted
+    multi-line strings, plus single-double-quoted basic and
+    single-single-quoted literal strings).
     """
     i = 0
     n = len(text)
