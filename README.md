@@ -39,19 +39,19 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | [code](skills/code/) | Universal development standards |
 | [rust](skills/rust/) | Rust standards, concurrency, unsafe/FFI, async, workspaces (default language for new work) |
 | [bevy](skills/bevy/) | Bevy 0.18 ECS patterns |
+| [csharp](skills/csharp/) | C# / .NET / Unity mods / MelonLoader+Harmony |
+| [python](skills/python/) | Python environment and standards on Windows |
+| [golang](skills/golang/) | Go development standards (cobra, k3s, testing, perf) |
+| [typescript](skills/typescript/) | TypeScript / JavaScript standards (browser, Node, MV3 extensions) |
 | [wgsl](skills/wgsl/) | WGSL shader patterns for Bevy compute and instanced rendering |
-| [csharp](skills/csharp/) | C# / .NET / Unity mods / NuGet |
-| [godot](skills/godot/) | Godot 4.x, GDScript, NPC optimization |
-| [golang](skills/golang/) | Go development standards |
-| [python](skills/python/) | Python environment and usage on Windows |
 | [powershell](skills/powershell/) | PowerShell, VMware, and Pester standards |
 | [bash](skills/bash/) | Bash scripting standards for shell scripts and CI |
-| [typescript](skills/typescript/) | TypeScript / JavaScript standards (browser, Node, extensions) |
+| [yaml](skills/yaml/) | YAML standards (configs, Ansible, k8s, Actions) |
 | [ansible](skills/ansible/) | Ansible playbook and role standards |
 | [jinja](skills/jinja/) | Jinja2 templating (Ansible, AWX) |
-| [yaml](skills/yaml/) | YAML standards (configs, Ansible, k8s, Actions) |
-| [ahk](skills/ahk/) | AutoHotkey v2 Windows automation and game macros |
 | [assembly](skills/assembly/) | x86-64 disassembly, RVAs, struct/vtable layout, hook trampolines |
+| [godot](skills/godot/) | Godot 4.x, GDScript, NPC optimization |
+| [ahk](skills/ahk/) | AutoHotkey scripting (Windows automation, game macros) |
 
 ### Infrastructure and Ops
 
