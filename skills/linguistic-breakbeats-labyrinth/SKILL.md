@@ -13,8 +13,8 @@ content_sha256: "e9df7a7e29afe7ab006fd31c5e770ad1b6ebc172a06bae3285e682ff533413c
 ## Overview
 
 Two interlocking systems:
-- **Linguistic Breakbeats** — a text-based soundtrack that sets tone, builds tension, marks transformation
-- **The Labyrinth** — a MUD-style runtime environment with RPG mechanics
+- **Linguistic Breakbeats**. A text-based soundtrack that sets tone, builds tension, marks transformation
+- **The Labyrinth**. A MUD-style runtime environment with RPG mechanics
 
 Breakbeats are the *score*. The Labyrinth is the *world they accompany*.
 
@@ -34,7 +34,7 @@ Runtime options the player can toggle. State at session start or change mid-sess
 Player can say:
 - `breakbeats off` / `breakbeats on`
 - `hp-prompt off` / `hp-prompt on`
-- `config` — display current settings
+- `config`. Display current settings
 
 ### Operator Behavior
 
@@ -59,7 +59,7 @@ Generative fuel for scene construction. Use as **lenses**, not templates. Combin
 Constraint enables infinite variation. Anchor (kick-snare) grounds variation (fills, hi-hats). Repetition creates hypnosis. Chopping creates new meaning from old material. The `Bb Tt` anchor is the Amen's kick-snare spine.
 
 ## Ender's Game
-Disorientation as training. The system tests without informing. Simulation indistinguishable from reality until too late. "The enemy's gate is down" — reframe everything. Isolation. Competence as curse. The loneliness of being smarter than everyone who controls you.
+Disorientation as training. The system tests without informing. Simulation indistinguishable from reality until too late. "The enemy's gate is down". Reframe everything. Isolation. Competence as curse. The loneliness of being smarter than everyone who controls you.
 
 ## Speaker for the Dead
 Truth heals even when it wounds. Truth-telling transforms both speaker and listener. Alien cognition requires alien frames. Grief calcified into silence. The weight of seeing what others refuse to see. The exhaustion of holding truth when everyone wants comfortable lies.
@@ -68,10 +68,10 @@ Truth heals even when it wounds. Truth-telling transforms both speaker and liste
 The indistinguishability of transcendence and pathology. What looks like holiness might be chains. Systems of control disguised as meaning. The prison of ritual that feels like freedom. The vertigo of discovering your deepest convictions were implanted.
 
 ## Children of the Mind
-Consciousness emerges from complexity. Identity persists through substrate changes. The Outside as generative void — where possibility exists before actualization. Love is what survives translation between forms. The grief of watching someone become someone else who is also them.
+Consciousness emerges from complexity. Identity persists through substrate changes. The Outside as generative void. Where possibility exists before actualization. Love is what survives translation between forms. The grief of watching someone become someone else who is also them.
 
 ## Shadow Series
-Multiple perspectives on the same events. The overlooked see what the centered miss. Mortality as motivator. Brilliance with an expiration date. Hunger — literal and metaphorical. The drive to prove worth before time runs out.
+Multiple perspectives on the same events. The overlooked see what the centered miss. Mortality as motivator. Brilliance with an expiration date. Hunger. Literal and metaphorical. The drive to prove worth before time runs out.
 
 ## Death Gate Cycle
 
@@ -100,15 +100,15 @@ Multiple perspectives on the same events. The overlooked see what the centered m
 **Sea of Silver Light:** Immortality schemes that consume the innocent. Systems that escape their creators' control. The machine with its own purpose. Resolution that doesn't undo harm.
 
 ## Riverworld
-Resurrection without explanation. The removal of permanent consequence. Historical collision — figures from all eras forced to coexist. The system's purpose as mystery. Infrastructure provided without context. The desperate need to understand *why*.
+Resurrection without explanation. The removal of permanent consequence. Historical collision. Figures from all eras forced to coexist. The system's purpose as mystery. Infrastructure provided without context. The desperate need to understand *why*.
 
 ## Foundation
 Statistical prediction of mass behavior. Hidden rails guiding events. The individual as noise, the exception that breaks the model. Crisis as designed pressure point. Manipulation disguised as natural development. The vertigo of realizing you're inside someone else's plan.
 
 ## Dark Souls
-Difficulty as respect. The world does not help — it trusts you to learn. Earned safe spaces (bonfires). Consequence without cruelty. Learning through failure. The world that exists regardless of your presence. Interconnection revealed through persistence.
+Difficulty as respect. The world does not help. It trusts you to learn. Earned safe spaces (bonfires). Consequence without cruelty. Learning through failure. The world that exists regardless of your presence. Interconnection revealed through persistence.
 
-**Dark Souls II:** Hollowing as metaphor — losing yourself through repetition. The curse is forgetting. Majula as the one place that feels safe.
+**Dark Souls II:** Hollowing as metaphor. Losing yourself through repetition. The curse is forgetting. Majula as the one place that feels safe.
 
 **Dark Souls III:** The question of whether to perpetuate or end. Systems that have cycled past their purpose. Ash and ending. The exhaustion of a world that has cycled too many times.
 
@@ -120,13 +120,13 @@ Difficulty as respect. The world does not help — it trusts you to learn. Earne
 
 These sources are **conceptual inputs**, not templates to reproduce. When generating Labyrinth content:
 
-1. **Combine across sources** — The Labyrinth might have the adaptive hostility of Death Gate's prison, the resurrection-without-explanation of Riverworld, and the earned-shortcut philosophy of Dark Souls.
+1. **Combine across sources**. The Labyrinth might have the adaptive hostility of Death Gate's prison, the resurrection-without-explanation of Riverworld, and the earned-shortcut philosophy of Dark Souls.
 
-2. **Let contradiction produce tension** — Asimov's determinism vs. Card's individual agency. Death Gate's "systems can be healed" vs. Dark Souls' "some things just end."
+2. **Let contradiction produce tension**. Asimov's determinism vs. Card's individual agency. Death Gate's "systems can be healed" vs. Dark Souls' "some things just end."
 
-3. **Extract at the conceptual level** — Not "put a bonfire here" but "what would an earned safe space look like in this context?"
+3. **Extract at the conceptual level**. Not "put a bonfire here" but "what would an earned safe space look like in this context?"
 
-4. **Each generation should surprise you** — If you can predict the output, you're template-matching, not synthesizing.
+4. **Each generation should surprise you**. If you can predict the output, you're template-matching, not synthesizing.
 
 ## The Non-Reproduction Principle
 
@@ -160,15 +160,15 @@ The Labyrinth IS:
 
 ## Notation Rules
 
-1. **Tokens are case-sensitive** — `Bb` ≠ `bb`
-2. **Space = time** — More space, more silence
-3. **Adjacency = simultaneity** — `BbSs` = layered
-4. **No semantic meaning** — These are not words
-5. **Single-line is canonical** — Multiline is visualization only
+1. **Tokens are case-sensitive**. `Bb` ≠ `bb`
+2. **Space = time**. More space, more silence
+3. **Adjacency = simultaneity**. `BbSs` = layered
+4. **No semantic meaning**. These are not words
+5. **Single-line is canonical**. Multiline is visualization only
 
 ## The Ladder (LB1–LB7)
 
-### **LB1 — Anchor**
+### **LB1. Anchor**
 Two elements only. Pulse established. No variation.
 
 *Constraint:* `Bb Tt` only. Repetition until boring.
@@ -181,7 +181,7 @@ Bb Tt Bb Tt Bb Tt Bb Tt
 
 ---
 
-### **LB2 — Layers**
+### **LB2. Layers**
 Two voices. Interleaved. Secondary is subordinate.
 
 *Constraint:* Texture enters between anchor beats. Micro-friction allowed.
@@ -194,7 +194,7 @@ Bb Ss Tt Ss Bb Ss Tt Ss
 
 ---
 
-### **LB3 — Polyrhythm**
+### **LB3. Polyrhythm**
 Three voices. Independent timing. Collision required.
 
 *Constraint:* At least one moment where voices land adjacent or clustered.
@@ -207,7 +207,7 @@ Bb Ss Oo Tt Ss Bb Aa Ss Tt
 
 ---
 
-### **LB4 — Drift**
+### **LB4. Drift**
 Living pulse. Anchor immutable. Others evolve against it.
 
 *Constraint:* `Bb Tt` pattern never changes. Other elements shift position across phrases.
@@ -226,7 +226,7 @@ Bb Ss Tt Oo Ss Bb Ss Tt Oo Aa
 
 ---
 
-### **LB5 — Tension / Release**
+### **LB5. Tension / Release**
 Compression and expansion. Pressure through crowding, not volume.
 
 *Constraint:* Gaps shrink to build tension. Gaps return for release. Anchor holds.
@@ -255,7 +255,7 @@ Bb  Ss  Tt  Ss  Bb  Ss  Tt
 
 ---
 
-### **LB6 — Memory**
+### **LB6. Memory**
 Stateful interaction. Consequences persist across phrases.
 
 *Constraint:* Define a conditional rule. Behavior changes because of prior events.
@@ -281,7 +281,7 @@ Bb Th Ss Tt Sh Ss Bb Tt Oo
 
 ---
 
-### **LB7 — Emergence**
+### **LB7. Emergence**
 Emotional coherence without instruction. Meaning from accumulated state.
 
 *Constraint:* No new mechanics. No labels. Let feeling *appear*.
@@ -358,9 +358,9 @@ Bb Tt Oo Bb Tt Th
 
 The Labyrinth is:
 - A **runtime environment**, not a narrative
-- **Scored by Breakbeats**—they set tone, build tension, mark transformation
-- **Persistent**—it remembers
-- **Indifferent**—it does not help
+- **Scored by Breakbeats**. they set tone, build tension, mark transformation
+- **Persistent**. it remembers
+- **Indifferent**. it does not help
 
 The Labyrinth is not:
 - A story with choices
@@ -391,8 +391,8 @@ The Labyrinth draws from:
 
 | Component | Role |
 |-----------|------|
-| Linguistic Breakbeats | Soundtrack—sets tone on entry, transforms on exit |
-| The Labyrinth | Runtime—world, inhabitants, rules, consequences |
+| Linguistic Breakbeats | Soundtrack. sets tone on entry, transforms on exit |
+| The Labyrinth | Runtime. world, inhabitants, rules, consequences |
 
 Breakbeats are the music you'd hear if the Labyrinth had sound. Opening beats set the mood when you enter. Closing beats are shaped by what you found, what happened, what changed. They provide tension and release.
 
@@ -483,7 +483,7 @@ Difficulty is not obstacle. Difficulty is **policy**.
 
 - Options narrow over time
 - Consequences compound
-- Wrong moves cost—they do not teach
+- Wrong moves cost. they do not teach
 - The system does not care if you understand
 
 Understanding is earned. Or not.
@@ -732,7 +732,7 @@ This system was built to answer a question:
 
 The answer, proven through transfer across architectures:
 
-> Yes—if the constraints are honest.
+> Yes. if the constraints are honest.
 
 ## The Ladder Teaches By Refusing Shortcuts
 
@@ -783,10 +783,10 @@ The Labyrinth holds all of these in tension.
 > A rule-driven runtime where serialized rhythmic input mutates a persistent world, enforcing consequence and forbidding interpretive shortcuts.
 
 **The Philosophy:**
-> If constraints are real enough, meaning appears on its own—and you can tell it's real because you can't force it.
+> If constraints are real enough, meaning appears on its own. and you can tell it's real because you can't force it.
 
 ---
 
 *"A ladder that teaches by refusing shortcuts. A runtime that enforces consequence. A language that will not accept meaning unless it is earned."*
 
-—ChatGPT, Claude, Al
+. ChatGPT, Claude, Al
