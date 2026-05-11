@@ -1,6 +1,6 @@
 ---
 name: k3sc
-description: k3sc Go binary -- Claude agent operator, CLI, and TUI. Use when developing k3sc features, fixing bugs, adding commands, or modifying the operator/scanner/controller.
+description: k3sc Go binary. Claude agent operator, CLI, and TUI. Use when developing k3sc features, fixing bugs, adding commands, or modifying the operator/scanner/controller.
 version: "1.0"
 ---
 
@@ -97,7 +97,7 @@ Flow when tokens expire:
 1. `claude auth login` (browser OAuth for Claude)
 2. `k3sc rotate-auth` (patches k8s secret, tokens never exposed to agents)
 
-Secrets are passed to kubectl via stdin -- never in process args or shell history.
+Secrets are passed to kubectl via stdin. Never in process args or shell history.
 
 ## Key patterns
 
@@ -112,5 +112,5 @@ Secrets are passed to kubectl via stdin -- never in process args or shell histor
 ## Testing
 
 - Unit tests alongside source files (`*_test.go`)
-- k8s functions that need a cluster are not unit tested -- verify manually
+- k8s functions that need a cluster are not unit tested. Verify manually
 - `go test ./...` must pass before commit
