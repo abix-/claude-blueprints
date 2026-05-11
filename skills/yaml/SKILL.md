@@ -1,60 +1,347 @@
 ---
 name: yaml
-description: YAML standards for config files, Ansible playbooks, k8s manifests, GitHub Actions, and any project config. Use when writing or editing .yml/.yaml.
+description: YAML standards for config files, Ansible playbooks, k8s manifests, GitHub Actions, docker-compose, and any project config. Built from the YAML 1.2 spec, yamllint defaults, and the practical pitfalls (Norway problem, type coercion, anchor gotchas).
 user-invocable: false
-version: "1.0"
+version: "2.0"
 updated: "2026-05-11"
 ---
 # YAML
 
-## Core
-- 2-space indent. Never tabs (YAML rejects them).
-- LF line endings, UTF-8, no BOM. Final newline at EOF.
-- Lowercase keys, kebab-case for multi-word: `start-time`, not `startTime` or `start_time`. Exception: respect the host system's convention (k8s = camelCase, Ansible = snake_case).
-- One document per file unless multi-doc (`---` separator) is the intent (k8s manifests, helm).
+YAML 1.2 is the current spec (2009, last clarified 2021). Most tooling
+implements YAML 1.1 by default for backwards compatibility, which means
+old type-coercion rules (the "Norway problem" with `NO`, `on`/`off`)
+still bite. Write for the lowest common denominator: be explicit.
 
-## Quoting
-- Don't quote strings unless required. Quote when:
-  - The value starts with `{`, `[`, `&`, `*`, `!`, `|`, `>`, `'`, `"`, `%`, `@`, ``` ` ```.
-  - The value is `yes`, `no`, `true`, `false`, `on`, `off`, `null`, `~`, or a number, but you want a string.
-  - The value contains `:` followed by space, or `#`.
-  - It is a Jinja expression: `key: "{{ var }}"`.
-- Prefer double quotes when escaping is needed. Single quotes for literals.
+For Jinja templating inside YAML, read the `jinja` skill.
+
+## File structure
+
+- **2-space indent.** Never tabs (YAML rejects them outright).
+- **LF line endings**, UTF-8, no BOM, final newline at EOF.
+- **One document per file** by default. Multi-doc (`---` separator)
+  only when the tool expects it (k8s manifests, helm).
+- **Optional top `---`** -- some tools require it, most don't. Pick
+  one style per repo. Trailing `...` end-marker is almost never needed.
+- **No trailing whitespace.** yamllint flags it; editors should auto-strip.
+
+## Keys
+
+Naming follows the host system's convention. Don't reinvent.
+
+| Context | Convention | Example |
+|---------|------------|---------|
+| Ansible | snake_case | `become_user: root` |
+| Kubernetes | camelCase | `metadata.creationTimestamp` |
+| GitHub Actions | kebab-case (jobs/steps), snake_case (inputs) | `runs-on: ubuntu-latest` |
+| docker-compose | snake_case | `depends_on: [db]` |
+| Helm values | usually camelCase | `image.pullPolicy` |
+| OpenAPI / JSON Schema | camelCase | `additionalProperties` |
+
+When in doubt, **read three nearby keys and match**.
+
+## Strings and quoting
+
+YAML aggressively coerces unquoted strings. The safe rule: quote
+anything that could plausibly be misinterpreted.
+
+```yaml
+# unquoted: usually fine
+name: production
+version: 1.0       # parsed as float!
+count: 42
+
+# MUST quote
+ratio: "1.0"               # if you want string "1.0", not 1.0
+empty: ""                  # not null
+country_code: "NO"         # the Norway problem -- unquoted = bool false
+country_code: "no"         # same
+on_event: "on"             # YAML 1.1 booleans
+phone: "+44 1234 5678"     # starts with `+` is fine, but quote for clarity
+date_str: "2026-05-11"     # if you want string, not Date
+ip: "10.0.0.1"             # IPv4 literals are floats in some parsers
+key_path: "/etc/nginx"     # leading / is fine; leading {/[/&/*/etc. is not
+template: "{{ var }}"      # Jinja must be quoted
+percent: "50%"             # safe as-is but quote anyway
+
+# Forbidden unquoted starts (will fail parse or coerce):
+# { [ & * ! | > ' " % @ `
+```
+
+**Prefer double quotes** when you need escapes (`\n`, `\t`, `\"`).
+Single quotes are pure literal: only `''` escapes a single quote, no
+other escapes.
+
+**The Norway problem:** YAML 1.1 parsers see `NO`, `yes`, `no`,
+`on`, `off`, `Y`, `N`, `True`, `False` as booleans. YAML 1.2 drops
+this but most libraries default to 1.1 behavior. **Always use
+`true` / `false`.** Quote anything that looks like a YAML 1.1 boolean
+if you mean a string.
+
+## Numbers
+
+- `42` integer, `1.5` float, `1e6` scientific, `0xff` hex, `0o17` octal
+  (1.2) / `017` octal (1.1).
+- Leading zero is octal in 1.1: `mode: 0644` -> `420 decimal`. **File
+  modes must be quoted strings**: `mode: "0644"`.
+- `.NaN`, `.inf`, `-.inf` are special floats.
+- `_` digit separators (`1_000_000`) are NOT standard in YAML 1.2;
+  some parsers accept them.
 
 ## Booleans and nulls
-- `true` / `false`. Avoid `yes`/`no`, `on`/`off` (legacy YAML 1.1, causes Norway problem with `NO`, `no` becoming bool).
-- Explicit `null` over empty. Don't leave bare keys (`key:`) unless you mean null.
 
-## Strings
-- Multi-line literal (preserve newlines): `|` or `|-` (strip trailing newline).
-- Multi-line folded (collapse to spaces): `>` or `>-`.
-- `|2` to force indent when content starts with whitespace.
+- **`true` / `false`** -- use these. Lowercase.
+- **`null`** -- explicit. `~` is the legacy alternative; avoid.
+- Empty value `key:` parses as null in most parsers. **Don't rely on
+  it.** Write `key: null` if you mean null, `key: ""` for empty
+  string.
+- Don't mix conventions inside one file.
+
+## Multi-line strings
+
+Five styles. Pick the one that matches the consumer's needs:
+
+```yaml
+# `|` literal: preserve newlines, strip final
+script: |
+  set -euo pipefail
+  echo "hello"
+
+# `|-` literal strip: no final newline
+script: |-
+  one
+  two
+
+# `|+` literal keep: preserve all trailing newlines
+script: |+
+  one
+
+
+# `>` folded: newlines become spaces, blank lines preserved
+desc: >
+  This is a long
+  description that
+  collapses to one line.
+
+# `>-` folded strip: no final newline
+desc: >-
+  paragraph one.
+
+# Plain multi-line (with continuation)
+title: This is
+  one logical
+  line.
+```
+
+- `|` keeps the structure verbatim. Use for scripts, regex, exact
+  whitespace.
+- `>` collapses to a paragraph. Use for prose / long descriptions.
+- The chomping indicator (`|`, `|-`, `|+`) controls trailing newlines.
+- Indent the content relative to the key. Yamllint enforces 2 spaces.
 
 ## Lists and maps
-- Block style (`- item`) for readable lists. Flow style (`[a, b]`) only for short inline lists.
-- Maps: block style by default. Flow (`{k: v}`) only for tiny single-line maps.
-- Trailing commas: not allowed in flow style. Don't add them.
+
+```yaml
+# block style (preferred)
+servers:
+  - name: a
+    ip: 10.0.0.1
+  - name: b
+    ip: 10.0.0.2
+
+# flow style (for short inline)
+tags: [prod, web, us-east]
+labels: {env: prod, tier: frontend}
+```
+
+- **Block style for anything non-trivial.** Diffs are clean,
+  comments work, nesting is obvious.
+- **Flow style only for short, atomic values.** A list of 3 strings,
+  a 2-key map.
+- **No trailing commas in flow style.** YAML rejects them.
+- **Don't mix styles in the same list.** Pick one per file.
+- Lists of one item: still use `- item` block style for diff
+  friendliness.
 
 ## Anchors and aliases
-- Use sparingly. They confuse readers and most tooling does not follow them when merging.
-- Acceptable for repeated CI matrix values or shared k8s sidecars. Pull into a separate file with `!include` (helm, kustomize) once it gets complex.
+
+```yaml
+defaults: &defaults
+  retries: 3
+  timeout: 30
+
+prod:
+  <<: *defaults
+  host: prod.example.com
+
+stage:
+  <<: *defaults
+  host: stage.example.com
+```
+
+- `&name` defines an anchor, `*name` references it.
+- `<<: *name` merge key (YAML 1.1 only). Removed in YAML 1.2 but
+  widely supported. Helm and kustomize support it; some tooling
+  doesn't.
+- **Use sparingly.** Anchors confuse readers and many tools don't
+  follow them across files.
+- Acceptable for CI matrix shared values, k8s probe templates.
+- When it gets complex, switch to Helm / kustomize / jsonnet /
+  a real templating layer.
 
 ## Comments
-- `#` to end of line. No block comments in YAML.
-- Comment WHY, not WHAT. The key name already tells you what.
 
-## Project-specific
-- **Ansible:** `when:` is already Jinja. Don't double-template (`when: "{{ x }} == 'y'"` is wrong). See the `jinja` and `ansible` skills.
-- **k8s:** camelCase keys, even though it violates the general rule. Required by the API.
-- **GitHub Actions:** `on:` keyword needs quoting in some YAML parsers (`"on":`) but Actions accepts both. Pick one style per repo.
-- **docker-compose:** keep version pinning explicit. `image: nginx:1.27.0`, not `:latest`.
+```yaml
+# Single-line comment.
+servers:
+  - name: prod      # inline comment
+    timeout: 30     # in seconds
+```
+
+- `#` to end of line. **No block comments.**
+- Comment the WHY: limits, rationale, links to issues. Skip what
+  the key already explains.
+- Inline comments need at least two spaces before `#`.
+
+## Project-specific gotchas
+
+### Ansible
+
+```yaml
+- name: Set port
+  ansible.builtin.set_fact:
+    port: "{{ env_port | int }}"        # string -> int
+    enabled: true                        # not "yes"
+    mode: "0644"                         # quoted! avoid octal trap
+  when: env == "prod"                    # already Jinja; don't double-template
+```
+
+- Modes ALWAYS as quoted strings: `"0644"`.
+- Booleans as `true` / `false`; ansible-lint flags `yes`/`no`.
+- `when:` clauses are already Jinja; no `{{ }}` needed.
+
+### Kubernetes
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  labels:
+    app: backend
+data:
+  config.json: |
+    {
+      "key": "value"
+    }
+```
+
+- camelCase keys (`apiVersion`, `containerPort`). Required by the
+  API server.
+- Multi-doc files separated by `---`. Helm renders these.
+- Embed JSON / shell scripts with `|` literal block.
+- Resource quantities (`memory: "256Mi"`, `cpu: "500m"`) as quoted
+  strings to avoid float coercion of plain numbers.
+
+### GitHub Actions
+
+```yaml
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: |
+          cargo test
+```
+
+- `on:` is fine unquoted in Actions despite being a YAML 1.1 boolean
+  (the parser is aware).
+- Job IDs are kebab-case. Step `name`s are free-form.
+- `uses:` references with `@v4` or `@<commit-sha>`. SHA-pin for
+  security.
+- Long `run:` scripts get `|` literal block. Multi-line bash works
+  here.
+
+### docker-compose
+
+```yaml
+version: "3.9"               # quote; YAML treats 3.9 as float
+services:
+  web:
+    image: nginx:1.27.0      # pin; no :latest
+    ports:
+      - "8080:80"            # quote ports (1.1 bool: NO)
+    depends_on:
+      - db
+```
+
+- Version string quoted.
+- Ports as quoted strings to avoid the `:` parsing oddities.
+- `:latest` is operational debt. Always pin.
+
+## Performance
+
+YAML parse speed rarely matters, but a few things do:
+
+- **Large YAML in tight loops:** prefer JSON. Most YAML parsers do
+  a 2-pass parse and are 5-10x slower than JSON.
+- **PyYAML is slow.** For Python, install `libyaml` C bindings
+  (`pip install pyyaml[c]` or just `pyyaml` if available) so
+  `yaml.CSafeLoader` is usable. 10x faster than the pure-Python
+  loader.
+- **Big anchor graphs blow up memory.** Anchors are expanded at
+  parse time; a deeply shared anchor referenced 1000 times
+  materializes the data 1000 times.
+- **For huge configs (>10k lines), split into multiple files** and
+  let the consumer (kustomize, helm, ansible) compose them.
+  Single-file 50k-line YAMLs are an antipattern.
+
+## Security
+
+- **`yaml.load()` in Python (PyYAML) executes arbitrary code.**
+  Always use `yaml.safe_load()`. Same applies to Ruby's `Psych.load`
+  (vs `safe_load`).
+- **Don't load untrusted YAML** with a non-safe loader. Custom tags
+  (`!!python/object`) can execute code.
+- **Schema validation** for any externally-supplied YAML: JSON
+  Schema with a YAML-aware validator, or Pydantic / Cue / Dhall.
 
 ## Validation
-- `yamllint` on every change. Wire into pre-commit.
-- For schemas (k8s, Actions), use editor LSP (red-hat YAML extension) so you see drift immediately.
+
+- **`yamllint`** on every change. Standard config catches most
+  issues. Wire into pre-commit:
+  ```bash
+  yamllint -d "{extends: default, rules: {line-length: {max: 120}}}" .
+  ```
+- **Schema validators** for typed configs:
+  - k8s: `kubeval`, `kubeconform`, `kustomize build | kubectl apply --dry-run=server`
+  - GitHub Actions: VS Code with the redhat.vscode-yaml extension auto-loads schemas
+  - JSON Schema: `ajv-cli` or `check-jsonschema`
+- **`yq`** for YAML in scripts (jq syntax). `yq eval '.servers[0]' file.yml`.
 
 ## Avoid
-- Tabs anywhere. YAML will reject the file.
-- Mixing flow and block styles in the same list.
-- Trailing whitespace.
-- YAML for code (write code in code). YAML is config.
+
+- **Tabs.** YAML will reject the file with a useless error.
+- **Mixing flow and block** in the same list / map.
+- **Trailing whitespace.** Editor should auto-strip on save.
+- **Unquoted version-like strings**: `1.0`, `2.10` are floats; quote.
+- **Unquoted Norway-problem values**: `no`, `yes`, `on`, `off`,
+  `Y`, `N`, `True`, `False`, `NULL`.
+- **Octal-looking modes** unquoted: `0644` becomes 420 decimal.
+- **Code in YAML.** Multi-line shell scripts in playbooks get long
+  fast; extract to a real file and call it.
+- **Repeating yourself.** Anchors and aliases are the workaround;
+  templating layers (Helm, kustomize, jsonnet, jinja) are the fix.
+- **Leading zero numbers** unquoted. `version: 042` is 34 decimal in
+  YAML 1.1.
+- **Single quotes for keys.** Keys are strings; just leave them
+  unquoted unless they start with a forbidden char.
+- **Bare `key:`** when you mean empty string. Be explicit:
+  `key: ""` or `key: null`.

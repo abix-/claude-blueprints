@@ -604,6 +604,248 @@ def _check_csharp(text: str) -> int:
 
 
 # ----------------------------------------------------------------------
+# Go processor
+# ----------------------------------------------------------------------
+
+
+def _tokenize_go(text: str) -> list[tuple[str, str]]:
+    """Tokenize a Go source file.
+
+    Kinds: 'code', 'line_comment', 'block_comment', 'string', 'raw_string',
+    'char'. Only the comment kinds get rewritten.
+
+    Go specifics:
+      - // line comment (godoc above decl, regular elsewhere).
+      - /* block comment */ (NOT nested).
+      - "..." interpreted string (backslash escapes).
+      - `...` raw string (backticks, may span lines, no escapes).
+      - 'x' rune literal (a single rune or escape sequence).
+    """
+    i = 0
+    n = len(text)
+    out: list[tuple[str, str]] = []
+    code_start = 0
+
+    def flush_code(end: int) -> None:
+        nonlocal code_start
+        if end > code_start:
+            out.append(("code", text[code_start:end]))
+
+    while i < n:
+        c = text[i]
+
+        # Block comment.
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            flush_code(i)
+            j = text.find("*/", i + 2)
+            if j < 0:
+                j = n
+            else:
+                j += 2
+            out.append(("block_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Line comment.
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            flush_code(i)
+            j = text.find("\n", i)
+            if j < 0:
+                j = n
+            out.append(("line_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Raw string (backticks).
+        if c == "`":
+            flush_code(i)
+            j = text.find("`", i + 1)
+            if j < 0:
+                j = n
+            else:
+                j += 1
+            out.append(("raw_string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Interpreted string.
+        if c == '"':
+            flush_code(i)
+            j = i + 1
+            while j < n:
+                if text[j] == "\\" and j + 1 < n:
+                    j += 2
+                elif text[j] == "\n":
+                    break
+                elif text[j] == '"':
+                    j += 1
+                    break
+                else:
+                    j += 1
+            out.append(("string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Rune literal.
+        if c == "'":
+            m = re.match(
+                r"""'(?:\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}|\\x[0-9a-fA-F]{2}|\\[0-7]{1,3}|\\[\\nrt0'"abfv]|[^'\\\n])'""",
+                text[i:],
+            )
+            if m:
+                flush_code(i)
+                out.append(("char", m.group(0)))
+                i += len(m.group(0))
+                code_start = i
+                continue
+
+        i += 1
+
+    flush_code(n)
+    return out
+
+
+def _process_go(text: str) -> tuple[str, int]:
+    tokens = _tokenize_go(text)
+    out_parts: list[str] = []
+    remaining = 0
+    for kind, chunk in tokens:
+        if kind in ("line_comment", "block_comment"):
+            lines = chunk.split("\n")
+            new_chunk = "\n".join(_rewrite_prose(ln) for ln in lines)
+            if _line_would_change(new_chunk):
+                remaining += 1
+            out_parts.append(new_chunk)
+        else:
+            out_parts.append(chunk)
+    return "".join(out_parts), remaining
+
+
+def _check_go(text: str) -> int:
+    tokens = _tokenize_go(text)
+    count = 0
+    for kind, chunk in tokens:
+        if kind not in ("line_comment", "block_comment"):
+            continue
+        for ln in chunk.split("\n"):
+            if _line_would_change(ln):
+                count += 1
+    return count
+
+
+# ----------------------------------------------------------------------
+# TOML processor
+# ----------------------------------------------------------------------
+
+
+def _tokenize_toml(text: str) -> list[tuple[str, str]]:
+    """Tokenize a TOML source file.
+
+    Kinds: 'code', 'line_comment', 'string'. Only line_comment gets rewritten.
+
+    TOML strings:
+      - "..."         basic (backslash escapes)
+      - '...'         literal (no escapes; ends at next ')
+      - "..."""       multi-line basic
+      - '...'''       multi-line literal
+    """
+    i = 0
+    n = len(text)
+    out: list[tuple[str, str]] = []
+    code_start = 0
+
+    def flush_code(end: int) -> None:
+        nonlocal code_start
+        if end > code_start:
+            out.append(("code", text[code_start:end]))
+
+    while i < n:
+        c = text[i]
+
+        # # line comment.
+        if c == "#":
+            flush_code(i)
+            j = text.find("\n", i)
+            if j < 0:
+                j = n
+            out.append(("line_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Triple-quoted string.
+        if text[i : i + 3] in ('"""', "'''"):
+            flush_code(i)
+            quote = text[i : i + 3]
+            j = text.find(quote, i + 3)
+            if j < 0:
+                j = n
+            else:
+                j += 3
+            out.append(("string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        # Single-line string.
+        if c in ('"', "'"):
+            flush_code(i)
+            quote = c
+            j = i + 1
+            if quote == '"':
+                while j < n:
+                    if text[j] == "\\" and j + 1 < n:
+                        j += 2
+                    elif text[j] in ('"', "\n"):
+                        if text[j] == '"':
+                            j += 1
+                        break
+                    else:
+                        j += 1
+            else:
+                # Literal string: no escapes; ends at next ' or newline.
+                while j < n and text[j] not in ("'", "\n"):
+                    j += 1
+                if j < n and text[j] == "'":
+                    j += 1
+            out.append(("string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        i += 1
+
+    flush_code(n)
+    return out
+
+
+def _process_toml(text: str) -> tuple[str, int]:
+    tokens = _tokenize_toml(text)
+    out_parts: list[str] = []
+    remaining = 0
+    for kind, chunk in tokens:
+        if kind == "line_comment":
+            new_chunk = _rewrite_prose(chunk)
+            if _line_would_change(new_chunk):
+                remaining += 1
+            out_parts.append(new_chunk)
+        else:
+            out_parts.append(chunk)
+    return "".join(out_parts), remaining
+
+
+def _check_toml(text: str) -> int:
+    tokens = _tokenize_toml(text)
+    return sum(
+        1 for kind, chunk in tokens if kind == "line_comment" and _line_would_change(chunk)
+    )
+
+
+# ----------------------------------------------------------------------
 # Plain processor (whole file is prose)
 # ----------------------------------------------------------------------
 
@@ -635,6 +877,8 @@ LANG_BY_EXT = {
     ".py": "python",
     ".pyi": "python",
     ".cs": "csharp",
+    ".go": "go",
+    ".toml": "toml",
     ".txt": "plain",
     ".rst": "plain",
 }
@@ -649,6 +893,8 @@ PROCESSORS = {
     "rust": _process_rust,
     "python": _process_python,
     "csharp": _process_csharp,
+    "go": _process_go,
+    "toml": _process_toml,
     "plain": _process_plain,
 }
 
@@ -657,6 +903,8 @@ CHECKERS = {
     "rust": _check_rust,
     "python": _check_python,
     "csharp": _check_csharp,
+    "go": _check_go,
+    "toml": _check_toml,
     "plain": _check_plain,
 }
 
