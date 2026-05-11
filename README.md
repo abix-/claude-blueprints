@@ -34,10 +34,30 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 
 ### Coding
 
+**Language breakdown across user-authored repos** (forks and vendored content excluded. E.g. `CustomizableContainers` Steam Workshop dump, `Fluid-Void-Extra` upstream-derived, `powershell-practical/vmware-community.ps1` community functions, `chromium-extensions/filter-anything-everywhere/` vendored TS):
+
+| Language | Bytes | % |
+|----------|------:|---:|
+| Rust | 6,140,436 | 71.3% |
+| PowerShell | 719,114 | 8.4% |
+| C# | 640,399 | 7.4% |
+| Python | 392,756 | 4.6% |
+| Go | 380,199 | 4.4% |
+| JavaScript | 173,116 | 2.0% |
+| HTML | 67,896 | 0.8% |
+| WGSL | 51,354 | 0.6% |
+| C++ | 20,526 | 0.2% |
+| Shell | 14,973 | 0.2% |
+| CSS | 5,572 | 0.1% |
+| Lua | 3,136 | 0.0% |
+| Dockerfile | 1,658 | 0.0% |
+| TypeScript | 0 | 0.0% |
+| **Total** | **8,611,135** | **100%** |
+
 | Skill | Description |
 |-------|-------------|
 | [code](skills/code/) | Universal development standards |
-| [rust](skills/rust/) | Rust standards, concurrency, unsafe/FFI, async, workspaces (default language, 6.1M bytes) |
+| [rust](skills/rust/) | Rust standards, concurrency, unsafe/FFI, async, workspaces (default language, 71.3% of code) |
 | [bevy](skills/bevy/) | Bevy 0.18 ECS patterns (Rust framework, Endless project) |
 | [wgsl](skills/wgsl/) | WGSL shader patterns for Bevy compute and instanced rendering |
 | [powershell](skills/powershell/) | PowerShell, VMware PowerCLI, Pester (~700K user-authored; vmware-community.ps1 is upstream) |
