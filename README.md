@@ -54,6 +54,18 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | TypeScript | 0 | 0.0% |
 | **Total** | **8,611,135** | **100%** |
 
+**Rust attribution by repo** (6.14M / 71.3% of total; all user-authored, verified clean of vendored/generated code):
+
+| Repo | Bytes | % of Rust | Project |
+|------|------:|----------:|---------|
+| [endless](https://github.com/abix-/endless) | 2,464,593 | 40.1% | Bevy colony sim with GPU compute, 50K NPC target |
+| [abixio](https://github.com/abix-/abixio) | 1,008,341 | 16.4% | S3-compatible erasure-coded object server |
+| [Grounded2Mods](https://github.com/abix-/Grounded2Mods) | 927,727 | 15.1% | UE4SS Rust mods (Grounded 2, Outworld Station) + ueforge framework |
+| [abixio-ui](https://github.com/abix-/abixio-ui) | 706,769 | 11.5% | iced desktop S3 manager + benchmark harness for abixio |
+| [chromium-extensions](https://github.com/abix-/chromium-extensions) | 540,887 | 8.8% | Hush firewall-style Chrome extension (Rust to WASM) |
+| [awx-ui](https://github.com/abix-/awx-ui) | 390,837 | 6.4% | iced desktop GUI for AWX management |
+| [terse](https://github.com/abix-/terse) | 101,282 | 1.6% | Lossless context compression benchmark (TOON encoder, bedrock gateway) |
+
 | Skill | Description |
 |-------|-------------|
 | [code](skills/code/) | Universal development standards |
