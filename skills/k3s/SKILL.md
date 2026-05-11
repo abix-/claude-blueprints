@@ -46,7 +46,7 @@ Images are built with nerdctl directly into the k3s containerd namespace (no reg
 wsl -d Ubuntu-24.04 -- bash -c "cd /mnt/c/code/k3sc && sudo nerdctl --address /run/k3s/containerd/containerd.sock --namespace k8s.io build -t claude-agent:latest image/"
 ```
 
-Pods use `imagePullPolicy: Never` -- if you see `ErrImageNeverPull`, rebuild with `--namespace k8s.io`.
+Pods use `imagePullPolicy: Never`. If you see `ErrImageNeverPull`, rebuild with `--namespace k8s.io`.
 
 ## Troubleshooting
 
