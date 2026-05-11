@@ -1,49 +1,254 @@
 ---
 name: typescript
-description: TypeScript and JavaScript development standards. Use when writing TS/JS, including browser extension bootstrap shims, web frontends, and Node tooling.
+description: TypeScript and JavaScript standards. Sourced from abix-/chromium-extensions (Hush + filter-anything-everywhere). Use when writing TS/JS, including browser extension bootstrap shims, MV3 service workers, and small web frontends.
 user-invocable: false
-version: "1.0"
+version: "2.0"
 updated: "2026-05-11"
 ---
 # TypeScript / JavaScript
 
-## Core
-- TypeScript first. Plain JS only for tiny bootstrap shims (extension content scripts, popup loaders) where adding a build step is not worth it.
-- `strict: true` always. No implicit any, no `// @ts-ignore` (use `// @ts-expect-error` with a reason).
-- ES modules (`import`/`export`). No CommonJS in new code.
-- Target modern runtimes: ES2022+ for browser, current LTS for Node.
-- Prefer named exports. Default exports only when the file has exactly one obvious thing (React component, etc.).
+Source repos: `abix-/chromium-extensions/filter-anything-everywhere`
+(TS, jQuery, jest), `abix-/chromium-extensions/hush` (plain JS shims
+fronting a Rust/WASM core).
+
+The decision between TS and plain JS in this codebase is **not**
+"always TS." Tiny bootstrap shims and content scripts are written in
+plain JS because adding a build step costs more than it saves.
+
+## When to pick TS vs JS
+
+- **TypeScript:** anything with logic, types, multiple files, or that
+  imports other modules. Use it for: options/popup pages, business
+  logic, shared utility code, tests.
+- **Plain JS:** MV3 service worker bootstrap (`hush/background.js`),
+  content scripts that just bridge events, main-world page hooks
+  (`hush/mainworld.js`). These need to load synchronously at
+  `document_start`, can't afford a build step, and call WASM for the
+  real work.
+- Never JS in a 500+ line file unless there's a hard reason (e.g.
+  document_start install ordering). At that point comment the reason
+  at the top of the file.
+
+## TypeScript compiler config
+
+The `filter-anything-everywhere/tsconfig.json` baseline:
+
+```jsonc
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "ESNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "rootDir": "./extension"
+  },
+  "exclude": ["node_modules", "**/*.spec.ts"]
+}
+```
+
+- `strict: true` always. Non-negotiable.
+- `target: es2020` for browser; bump to `es2022+` only when targeting
+  evergreen Node.
+- `skipLibCheck: true` to avoid third-party `.d.ts` noise blocking
+  your build.
+- `forceConsistentCasingInFileNames: true` keeps macOS/Linux/Windows
+  builds identical.
 
 ## Types
-- Model with discriminated unions, not enums. `type Action = { kind: "block" } | { kind: "allow"; pattern: string }`.
-- `unknown` over `any`. Narrow with type guards.
-- Use `satisfies` to verify literal shapes without widening.
-- Avoid type assertions (`as Foo`). If you need one, write a guard.
-- Const objects: `as const` for literal narrowness.
 
-## Async
+- Function param syntax mirrors `filter-anything-everywhere`:
+  ```ts
+  export function getCanonicalHostname(name:string) {
+    if (name.startsWith('www.')) return name.substring(4);
+    return name;
+  }
+  ```
+  Tight, no space before `:`. Match the existing style.
+- Discriminated unions over enums:
+  ```ts
+  type Action =
+    | { kind: 'block' }
+    | { kind: 'allow'; pattern: string };
+  ```
+- `unknown` over `any`. Narrow with type guards (`x instanceof X`,
+  `typeof x === 'string'`).
+- `interface` for object shapes that can be extended; `type` for
+  unions and aliases. Pick one per shape and stay consistent.
+- `as const` for literal narrowness on config objects.
+- `as Foo` only at trust boundaries (JSON parse, DOM lookup); inside
+  the codebase, write a guard.
+
+## Narrowing patterns from real code
+
+```ts
+function getInputElement(): HTMLInputElement {
+  const e = document.getElementById('input');
+  if (!(e instanceof HTMLInputElement)) {
+    console.log('expected input to be an HTMLInputElement', e);
+    throw new Error('Expected input to be an HTMLInputElement');
+  }
+  return e;
+}
+```
+
+- Use `instanceof` for DOM elements. The type system already knows.
+- Throw early on impossible state. Don't propagate `null` further than
+  the boundary.
+
+## Async / await
+
+```ts
+async function addWord(word: string) {
+  const items = await GetOptions();
+  items.blacklist[word] = true;
+  await chrome.storage.local.set({blacklist: items.blacklist});
+  await rerender();
+}
+```
+
 - `async`/`await` everywhere. No `.then` chains in new code.
-- `Promise.all` for parallel, `for await` for streams.
-- Always handle rejection. No floating promises (enable `no-floating-promises` lint).
+- `Promise.all` for independent parallel work.
+- No floating promises. If you don't await, `void cmd();` to make
+  intent explicit.
+- For event handlers that need async work, wrap in an arrow:
+  `$('#btn').click(async () => { ... })`.
 
-## Runtime
-- `fetch` over libraries (axios, node-fetch). Standard in Node 18+ and all browsers.
-- Logging: `console.log` for browser/extension; structured JSON via `pino` for servers.
-- Errors: extend `Error` with a `code` field for catchable conditions.
+## Browser extensions (MV3)
 
-## Browser / extensions
-- MV3 service workers: persistent state goes in `chrome.storage`, never module globals (workers get killed).
-- Bootstrap shims (Hush-style) stay tiny: lazy-load WASM, no business logic.
-- Bundling: use `esbuild` or `wasm-pack` outputs; avoid Webpack unless required by a framework.
+The Hush patterns are the reference:
+
+**Background service worker bootstrap** (`hush/background.js`):
+
+```js
+(async () => {
+  try {
+    const result = await migrateConfigSchema(chrome.storage.local);
+    if (!result.skipped) console.log(`[Hush bg] migrated v${result.fromVersion} -> v${result.toVersion}`);
+    await initWasm({ module_or_path: "./dist/pkg/hush_bg.wasm" });
+    try { initEngine(); } catch (e) { console.error("[Hush bg] initEngine threw", e); }
+    hushBackgroundMain();
+  } catch (e) {
+    console.error("[Hush bg] bootstrap failed", e);
+  }
+})();
+```
+
+- Top-level IIFE because module top-level await is workable but the
+  IIFE pattern reads more clearly and isolates scope.
+- Always log a tagged prefix (`[Hush bg]`) so multi-component
+  extensions are debuggable.
+- Catch broadly at the bootstrap boundary. One thrown error
+  shouldn't kill the whole worker silently.
+
+**Main-world content scripts** (`hush/mainworld.js`):
+
+- IIFE wrapper (`(() => { ... })()`) to avoid leaking globals into
+  the page.
+- Use `window.__app_state__` only when you actually need page-script
+  visibility; otherwise keep state inside the closure.
+- Sync stubs first, then patch with the real implementation once
+  WASM is ready. Comment why install order matters.
+- `try { ... } catch (e) { /* ignore - detached document */ }` for
+  ops that fail benignly after navigation.
+
+**Storage**:
+
+- `chrome.storage.local` is async, returns a Promise in MV3.
+- Persistent state goes in storage; module globals get wiped when the
+  worker idles.
+
+**Manifest:**
+
+- One service worker, one content script per surface. Add a
+  `"web_accessible_resources"` entry for any file the page loads
+  (WASM, main-world JS).
+
+## Runtime APIs
+
+- `fetch` over libraries (axios, node-fetch). Standard in all
+  browsers and Node 18+.
+- `URL` / `URLSearchParams` over manual parsing.
+- `structuredClone(x)` over `JSON.parse(JSON.stringify(x))`.
+- `crypto.randomUUID()` over npm uuid packages.
+- `Intl.NumberFormat` / `Intl.DateTimeFormat` over moment/date-fns
+  for display.
+
+## Defensive coercion at boundaries
+
+Pattern seen in `mainworld.js`:
+
+```js
+const v = el && el.dataset && el.dataset.hushSpoof;
+if (!v) return false;
+const parts = String(v).split(",");
+```
+
+- Page-script DOM access can return anything. `String(x)`,
+  `Number(x)`, `Boolean(x)` to normalize before use.
+- For data that crosses the WASM boundary, validate shape on the
+  TS side. Don't trust untyped JSON from a page.
 
 ## Testing
-- Vitest for unit tests. Jest only for legacy codebases.
-- Playwright for browser/e2e. No Selenium.
-- Co-locate tests as `foo.test.ts` next to `foo.ts`.
+
+- Jest + babel-jest is what `filter-anything-everywhere` uses. Tests
+  named `foo.spec.ts`, co-located with sources.
+- Test boundaries: pure functions, type-narrowing helpers, regex
+  builders. Don't unit-test the DOM; use Playwright/Puppeteer for
+  that.
+- Vitest is the modern default for new projects. Jest is fine for
+  legacy.
+
+## Linting and formatting
+
+- ESLint + Prettier. `eslint-config-google` + `eslint-config-prettier`
+  is the chosen baseline (`filter-anything-everywhere/package.json`).
+- `prettier --write .` before commit. Same config across the project.
+- `husky` + `lint-staged` for pre-commit if the project has many
+  contributors. Skip for solo projects.
+
+## Comments
+
+- Comment WHY, especially for browser quirks, race conditions, and
+  install ordering. The `mainworld.js` header is the model: it
+  explains why two install phases exist before any code starts.
+- Comment exactly once. Don't restate types or method names.
+- `// TODO(handle):` with a name; `// FIXME:` for known-broken.
+
+## Performance
+
+- `Set` / `Map` over plain objects for keyed lookups.
+- Avoid creating closures inside hot loops; hoist the function.
+- `for (let i = 0; i < arr.length; i++)` is fine for hot paths;
+  `for...of` is fine everywhere else. Don't write `forEach` if you
+  need `break`.
+- `requestAnimationFrame` for DOM-dependent timing, never `setTimeout(fn, 16)`.
+- For WASM-backed apps, push hot loops into Rust. JS is the bridge.
+
+## File and import conventions
+
+- Named exports by default. Default exports only when the file has
+  one obvious export (a React component).
+- One concept per file. `hostname.ts` exports `getCanonicalHostname`,
+  nothing else.
+- Imports: external first, then relative. Group with blank lines.
+- `.js` suffix in TS import paths when `module: ESNext` (required by
+  some bundlers): `import {x} from './hostname.js'` even though the
+  source is `.ts`.
 
 ## Avoid
+
 - `var`. Use `const`, then `let` only when reassignment is real.
 - `==`. Always `===`.
-- `Function.prototype.bind` in hot paths. Arrow capture is faster and clearer.
-- Decorators outside framework requirements (NestJS, etc.).
+- `Function.prototype.bind` in hot paths. Arrow capture is faster and
+  clearer.
+- `any` outside trust boundaries. `unknown` then narrow.
+- Decorators outside framework requirements.
 - `interface` for non-object shapes. Use `type`.
+- Adding a build step to a 20-line content script. Plain JS is fine.
+- jQuery in new code. `filter-anything-everywhere` uses it because
+  it's legacy; new projects should not.
+- Top-level `await` in a `.js` script tag. Modules only.
+- Reaching for Redux/Zustand/Recoil for a 3-field state. Use
+  `chrome.storage` or a `Map`.
