@@ -1,12 +1,12 @@
 ---
-description: Analyze why Claude made its previous response -- trace reasoning to system prompt, CLAUDE.md, memory, skills, or context
+description: Analyze why Claude made its previous response. Trace reasoning to system prompt, CLAUDE.md, memory, skills, or context
 disable-model-invocation: true
 allowed-tools: Read, Glob, Grep
 version: "1.0"
 ---
 ## Task
 
-Analyze your most recent response (before this skill was invoked) and explain WHY you produced it. This is not about right/wrong -- it is about tracing the reasoning chain so the user can identify what to change when behavior drifts.
+Analyze your most recent response (before this skill was invoked) and explain WHY you produced it. This is not about right/wrong. It is about tracing the reasoning chain so the user can identify what to change when behavior drifts.
 
 ## Process
 
@@ -21,17 +21,17 @@ Analyze your most recent response (before this skill was invoked) and explain WH
 | Skill | A skill file that was loaded (`~/.claude/skills/<name>/SKILL.md`) |
 | Memory | A memory file (`~/.claude/projects/*/memory/`) |
 | Context | Something the user said in this conversation |
-| Model default | Claude's training -- not from any instruction, just default behavior |
+| Model default | Claude's training. Not from any instruction, just default behavior |
 | Inference | You inferred/assumed something not explicitly stated anywhere |
 
-3. Read the actual source files to confirm. Do not guess -- open the file and quote the line.
+3. Read the actual source files to confirm. Do not guess. Open the file and quote the line.
 4. Flag any inference or assumption that was NOT grounded in a source file.
 
 ## Output format
 
 Use this exact format:
 
-## /why -- reasoning trace
+## /why. Reasoning trace
 
 ```
  CHOICE                        SOURCE              EVIDENCE
@@ -64,4 +64,4 @@ INFERENCES:
 - {choice}: {why you inferred this and what would have changed your behavior}
 ```
 
-This section is the most valuable -- it shows the user exactly where to add a rule or clarification to prevent future drift.
+This section is the most valuable. It shows the user exactly where to add a rule or clarification to prevent future drift.
