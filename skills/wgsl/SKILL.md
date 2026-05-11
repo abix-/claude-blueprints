@@ -217,7 +217,7 @@ contention more than ALU.
 - **Workgroup memory (`var<workgroup>`)** is ~100x faster than
   storage. Use for inter-thread communication and accumulators.
   Limit is 16-32KB depending on GPU.
-- **Avoid 64-bit atomics** in WGSL -- not supported on all GPUs
+- **Avoid 64-bit atomics** in WGSL. Not supported on all GPUs
   yet. Use 32-bit indexes and ranges.
 - **Minimize bind group switches.** Each `set_bind_group` is a
   small but non-zero cost. Batch related buffers into one group.
@@ -255,7 +255,7 @@ contention more than ALU.
 
 ## Debugging
 
-- **Naga validation errors** are read carefully -- they cite the
+- **Naga validation errors** are read carefully. They cite the
   exact line and rule.
 - **`@compute @workgroup_size(1)` for serial debugging**: forces
   one thread per workgroup. Slow but deterministic.
@@ -276,7 +276,7 @@ contention more than ALU.
   commit and bench-test alignment.
 - Long shader chains where one would do. Combining a separation pass
   and a movement pass saves a buffer roundtrip.
-- Writing to storage buffers in vertex shaders -- legal but slow
+- Writing to storage buffers in vertex shaders. Legal but slow
   and often ill-supported.
 - Recompiling shaders mid-frame. Bevy caches; manual `ShaderModule`
   creation per frame stalls.
