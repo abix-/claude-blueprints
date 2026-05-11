@@ -5,26 +5,26 @@ user-invocable: false
 version: "1.0"
 updated: "2026-02-08"
 ---
-# WGSL Shaders — Endless Project
+# WGSL Shaders. Endless Project
 
 ## Files
-- `shaders/npc_compute.wgsl` — 3-mode compute: clear grid, build grid, separation+movement+combat targeting
-- `shaders/npc_render.wgsl` — instanced quad renderer with sprite atlas + camera uniform
-- `shaders/projectile_compute.wgsl` — projectile movement + spatial grid collision detection
+- `shaders/npc_compute.wgsl`. 3-mode compute: clear grid, build grid, separation+movement+combat targeting
+- `shaders/npc_render.wgsl`. Instanced quad renderer with sprite atlas + camera uniform
+- `shaders/projectile_compute.wgsl`. Projectile movement + spatial grid collision detection
 
 ## WGSL vs GLSL (porting gotchas)
 These bit us during the GLSL→WGSL port:
-- `vec2(0.0)` → `vec2<f32>(0.0, 0.0)` — no implicit broadcast
-- `int/uint/float` → `i32/u32/f32` — explicit types everywhere
+- `vec2(0.0)` → `vec2<f32>(0.0, 0.0)`. No implicit broadcast
+- `int/uint/float` → `i32/u32/f32`. Explicit types everywhere
 - `gl_GlobalInvocationID.x` → `@builtin(global_invocation_id) global_id: vec3<u32>` then `global_id.x`
-- `layout(push_constant)` → `var<uniform>` — WGSL has no push constants, use uniform buffer
+- `layout(push_constant)` → `var<uniform>`. WGSL has no push constants, use uniform buffer
 - `layout(set=0, binding=0, std430) buffer` → `@group(0) @binding(0) var<storage, read_write>`
-- `atomicAdd(grid_counts[i], 1)` → `atomicAdd(&grid_counts[i], 1)` — needs `&` reference
+- `atomicAdd(grid_counts[i], 1)` → `atomicAdd(&grid_counts[i], 1)`. Needs `&` reference
 - `atomicStore` / `atomicLoad` also need `&` reference
-- Atomic buffers: `array<int>` → `array<atomic<i32>>` — must declare atomic type
-- **Variable shadowing forbidden** — WGSL won't let you redeclare `dy` in nested loops. Use `dy2`, `dy3` etc. for separate grid scans.
+- Atomic buffers: `array<int>` → `array<atomic<i32>>`. Must declare atomic type
+- **Variable shadowing forbidden**. WGSL won't let you redeclare `dy` in nested loops. Use `dy2`, `dy3` etc. for separate grid scans.
 - `clamp(int_val, 0, max)` works. `min()`/`max()` work on scalars.
-- `#version 450` / `#[compute]` — remove all GLSL preprocessor directives
+- `#version 450` / `#[compute]`. Remove all GLSL preprocessor directives
 
 ## Compute Shader Pattern
 ```wgsl
@@ -62,8 +62,8 @@ Rust side creates 3 bind groups, one per mode, each with its own uniform buffer 
 Grid: 128x128 cells, 64px each, 48 NPCs/cell max
 Memory: grid_counts = 64KB, grid_data = 3MB
 ```
-- **Mode 0**: `atomicStore(&grid_counts[i], 0)` — one thread per cell
-- **Mode 1**: `atomicAdd(&grid_counts[cell_idx], 1)` — one thread per NPC, claims slot, writes index to `grid_data[cell_idx * max_per_cell + slot]`
+- **Mode 0**: `atomicStore(&grid_counts[i], 0)`. One thread per cell
+- **Mode 1**: `atomicAdd(&grid_counts[cell_idx], 1)`. One thread per NPC, claims slot, writes index to `grid_data[cell_idx * max_per_cell + slot]`
 - **Mode 2**: Read grid via `atomicLoad(&grid_counts[cell_idx])` for neighbor queries
 - Cell from position: `let cx = i32(pos.x / params.cell_size);`
 - Hidden NPCs: `pos.x < -9000.0` means dead/hidden, skip in all modes
@@ -159,11 +159,11 @@ Rust side must match with `#[repr(C)]` + bytemuck. Field order and padding must 
 - **Render shaders**: loaded via Bevy asset system (`shader_defs: vec![]` in `RenderPipelineDescriptor`). Bevy handles compilation.
 
 ## Common Gotchas
-- **No variable shadowing** — use `dy2`, `dx3`, `n2` etc. for separate loop scopes
-- **Atomic requires `&`** — `atomicAdd(&grid_counts[i], 1)` not `atomicAdd(grid_counts[i], 1)`
-- **`SPRITE_SIZE` ≠ render size** — must match atlas cell pixels (16px), quad expansion handles visual size
-- **UV Y-flip not needed** — wgpu texture coordinates are top-left origin, matching the atlas layout. Don't flip.
-- **Bind group numbering matters** — texture in group 0, camera in group 1. Swapping breaks Transparent2d.
-- **`read_write` for all storage** — even read-only buffers use `read_write` in compute. WGSL is lenient here and it avoids needing separate bind group layouts.
-- **Hidden NPC sentinel** — `pos.x < -9000.0` means dead/hidden. Skip in all modes. Set position to `vec2<f32>(-9999.0, -9999.0)` to hide.
-- **Deactivated projectile sentinel** — `proj_hits[i] = vec2<i32>(-1, 0)` means no hit. Set on deactivation to prevent re-trigger.
+- **No variable shadowing**. Use `dy2`, `dx3`, `n2` etc. for separate loop scopes
+- **Atomic requires `&`**. `atomicAdd(&grid_counts[i], 1)` not `atomicAdd(grid_counts[i], 1)`
+- **`SPRITE_SIZE` ≠ render size**. Must match atlas cell pixels (16px), quad expansion handles visual size
+- **UV Y-flip not needed**. Wgpu texture coordinates are top-left origin, matching the atlas layout. Don't flip.
+- **Bind group numbering matters**. Texture in group 0, camera in group 1. Swapping breaks Transparent2d.
+- **`read_write` for all storage**. Even read-only buffers use `read_write` in compute. WGSL is lenient here and it avoids needing separate bind group layouts.
+- **Hidden NPC sentinel**. `pos.x < -9000.0` means dead/hidden. Skip in all modes. Set position to `vec2<f32>(-9999.0, -9999.0)` to hide.
+- **Deactivated projectile sentinel**. `proj_hits[i] = vec2<i32>(-1, 0)` means no hit. Set on deactivation to prevent re-trigger.
