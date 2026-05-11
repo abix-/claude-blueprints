@@ -2,7 +2,7 @@
 
 **Status: active -- skills and hooks evolve frequently**
 
-Personal Claude configuration shared across Claude web and Claude Code instances.
+Personal Claude configuration shared across Claude Code instances.
 
 ## Structure
 
@@ -11,7 +11,9 @@ claude-blueprints/
   skills/             # All skills (directory format: skills/<name>/SKILL.md)
   hooks/              # General-purpose hooks (skill injection, etc.)
   scripts/            # Supporting scripts referenced by skills
-  sanitizer/          # Credential sanitization system
+  extensions/         # Browser extensions (Hush)
+  wezterm/            # WezTerm config
+  archive/            # Unfinished or retired work (see archive/*/STATUS.md)
   CLAUDE.md           # Global context (copy to ~/.claude/)
   settings.json       # Global settings with hooks (copy to ~/.claude/)
 ```
@@ -26,90 +28,137 @@ Then tell Claude: *"Bootstrap my ~/.claude from claude-blueprints"*
 
 After bootstrap, edit repo directly, commit, push, then `/load` to apply locally.
 
-## Components
+## Skills
 
-### Sanitizer
+All skills use directory format: `skills/<name>/SKILL.md`.
 
-Go binary that prevents infrastructure details from reaching Anthropic's servers.
-
-**What gets replaced:**
-- IPs -> `111.x.x.x` sanitized range
-- Hostnames matching patterns (e.g., `*.domain.local`) -> `host-xxxx.example.test`
-- Manual mappings you define (server names, paths, project names)
-
-**How it works:**
-- Hooks run automatically via `settings.json` (SessionStart, PreToolUse, Stop)
-- On file read/edit: sanitizes content before Claude sees it
-- Unsanitized values stored in `~/.claude/unsanitized/{project}/` (never sent to API)
-- Idempotent: re-sanitizes if you modify files mid-session
-
-| Sent to Anthropic | Stays local |
-|-------------------|-------------|
-| Sanitized values only | Unsanitized values + mappings |
-
-See [sanitizer/README.md](sanitizer/README.md) for setup.
-
-### Skills
-
-All skills use directory format: `skills/<name>/SKILL.md`
-
-#### Reference Skills (auto-loaded by Claude)
+### Languages and Frameworks
 
 | Skill | Description |
 |-------|-------------|
-| [ansible](skills/ansible/) | Ansible playbook and role standards |
-| [bevy](skills/bevy/) | Bevy 0.18 ECS patterns for the Endless project |
-| [claude-config](skills/claude-config/) | Skills, hooks, settings, and sync workflow |
 | [code](skills/code/) | Universal development standards |
-| [godot](skills/godot/) | Godot 4.x game development, GDScript, NPC optimization |
+| [rust](skills/rust/) | Rust standards, concurrency, unsafe/FFI, async, workspaces (default language for new work) |
+| [bevy](skills/bevy/) | Bevy 0.18 ECS patterns for the Endless project |
+| [wgsl](skills/wgsl/) | WGSL shader patterns for Bevy compute and instanced rendering |
+| [csharp](skills/csharp/) | C# / .NET / Unity mods / NuGet |
+| [godot](skills/godot/) | Godot 4.x, GDScript, NPC optimization |
 | [golang](skills/golang/) | Go development standards |
-| [infrastructure-troubleshooting](skills/infrastructure-troubleshooting/) | Diagnosing infrastructure problems |
-| [linguistic-breakbeats-labyrinth](skills/linguistic-breakbeats-labyrinth/) | Constraint-based rhythmic text system and MUD runtime |
-| [powershell](skills/powershell/) | PowerShell, VMware, and Pester standards |
 | [python](skills/python/) | Python environment and usage on Windows |
-| [rust](skills/rust/) | Rust development standards |
-| [try-harder](skills/try-harder/) | Response calibration for accuracy and efficiency |
-| [vmware-esxi-performance](skills/vmware-esxi-performance/) | ESXi storage/network performance troubleshooting |
-| [vsphere-influxdb](skills/vsphere-influxdb/) | vSphere VM performance investigation via InfluxDB |
-| [wgsl](skills/wgsl/) | WGSL shader standards |
+| [powershell](skills/powershell/) | PowerShell, VMware, and Pester standards |
+| [ansible](skills/ansible/) | Ansible playbook and role standards |
 
-#### Action Skills (user-invoked via /name)
+### Infrastructure and Ops
+
+| Skill | Description |
+|-------|-------------|
+| [infrastructure-troubleshooting](skills/infrastructure-troubleshooting/) | Starting framework for diagnosing infra problems |
+| [vmware-esxi-performance](skills/vmware-esxi-performance/) | ESXi storage/network performance troubleshooting |
+| [vsphere-influxdb](skills/vsphere-influxdb/) | vSphere VM performance via InfluxDB MCP server |
+| [k3s](skills/k3s/) | k3s cluster on WSL2 Ubuntu 24.04 |
+| [k3sc](skills/k3sc/) | k3sc Go binary -- Claude agent operator, CLI, TUI |
+| [wsl](skills/wsl/) | WSL2 Ubuntu 24.04 management on Windows 10 |
+| [debloat](skills/debloat/) | Strip Windows of junk services, AppX, telemetry |
+
+### Endless (Bevy game)
+
+| Skill | Description |
+|-------|-------------|
+| [endless](skills/endless/) | Build and run Endless |
+| [endless-cli](skills/endless-cli/) | BRP client for inspecting the running game |
+| [/entity](skills/entity/) | Inspect a Bevy entity via endless-cli |
+| [/test](skills/test/) | Build, launch with --autostart, verify via BRP |
+| [/debug](skills/debug/) | Check Rust compiler errors and runtime logs |
+| [/dev](skills/dev/) | Trigger GitHub Actions dev build |
+| [/dist](skills/dist/) | Build release and package for distribution |
+| [/release](skills/release/) | Create GitHub release with notes from CHANGELOG |
+| [/deps](skills/deps/) | Check Rust dependencies for updates |
+| [/benchmark](skills/benchmark/) | Run Criterion benchmarks and record results |
+
+### Mods
+
+| Skill | Description |
+|-------|-------------|
+| [ueforge](skills/ueforge/) | Base framework every UE4SS Rust mod builds on |
+| [grounded2](skills/grounded2/) | Grounded 2 modding (UE5 + UE4SS, Rust) |
+| [outworld-station](skills/outworld-station/) | Outworld Station modding (UE5.4 + UE4SS, Rust) |
+| [schedule1](skills/schedule1/) | Schedule 1 modding (IL2CPP + MelonLoader + Harmony, C#) |
+| [timberborn](skills/timberborn/) | Timberbot mod development (C# + Python) |
+| [/timberbot](skills/timberbot/) | Timberborn gameplay client |
+| [/timberbot-release](skills/timberbot-release/) | Release Timberbot to GitHub and Steam Workshop |
+
+### Other Projects
+
+| Skill | Description |
+|-------|-------------|
+| [abixio](skills/abixio/) | AbixIO S3-compatible erasure-coded object server |
+| [hush](skills/hush/) | Firewall-style rule engine Chrome extension (Rust/WASM + Leptos) |
+| [linguistic-breakbeats-labyrinth](skills/linguistic-breakbeats-labyrinth/) | Constraint-based rhythmic text system and MUD runtime |
+
+### Workflow and Review
+
+| Skill | Description |
+|-------|-------------|
+| [/issue](skills/issue/) | Create, claim, and work GitHub issues |
+| [/n](skills/n/) | Auto-pick next PR/issue and start reviewing |
+| [/review](skills/review/) | Review a PR or issue against hard merge gates |
+| [/approve](skills/approve/) | Approve and merge a PR after review |
+| [/reject](skills/reject/) | Close a failed PR, comment findings, reset |
+| [/done](skills/done/) | Update docs, changelog, commit, and push |
+| [/learn](skills/learn/) | Review conversation and update skills |
+| [/why](skills/why/) | Trace why Claude made its previous response |
+
+### Claude Behavior
+
+| Skill | Description |
+|-------|-------------|
+| [try-harder](skills/try-harder/) | Response calibration for accuracy and efficiency |
+| [/obey](skills/obey/) | Re-read CLAUDE.md and confirm full compliance |
+| [/kovarex](skills/kovarex/) | Brutally honest Factorio-style project review |
+| [/rtfm](skills/rtfm/) | Search for existing solutions before building |
+| [/help](skills/help/) | List all slash commands grouped by workflow stage |
+
+### Claude Config
+
+| Skill | Description |
+|-------|-------------|
+| [claude-config](skills/claude-config/) | Skills, hooks, settings, and sync workflow |
+| [claude-code-deep-dive](skills/claude-code-deep-dive/) | Deep reference for Claude Code internals (query loop, prompt cache, tools) |
+| [docs](skills/docs/) | Build, preview, and deploy MkDocs Material sites |
+| [/load](skills/load/) | Pull repo and apply to ~/.claude |
+| [/fix-auth](skills/fix-auth/) | Restore .claude.json from auto-backup |
+
+### Utilities
 
 | Skill | Description |
 |-------|-------------|
 | [/1note](skills/1note/) | Read and search OneNote notebooks via COM interop |
-| [/benchmark](skills/benchmark/) | Run Criterion benchmarks and record results |
-| [/debug](skills/debug/) | Check Rust compiler errors and runtime logs |
-| [/deps](skills/deps/) | Check Rust dependencies for updates |
-| [/dev](skills/dev/) | Trigger GitHub Actions dev build |
-| [/dist](skills/dist/) | Build release and package for distribution |
-| [/done](skills/done/) | Update docs, changelog, commit, and push |
-| [/endless](skills/endless/) | Build and run Endless |
-| [/entity](skills/entity/) | Inspect a Bevy entity via BRP endpoint |
-| [/fix-auth](skills/fix-auth/) | Restore .claude.json from auto-backup |
-| [/learn](skills/learn/) | Review conversation and update skills |
-| [/load](skills/load/) | Pull repo and apply to ~/.claude |
-| [/release](skills/release/) | Create GitHub release with notes from CHANGELOG |
-| [/test](skills/test/) | Build, launch with --autostart, verify via BRP |
 
-#### Hybrid Skills (user or Claude-invoked)
-
-| Skill | Description |
-|-------|-------------|
-| [/kovarex](skills/kovarex/) | Brutally honest Factorio-style project review |
-| [/rtfm](skills/rtfm/) | Search for existing solutions before building |
-
-### Hooks
+## Hooks
 
 | Hook | Description |
 |------|-------------|
 | [Hook-SessionStart-Skills](hooks/Hook-SessionStart-Skills.ps1) | Injects skills at session start |
 
-### claude-depester
+## Scripts
 
-Replaces whimsical spinner words ("Flibbertigibbeting") with "Thinking". Must run outside Claude (patches the binary). SessionStart hook re-applies after updates.
+| Script | Description |
+|--------|-------------|
+| [dehyphen.py](scripts/dehyphen.py) | Strip em-dashes and double-hyphens from prose |
+| [chrome_cpu_profile.py](scripts/chrome_cpu_profile.py) | Capture CPU profiles from a running Chrome |
+| [google_search.py](scripts/google_search.py) | Headless Google search helper |
+| [1note.ps1](scripts/1note.ps1) | OneNote COM reader (used by `/1note`) |
 
-See: https://github.com/ominiverdi/claude-depester
+## Settings Highlights
+
+- `spinnerVerbs` replaces the whimsical thinking words with a custom verb. No external binary patcher needed.
+- Permission allowlist / deny / `filePermissions` keep secret-bearing paths (`.env`, `**/*.key`, `**/credentials/**`) out of reach.
+- Hooks wire up SessionStart skill injection, prompt logging, and memory updates.
+
+## Archive
+
+Prototyped but unfinished work lives in `archive/`. Each subdir has a `STATUS.md`.
+
+- `archive/sanitizer/` -- Go content sanitizer for hooks. Response-side desanitization and full tool-surface coverage were never finished.
 
 ## Claude Web
 

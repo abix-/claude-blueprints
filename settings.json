@@ -18,7 +18,6 @@
       "WebSearch"
     ],
     "deny": [
-      "~/.claude/sanitizer/sanitizer.json",
       "~/.claude/unsanitized/**"
     ],
     "filePermissions": {

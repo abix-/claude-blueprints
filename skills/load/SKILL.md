@@ -49,18 +49,4 @@ cp "$repo/CLAUDE.md" "$local/" 2>/dev/null
 cp "$repo/settings.json" "$local/" 2>/dev/null
 ```
 
-3. Build Go sanitizer (if Go installed):
-
-```bash
-if [ -f "/c/Program Files/Go/bin/go.exe" ]; then
-    cd "C:/code/claude-blueprints/sanitizer"
-    "/c/Program Files/Go/bin/go.exe" build -o sanitizer.exe ./cmd/sanitizer
-    mkdir -p "$HOME/.claude/sanitizer"
-    cp sanitizer.exe "$HOME/.claude/sanitizer/"
-    echo "Go sanitizer built"
-else
-    echo "Go not installed - skipping"
-fi
-```
-
 Report what git pulled and confirm sync completed.
