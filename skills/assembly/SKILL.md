@@ -119,7 +119,7 @@ ret
 ```
 
 - Leaf functions (no calls) often omit `rbp` and just `sub rsp, N`.
-- **`sub rsp, 0x28`** -- minimum non-leaf prologue: 0x20 shadow +
+- **`sub rsp, 0x28`**. Minimum non-leaf prologue: 0x20 shadow +
   0x08 alignment.
 - **A `ret` with no `add rsp`** = tail call or thunk.
 - **Saved non-volatile registers** appear just inside the prologue
