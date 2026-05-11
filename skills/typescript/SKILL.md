@@ -233,7 +233,7 @@ Knowing its rules pays off for hot paths.
 
 - **Hidden classes**: V8 builds a hidden class for every object
   shape. Adding properties in the same order across all instances
-  keeps them sharing one class -- fast property access. Adding in
+  keeps them sharing one class. Fast property access. Adding in
   different orders, or deleting properties, creates a new hidden
   class and slows lookups.
 - **Monomorphic > polymorphic > megamorphic**: a function called
@@ -269,7 +269,7 @@ Knowing its rules pays off for hot paths.
   near-zero delay.
 - **`requestIdleCallback`** for background work that should yield
   to user interactions. Not available in all Node versions.
-- **Avoid `await` in tight loops** when work is independent --
+- **Avoid `await` in tight loops** when work is independent.
   `Promise.all([...])` runs in parallel.
 
 ### Profiling and benchmarking
