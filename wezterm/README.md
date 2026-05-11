@@ -12,8 +12,8 @@ Terminal config for running multiple Claude Code agents in parallel, each in its
 
 ## Files
 
-- `.wezterm.lua` -- main config, goes to `~/.wezterm.lua`
-- `claude-next.ps1` -- agent launcher, goes to your project's `scripts/` dir
+- `.wezterm.lua`. Main config, goes to `~/.wezterm.lua`
+- `claude-next.ps1`. Agent launcher, goes to your project's `scripts/` dir
 
 ## Setup
 
@@ -37,12 +37,12 @@ copy wezterm\claude-next.ps1 C:\code\endless\scripts\claude-next.ps1
 5. Launches `claude` in that worktree
 6. Tab title auto-updates to show `endless-claude-3:issue-42` etc.
 
-Each agent derives its identity from its worktree path -- no config files or registration needed.
+Each agent derives its identity from its worktree path. No config files or registration needed.
 
 ## Customization
 
 Edit `.wezterm.lua`:
-- `config.default_cwd` -- your project root
-- `config.default_prog` -- shell (pwsh, bash, etc.)
+- `config.default_cwd`. Your project root
+- `config.default_prog`. Shell (pwsh, bash, etc.)
 - `claude-next.ps1` path in the `Ctrl+Shift+N` keybind
 - `$base` and project name in `claude-next.ps1`
