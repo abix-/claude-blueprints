@@ -948,6 +948,295 @@ def _check_shell(text: str) -> int:
 
 
 # ----------------------------------------------------------------------
+# JavaScript / TypeScript processor
+# ----------------------------------------------------------------------
+
+
+def _tokenize_js(text: str) -> list[tuple[str, str]]:
+    """Tokenize JS / TS source.
+
+    Kinds: 'code', 'line_comment', 'block_comment', 'string', 'template'.
+    Only the comment kinds get rewritten.
+
+    Handles: // line comments, /* block */ (no nesting), "..." and '...'
+    strings (backslash escapes), `...` template literals (with ${...}
+    interpolation skipped as a single span). No raw strings, no char literals.
+    """
+    i = 0
+    n = len(text)
+    out: list[tuple[str, str]] = []
+    code_start = 0
+
+    def flush_code(end: int) -> None:
+        nonlocal code_start
+        if end > code_start:
+            out.append(("code", text[code_start:end]))
+
+    while i < n:
+        c = text[i]
+
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            flush_code(i)
+            j = text.find("*/", i + 2)
+            if j < 0:
+                j = n
+            else:
+                j += 2
+            out.append(("block_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            flush_code(i)
+            j = text.find("\n", i)
+            if j < 0:
+                j = n
+            out.append(("line_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        if c in ('"', "'"):
+            flush_code(i)
+            quote = c
+            j = i + 1
+            while j < n:
+                if text[j] == "\\" and j + 1 < n:
+                    j += 2
+                elif text[j] == "\n":
+                    break
+                elif text[j] == quote:
+                    j += 1
+                    break
+                else:
+                    j += 1
+            out.append(("string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        if c == "`":
+            flush_code(i)
+            j = i + 1
+            while j < n:
+                if text[j] == "\\" and j + 1 < n:
+                    j += 2
+                elif text[j] == "`":
+                    j += 1
+                    break
+                elif text[j] == "$" and j + 1 < n and text[j + 1] == "{":
+                    # Skip past balanced ${...}. Brace counter.
+                    depth = 1
+                    j += 2
+                    while j < n and depth > 0:
+                        if text[j] == "{":
+                            depth += 1
+                        elif text[j] == "}":
+                            depth -= 1
+                        j += 1
+                else:
+                    j += 1
+            out.append(("template", text[i:j]))
+            i = j
+            code_start = i
+            continue
+
+        i += 1
+
+    flush_code(n)
+    return out
+
+
+def _process_js(text: str) -> tuple[str, int]:
+    tokens = _tokenize_js(text)
+    out_parts: list[str] = []
+    remaining = 0
+    for kind, chunk in tokens:
+        if kind in ("line_comment", "block_comment"):
+            lines = chunk.split("\n")
+            new_chunk = "\n".join(_rewrite_prose(ln) for ln in lines)
+            if _line_would_change(new_chunk):
+                remaining += 1
+            out_parts.append(new_chunk)
+        else:
+            out_parts.append(chunk)
+    return "".join(out_parts), remaining
+
+
+def _check_js(text: str) -> int:
+    tokens = _tokenize_js(text)
+    count = 0
+    for kind, chunk in tokens:
+        if kind not in ("line_comment", "block_comment"):
+            continue
+        for ln in chunk.split("\n"):
+            if _line_would_change(ln):
+                count += 1
+    return count
+
+
+# ----------------------------------------------------------------------
+# WGSL processor (comments only; no strings)
+# ----------------------------------------------------------------------
+
+
+def _tokenize_wgsl(text: str) -> list[tuple[str, str]]:
+    """WGSL has // line comments and /* block */ (non-nesting). No strings."""
+    i = 0
+    n = len(text)
+    out: list[tuple[str, str]] = []
+    code_start = 0
+
+    def flush_code(end: int) -> None:
+        nonlocal code_start
+        if end > code_start:
+            out.append(("code", text[code_start:end]))
+
+    while i < n:
+        c = text[i]
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            flush_code(i)
+            j = text.find("*/", i + 2)
+            if j < 0:
+                j = n
+            else:
+                j += 2
+            out.append(("block_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "/":
+            flush_code(i)
+            j = text.find("\n", i)
+            if j < 0:
+                j = n
+            out.append(("line_comment", text[i:j]))
+            i = j
+            code_start = i
+            continue
+        i += 1
+    flush_code(n)
+    return out
+
+
+def _process_wgsl(text: str) -> tuple[str, int]:
+    tokens = _tokenize_wgsl(text)
+    out_parts: list[str] = []
+    remaining = 0
+    for kind, chunk in tokens:
+        if kind in ("line_comment", "block_comment"):
+            lines = chunk.split("\n")
+            new_chunk = "\n".join(_rewrite_prose(ln) for ln in lines)
+            if _line_would_change(new_chunk):
+                remaining += 1
+            out_parts.append(new_chunk)
+        else:
+            out_parts.append(chunk)
+    return "".join(out_parts), remaining
+
+
+def _check_wgsl(text: str) -> int:
+    tokens = _tokenize_wgsl(text)
+    count = 0
+    for kind, chunk in tokens:
+        if kind not in ("line_comment", "block_comment"):
+            continue
+        for ln in chunk.split("\n"):
+            if _line_would_change(ln):
+                count += 1
+    return count
+
+
+# ----------------------------------------------------------------------
+# YAML processor (# comments only)
+# ----------------------------------------------------------------------
+
+
+def _tokenize_yaml(text: str) -> list[tuple[str, str]]:
+    """YAML has `#` line comments. Strings handled minimally to avoid
+    misreading a `#` inside a quoted scalar as a comment marker.
+    """
+    i = 0
+    n = len(text)
+    out: list[tuple[str, str]] = []
+    code_start = 0
+
+    def flush_code(end: int) -> None:
+        nonlocal code_start
+        if end > code_start:
+            out.append(("code", text[code_start:end]))
+
+    while i < n:
+        c = text[i]
+        if c == "#":
+            # YAML requires whitespace before `#` for it to start a comment.
+            is_comment = i == 0 or text[i - 1] in (" ", "\t", "\n")
+            if is_comment:
+                flush_code(i)
+                j = text.find("\n", i)
+                if j < 0:
+                    j = n
+                out.append(("line_comment", text[i:j]))
+                i = j
+                code_start = i
+                continue
+        if c == "'":
+            flush_code(i)
+            j = text.find("'", i + 1)
+            if j < 0:
+                j = n
+            else:
+                j += 1
+            out.append(("string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+        if c == '"':
+            flush_code(i)
+            j = i + 1
+            while j < n:
+                if text[j] == "\\" and j + 1 < n:
+                    j += 2
+                elif text[j] == '"':
+                    j += 1
+                    break
+                elif text[j] == "\n":
+                    break
+                else:
+                    j += 1
+            out.append(("string", text[i:j]))
+            i = j
+            code_start = i
+            continue
+        i += 1
+    flush_code(n)
+    return out
+
+
+def _process_yaml(text: str) -> tuple[str, int]:
+    tokens = _tokenize_yaml(text)
+    out_parts: list[str] = []
+    remaining = 0
+    for kind, chunk in tokens:
+        if kind == "line_comment":
+            new_chunk = _rewrite_prose(chunk)
+            if _line_would_change(new_chunk):
+                remaining += 1
+            out_parts.append(new_chunk)
+        else:
+            out_parts.append(chunk)
+    return "".join(out_parts), remaining
+
+
+def _check_yaml(text: str) -> int:
+    tokens = _tokenize_yaml(text)
+    return sum(
+        1 for kind, chunk in tokens if kind == "line_comment" and _line_would_change(chunk)
+    )
+
+
+# ----------------------------------------------------------------------
 # Plain processor (whole file is prose)
 # ----------------------------------------------------------------------
 
@@ -983,6 +1272,15 @@ LANG_BY_EXT = {
     ".toml": "toml",
     ".sh": "shell",
     ".bash": "shell",
+    ".js": "js",
+    ".mjs": "js",
+    ".cjs": "js",
+    ".ts": "js",
+    ".tsx": "js",
+    ".jsx": "js",
+    ".wgsl": "wgsl",
+    ".yaml": "yaml",
+    ".yml": "yaml",
     ".txt": "plain",
     ".rst": "plain",
 }
@@ -1000,6 +1298,9 @@ PROCESSORS = {
     "go": _process_go,
     "toml": _process_toml,
     "shell": _process_shell,
+    "js": _process_js,
+    "wgsl": _process_wgsl,
+    "yaml": _process_yaml,
     "plain": _process_plain,
 }
 
@@ -1011,6 +1312,9 @@ CHECKERS = {
     "go": _check_go,
     "toml": _check_toml,
     "shell": _check_shell,
+    "js": _check_js,
+    "wgsl": _check_wgsl,
+    "yaml": _check_yaml,
     "plain": _check_plain,
 }
 
