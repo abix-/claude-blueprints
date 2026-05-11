@@ -16,11 +16,11 @@ For Ansible-specific layout, read the `ansible` skill.
 
 ## Delimiters
 
-- `{{ expr }}` -- output expression.
-- `{% stmt %}` -- statement (for, if, set, include, etc).
-- `{# comment #}` -- comment, never rendered.
-- `{%- ... -%}` -- strip surrounding whitespace.
-- `{%+ ... %}` -- force keep leading whitespace (rare).
+- `{{ expr }}`. Output expression.
+- `{% stmt %}`. Statement (for, if, set, include, etc).
+- `{# comment #}`. Comment, never rendered.
+- `{%- ... -%}`. Strip surrounding whitespace.
+- `{%+ ... %}`. Force keep leading whitespace (rare).
 - Inside double-curly: spaces around the expression always:
   `{{ name }}`, not `{{name}}`. Readable diffs.
 
@@ -121,7 +121,7 @@ Tests follow `is`/`is not`. They return booleans.
 
 - `loop.first`, `loop.last`, `loop.index` (1-based), `loop.index0`
   (0-based), `loop.length`, `loop.cycle('a','b')` for alternation.
-- `{% for ... %}{% else %}` -- the `else` runs only if the iterable
+- `{% for ... %}{% else %}`. The `else` runs only if the iterable
   was empty. Cleaner than separate length checks.
 - `{% set var = expr %}` for local vars. Scope is the template block.
 - `{% set var %}block content{% endset %}` for block-valued vars
@@ -227,17 +227,17 @@ some patterns matter:
 
 ## Ansible-specific
 
-- `hostvars[inventory_hostname]` -- this host's facts and vars.
-- `hostvars[other_host]` -- another host's vars (requires that play
+- `hostvars[inventory_hostname]`. This host's facts and vars.
+- `hostvars[other_host]`. Another host's vars (requires that play
   to have run against the other host).
-- `groups['groupname']` -- list of hostnames in a group.
+- `groups['groupname']`. List of hostnames in a group.
 - `inventory_hostname`, `ansible_facts.os_family`, `ansible_default_ipv4.address`
-  -- the most-used built-ins.
+ . The most-used built-ins.
 - Lookups run on the control node:
-  - `lookup('file', 'path')` -- file content from the control node.
-  - `lookup('env', 'NAME')` -- env var from the control node.
-  - `lookup('pipe', 'cmd')` -- run command on the control node.
-  - `lookup('vars', 'name')` -- indirect var ref.
+  - `lookup('file', 'path')`. File content from the control node.
+  - `lookup('env', 'NAME')`. Env var from the control node.
+  - `lookup('pipe', 'cmd')`. Run command on the control node.
+  - `lookup('vars', 'name')`. Indirect var ref.
 - For target-node values, use `slurp`, `command`, or a module.
 
 ## Avoid
