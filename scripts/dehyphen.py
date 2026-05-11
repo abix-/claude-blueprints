@@ -113,10 +113,12 @@ def _replace_prose_dashes(line: str) -> str:
 
 
 def _scan_violations(line: str) -> bool:
-    """True if the line still contains a prose ' -- ' or em-dash after rewrite."""
-    if " -- " in line or EMDASH in line:
-        return True
-    return False
+    """True if a re-run of the rewriter would still change this line.
+
+    Matches the contract of the `--check` mode so the post-rewrite count
+    in normal mode agrees with audit results.
+    """
+    return _replace_prose_dashes(line) != line
 
 
 def process(text: str) -> tuple[str, int]:

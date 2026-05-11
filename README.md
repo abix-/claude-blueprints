@@ -45,7 +45,12 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | [golang](skills/golang/) | Go development standards |
 | [python](skills/python/) | Python environment and usage on Windows |
 | [powershell](skills/powershell/) | PowerShell, VMware, and Pester standards |
+| [bash](skills/bash/) | Bash scripting standards for shell scripts and CI |
+| [typescript](skills/typescript/) | TypeScript / JavaScript standards (browser, Node, extensions) |
 | [ansible](skills/ansible/) | Ansible playbook and role standards |
+| [jinja](skills/jinja/) | Jinja2 templating (Ansible, AWX) |
+| [yaml](skills/yaml/) | YAML standards (configs, Ansible, k8s, Actions) |
+| [ahk](skills/ahk/) | AutoHotkey v2 Windows automation and game macros |
 
 ### Infrastructure and Ops
 
