@@ -226,6 +226,81 @@ const parts = String(v).split(",");
 - `requestAnimationFrame` for DOM-dependent timing, never `setTimeout(fn, 16)`.
 - For WASM-backed apps, push hot loops into Rust. JS is the bridge.
 
+### V8 / engine specifics
+
+V8 powers Chrome, Edge, Node.js, Deno (and most extension contexts).
+Knowing its rules pays off for hot paths.
+
+- **Hidden classes**: V8 builds a hidden class for every object
+  shape. Adding properties in the same order across all instances
+  keeps them sharing one class -- fast property access. Adding in
+  different orders, or deleting properties, creates a new hidden
+  class and slows lookups.
+- **Monomorphic > polymorphic > megamorphic**: a function called
+  with one object shape is inlined and specialized. Two shapes is
+  polymorphic (slower). 4+ shapes is megamorphic (very slow,
+  inline cache flushed). Avoid passing wildly different shapes to
+  the same function in hot paths.
+- **Avoid `delete obj.prop`** in hot objects. Triggers transition to
+  dictionary mode. Set to `undefined` if you must clear.
+- **Pre-size arrays** with `new Array(n)` or fill via `Array.from`,
+  not `push` in a loop, when length is known. V8 reallocates the
+  backing store ~once per doubling but can avoid it.
+- **Typed arrays** (`Float32Array`, `Uint8Array`, etc.) for
+  numerical data. Tightly packed, predictable, no boxing.
+- **String concat with `+`** is fine; V8 uses cons-strings. Avoid
+  repeated `s = s + char` in a loop only because the cons tree gets
+  deep; reach for an array + `.join('')` past ~1000 chars.
+- **`JSON.parse` on a string is faster than building the object
+  literally** when the data is more than a few hundred items.
+  V8 has a fast-path parser.
+- **Avoid `with`, `eval`, `arguments`** in hot functions. Each
+  inhibits inlining.
+
+### Async and event loop
+
+- **Microtasks run before macrotasks.** `Promise.resolve().then(...)`
+  fires before `setTimeout(..., 0)`. Long microtask chains starve
+  rendering.
+- **`queueMicrotask(fn)`** for "run after current code but before
+  next event" without creating a Promise.
+- **`setTimeout(..., 0)`** has a 4ms minimum in most browsers
+  (clamped). Use `MessageChannel.port.postMessage(...)` for true
+  near-zero delay.
+- **`requestIdleCallback`** for background work that should yield
+  to user interactions. Not available in all Node versions.
+- **Avoid `await` in tight loops** when work is independent --
+  `Promise.all([...])` runs in parallel.
+
+### Profiling and benchmarking
+
+- **Chrome DevTools Performance tab** for full timeline: scripting,
+  rendering, painting, GC. Indispensable for browser code.
+- **`console.time` / `timeEnd`** for ad-hoc measurement. Pair with
+  `performance.now()` for sub-ms precision.
+- **`performance.mark` + `performance.measure`** to surface in the
+  DevTools timeline.
+- **Node**: `node --prof` then `node --prof-process` for V8
+  profiling. `--inspect` to attach Chrome DevTools to Node.
+- **Memory leaks**: DevTools Memory tab, take heap snapshots
+  before/after, compare. Look for detached DOM nodes (extension
+  bug class) and closures retaining caller frames.
+- **Bundle size matters more than runtime perf for most web apps.**
+  Use `webpack-bundle-analyzer` / `esbuild --analyze` / source maps
+  explorer to see what's shipping. Code-split routes.
+
+### Browser specifics
+
+- **MV3 service workers idle out after ~30s.** Module-scope state
+  is wiped. Persist with `chrome.storage`.
+- **`chrome.storage.local` is async** and has quota (~10MB).
+  `session` is in-memory, cleared on browser close.
+- **DOM mutations batch:** reading `offsetWidth` (or any layout
+  property) flushes pending mutations and forces sync layout.
+  Don't interleave reads and writes; batch reads, then writes.
+- **`IntersectionObserver` / `MutationObserver`** for reactive DOM
+  watching; far cheaper than `setInterval` polling.
+
 ## File and import conventions
 
 - Named exports by default. Default exports only when the file has

@@ -204,6 +204,55 @@ func runClaim(cmd *cobra.Command, args []string) error {
 ## Performance
 
 - Preallocate slices when length is known: `make([]T, 0, n)`.
+- **Struct field ordering matters for cache lines.** Group hot fields
+  together; pack same-size fields to avoid padding. `go vet
+  -fieldalignment` (now in `golang.org/x/tools/go/analysis/passes/fieldalignment`)
+  flags layout issues.
+- **Escape analysis:** `go build -gcflags='-m'` shows what escapes to
+  the heap. Returning a pointer to a local var, capturing in a
+  closure, or putting a value behind an interface forces a heap
+  allocation. Audit hot paths.
+- **`sync.Pool` for transient allocations** in hot paths (buffers,
+  small structs). Standard pattern: `pool.Get().(*Buf)`, defer
+  `pool.Put(buf)`. Don't hold pooled objects past the request scope.
+- **`bytes.Buffer` and `strings.Builder` reuse:** call `Reset()`
+  between uses instead of allocating new.
+- **Avoid `interface{}` / `any` in hot paths.** Each interface value
+  is a 2-word struct (type pointer + data pointer); method calls
+  through interfaces are indirect. Use concrete types or generics.
+- **Map lookup cost:** ~10ns for small maps; degrades with size and
+  hash quality. For frequent lookups on a fixed set, consider
+  `[N]struct{}` with a switch, or generate a perfect hash.
+- **Channel cost:** ~50-100ns per send/recv. For very high frequency
+  events, mutex + condition variable can be cheaper.
+- **Goroutines have setup cost** (~2us + 8KB initial stack). For
+  small N or short work, sequential beats parallel.
+
+### Profiling and benchmarking
+
+- **`go test -bench=. -benchmem`** for microbenchmarks. Always
+  include `-benchmem` to track allocations.
+- **`benchstat` (`golang.org/x/perf/cmd/benchstat`)** to compare
+  before/after benchmark runs with statistical significance:
+  ```
+  go test -bench=. -count=10 > old.txt
+  # make change
+  go test -bench=. -count=10 > new.txt
+  benchstat old.txt new.txt
+  ```
+- **`pprof`** for production profiling: `go test -bench=. -cpuprofile=cpu.out`
+  then `go tool pprof cpu.out` for an interactive profile. `-memprofile`
+  for heap, `-blockprofile` for blocking events.
+- **`net/http/pprof`** for live process profiling: import as side
+  effect, hit `/debug/pprof/profile` for a 30s CPU sample.
+- **`trace`** (`-trace=trace.out` + `go tool trace`) for scheduler
+  / GC / goroutine analysis. Visualization shows when goroutines
+  block and on what.
+- **`runtime.ReadMemStats`** for in-process heap snapshots. Useful
+  to verify "no allocations in hot path" assertions.
+- **Avoid microbenchmarks that the compiler optimizes away.** Use
+  `b.N` correctly and `_ = result` to keep the operation live.
+
 - Avoid `fmt.Sprintf` in hot paths; use `strings.Builder` for
   concatenation loops.
 - `strings.HasPrefix` / `strings.TrimSpace` over regex for fixed

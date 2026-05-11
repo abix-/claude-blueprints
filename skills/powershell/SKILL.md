@@ -256,14 +256,66 @@ Describe "Get-DatastoreDetails" {
 
 ## Performance
 
-- `Get-View` over object-mode PowerCLI cmdlets for large queries.
-- Avoid `+=` on arrays in loops; rebuilds the array each time
-  (`O(n^2)`). Use `ArrayList` or `foreach` returning into a variable.
-- `Where-Object` server-side via `-Filter @{}` (Get-View) beats
-  client-side `| Where-Object {}`.
-- Pipeline can be slower than a `foreach` loop for very large
-  collections due to per-item dispatch overhead.
-- `Measure-Command { ... }` to benchmark. Real numbers beat guesses.
+### Established wins
+
+- **`Get-View`** over `Get-VM` / `Get-VMHost` for large fleets.
+  Server-side filtering via `-Filter @{}` is orders of magnitude
+  faster.
+- **Avoid `+=` on arrays in loops.** PowerShell arrays are
+  immutable; `+=` rebuilds the array each time (O(n^2)). Options:
+  - Assign the pipeline directly: `$results = foreach ($x in $xs) { ... }`.
+  - Use `[System.Collections.Generic.List[object]]`: `$list = [List[object]]::new(); $list.Add($x)`.
+  - `[System.Collections.ArrayList]` (legacy but still works).
+- **`foreach` (statement) over `ForEach-Object` (cmdlet)** for very
+  large collections. Statement is 2-10x faster due to per-item
+  dispatch overhead. ForEach-Object's `process { }` block is the
+  bottleneck.
+- **`Where-Object {}` over `?{}` alias** semantically identical, but
+  property-name comparison (`Where-Object Name -eq 'foo'`) skips
+  the script block parse and is ~2x faster.
+- **Pipeline can be slower than a `foreach` loop** for very large
+  collections due to per-item dispatch overhead. The pipeline
+  shines for memory (it streams) but loses on CPU for in-memory data.
+- **.NET methods over cmdlets in hot paths.** `[System.IO.File]::ReadAllLines($p)`
+  beats `Get-Content` by 5-10x. Cmdlets have parameter binding
+  overhead per call.
+- **Avoid `Write-Host` in loops.** Each call hits the host UI;
+  redirect to a list and emit once.
+
+### Parallelism (PS 7+)
+
+- **`ForEach-Object -Parallel { } -ThrottleLimit N`** (PowerShell 7
+  only). Spawns N runspaces. Each iteration runs in its own
+  context; `$using:var` to capture outer variables.
+  ```powershell
+  $vms | ForEach-Object -Parallel {
+      Get-VM $_ | Select-Object Name, PowerState
+  } -ThrottleLimit 10
+  ```
+- **Startup cost** per parallel batch is significant (~500ms).
+  Worth it only for parallelizable work taking >1s total.
+- **`Start-ThreadJob`** for fire-and-forget background work.
+  Cheaper than `Start-Job` (which uses a separate process).
+- **Runspace pools** for high-frequency parallel work: build a pool
+  once, reuse runspaces. The `PoshRSJob` module wraps this.
+
+### Profiling and benchmarking
+
+- **`Measure-Command { ... }`** for one-shot timing. Returns
+  `TimeSpan`. Wrap the entire pipeline.
+- **`Trace-Command`** for deep-trace into cmdlet internals:
+  `Trace-Command -Name ParameterBinding -Expression { Get-Process } -PSHost`.
+- **`Get-Counter`** for OS-level perf counters.
+- **`Microsoft.PowerShell.Utility/Get-Random`**: avoid in tight loops;
+  the cryptographic implementation is slow.
+- For repeatable benchmarks, use multiple iterations and discard
+  the first (JIT warmup):
+  ```powershell
+  1..10 | ForEach-Object { (Measure-Command { ... }).TotalMilliseconds } |
+      Select-Object -Skip 1 | Measure-Object -Average -Minimum -Maximum
+  ```
+- **PSScriptAnalyzer** for lint and style checks; not perf-focused
+  but catches common slow patterns.
 
 ## Style
 

@@ -199,11 +199,64 @@ Scripts should be safe to re-run. Examples:
 
 ## Performance
 
-- Don't optimize Python; rewrite the hot path in Rust or Go.
-- For text munging: compiled regex is the only meaningful win
-  (`re.compile` once at module scope).
-- `subprocess.run` has fixed overhead (~50ms). Batch when possible.
-- `json.loads` on a `bytes` object is fine in 3.6+; no decode step.
+The dominant rule: **don't optimize Python**. Profile to confirm
+Python is the bottleneck, then rewrite that path in Rust (via
+PyO3 or just a separate binary) or Go.
+
+### Established wins inside Python
+
+- **`re.compile` once at module scope.** Pattern compilation
+  dwarfs the match cost.
+- **`subprocess.run` has fixed overhead (~50ms).** Batch when
+  possible. For many small commands, spawn one shell with `bash -c`
+  and let it loop.
+- **`json.loads` on a `bytes` object** is fine in 3.6+; no decode
+  step. `orjson` is 3-5x faster if you can take a dependency.
+- **Built-in functions in C** (`sum`, `min`, `max`, `any`, `all`,
+  `sorted`, `map`, `filter`) beat hand-rolled loops.
+- **List comprehensions** beat `for + append` loops by 30-50%.
+  Generator expressions `(x for x in ...)` use less memory when
+  feeding `sum` / `any` / `all`.
+- **`dict.get(key, default)`** beats `if key in dict: ... else`.
+  One hash lookup vs two.
+- **String concat with `+` in a loop is O(n^2).** Use
+  `''.join(parts)` with a list, or `io.StringIO`.
+- **`set` membership is O(1).** Use it for "is X in this list"
+  checks repeated many times.
+- **`functools.lru_cache`** for memoizing pure functions. Free
+  speedup on recursive or repeated-input work.
+- **`__slots__`** on small classes used in large numbers. Skips
+  the per-instance `__dict__`; ~40% memory reduction, faster
+  attribute access.
+
+### Multiprocessing vs threading
+
+- **GIL serializes Python bytecode.** Threading helps only for I/O-
+  bound work where the GIL is released (file I/O, network, C
+  extensions).
+- **`multiprocessing.Pool`** for CPU-bound parallelism. Each worker
+  has its own GIL. Cost: pickle every arg + result.
+- **`concurrent.futures.ThreadPoolExecutor` / `ProcessPoolExecutor`**
+  for cleaner API over the above.
+- **Python 3.13+ has free-threaded builds** (no GIL) experimentally;
+  not default yet.
+- **For mostly-async I/O**, `asyncio` beats threads. Single thread,
+  cooperative scheduling, no GIL contention.
+
+### Profiling
+
+- **`cProfile`** for function-level CPU time:
+  `python -m cProfile -o prof.out script.py`, then
+  `snakeviz prof.out` for a visualization.
+- **`pyinstrument`** is a sampling profiler with cleaner output
+  than cProfile. `pyinstrument script.py`.
+- **`line_profiler`** for line-by-line CPU in a specific function:
+  decorate with `@profile`, run with `kernprof -lv script.py`.
+- **`memory_profiler`** for line-by-line memory: `@profile` +
+  `python -m memory_profiler script.py`.
+- **`timeit`** for micro-benchmarks:
+  `python -m timeit -s 'x = list(range(1000))' 'sum(x)'`.
+- **`tracemalloc`** for tracking allocations by source line. Stdlib.
 
 ## Windows specifics
 
