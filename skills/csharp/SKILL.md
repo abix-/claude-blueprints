@@ -11,17 +11,17 @@ updated: "2026-03-24"
 
 - Windows 10, .NET SDK installed (multiple versions available)
 - Build: `dotnet build` (debug), `dotnet build -c Release` (release)
-- Target framework depends on project -- check `<TargetFramework>` in csproj
+- Target framework depends on project. Check `<TargetFramework>` in csproj
 - Unity mods target `netstandard2.1` (builds with any SDK 6+, output is always netstandard2.1)
 
 ## SDK vs Target Framework
 
 The .NET SDK version (6, 7, 8, 9) is the build tool. The `<TargetFramework>` in csproj is the output. They're independent:
-- `netstandard2.1` -- Unity/game mods, maximum compatibility
-- `net6.0` through `net9.0` -- standalone apps, pick latest stable
+- `netstandard2.1`. Unity/game mods, maximum compatibility
+- `net6.0` through `net9.0`. Standalone apps, pick latest stable
 - `<LangVersion>` in csproj limits C# syntax features regardless of SDK
 
-Building a `netstandard2.1` project with SDK 9 works fine -- the SDK is just the compiler.
+Building a `netstandard2.1` project with SDK 9 works fine. The SDK is just the compiler.
 
 ## Project Structure
 
@@ -40,7 +40,7 @@ Building a `netstandard2.1` project with SDK 9 works fine -- the SDK is just the
 </Project>
 ```
 
-`<Private>false</Private>` prevents copying referenced DLLs to output -- use when the host already has them (Unity, game runtime).
+`<Private>false</Private>` prevents copying referenced DLLs to output. Use when the host already has them (Unity, game runtime).
 
 ## Accessing Internal Types
 
@@ -123,7 +123,7 @@ if (RefChanged(ref c.LastWorkplaceRef, wp))
     c.Workplace = wp != null ? CleanName(wp.GameObject.name) : null;
 ```
 
-Use for: workplace names, district names, recipe names, any string derived from a game object reference. The `ReferenceEquals` check is a single pointer comparison — essentially free.
+Use for: workplace names, district names, recipe names, any string derived from a game object reference. The `ReferenceEquals` check is a single pointer comparison. Essentially free.
 
 ### Immutable-at-Add-Time Pattern
 
@@ -144,7 +144,7 @@ Rule: if a value only changes when the entity is created or destroyed, it belong
 
 ### Fluent Zero-Alloc JSON Writer (TimberbotJw)
 
-For all JSON serialization, use a fluent `TimberbotJw` instead of Dictionary+Newtonsoft. Allocate once as a field, `Reset()` per request. Auto-handles commas via depth-aware state -- no manual separator tracking:
+For all JSON serialization, use a fluent `TimberbotJw` instead of Dictionary+Newtonsoft. Allocate once as a field, `Reset()` per request. Auto-handles commas via depth-aware state. No manual separator tracking:
 
 ```csharp
 // field -- allocated once, reused across all requests
@@ -214,16 +214,16 @@ Available:
 - Local functions
 
 NOT available in netstandard2.1:
-- File-scoped namespaces (`namespace Foo;`) -- requires C# 10
-- Global usings -- requires C# 10
-- Raw string literals -- requires C# 11
-- Primary constructors -- requires C# 12
-- Collection expressions (`[1, 2, 3]`) -- requires C# 12
+- File-scoped namespaces (`namespace Foo;`). Requires C# 10
+- Global usings. Requires C# 10
+- Raw string literals. Requires C# 11
+- Primary constructors. Requires C# 12
+- Collection expressions (`[1, 2, 3]`). Requires C# 12
 
 ## Common Gotchas
 
 - **Variable name conflicts in nested scopes:** C# forbids reusing names from enclosing scopes in pattern matching (`is int g` fails if `g` exists in outer scope)
-- **`foreach` on non-IEnumerable:** types like `GoodAmount` may look iterable but aren't -- check the actual type
+- **`foreach` on non-IEnumerable:** types like `GoodAmount` may look iterable but aren't. Check the actual type
 - **`GetComponent<T>()` ambiguity:** game frameworks (Unity, Timberborn) may have their own `GetComponent` that shadows Unity's. Use the right one.
 - **`Publicize="true"` doesn't mean types exist:** the type must actually be in that DLL. If you get "type not found," check `ls Managed/ | grep -i keyword` to find the right DLL.
 - **Thread safety:** Unity APIs are main-thread only. Background HTTP threads must queue work, not call Unity directly.
@@ -237,14 +237,14 @@ dotnet build -c Release   # release build
 dotnet clean && dotnet build  # force full rebuild
 ```
 
-- CS0136 "name used in enclosing scope" -- rename the variable in the pattern match
-- CS1061 "does not contain a definition" -- wrong property name on publicized type, use reflection to discover
-- CS1579 "foreach cannot operate" -- type isn't iterable, access its properties directly
-- "type not found" -- add the DLL reference to csproj with Publicize="true"
+- CS0136 "name used in enclosing scope". Rename the variable in the pattern match
+- CS1061 "does not contain a definition". Wrong property name on publicized type, use reflection to discover
+- CS1579 "foreach cannot operate". Type isn't iterable, access its properties directly
+- "type not found". Add the DLL reference to csproj with Publicize="true"
 
 ## GC / Allocation Patterns
 
-### Per-frame code (Update loops) -- zero alloc target
+### Per-frame code (Update loops). Zero alloc target
 
 - **Never** use `new Dictionary`, `new List`, LINQ, `string.Format`, `ToString()` on enums in per-frame code
 - **Do** use pre-allocated structs, arrays, static lookup tables, `StringBuilder` reuse
@@ -269,7 +269,7 @@ Only matters in per-frame/per-second refresh paths. Per-request code (HTTP respo
 
 ### Why TimberbotJw instead of Newtonsoft
 
-Avoids: Dictionary allocs per item, Newtonsoft reflection, intermediate string allocs. 10x+ faster than `JsonConvert.SerializeObject(list)`. All endpoints use a single shared `TimberbotJw` instance -- serial on the listener thread, no concurrency concern.
+Avoids: Dictionary allocs per item, Newtonsoft reflection, intermediate string allocs. 10x+ faster than `JsonConvert.SerializeObject(list)`. All endpoints use a single shared `TimberbotJw` instance. Serial on the listener thread, no concurrency concern.
 
 ### LINQ in hot paths
 
@@ -302,7 +302,7 @@ Deploy built DLL to a target folder automatically:
 ## API Design Patterns (Unity Mods)
 
 ### Return types: struct not JSON
-Internal methods return typed structs. JSON serialization happens ONLY at the HTTP boundary. Never pass JSON strings between internal methods -- use the struct directly.
+Internal methods return typed structs. JSON serialization happens ONLY at the HTTP boundary. Never pass JSON strings between internal methods. Use the struct directly.
 
 ```csharp
 // good: struct for internal use, ToJson() at HTTP boundary
@@ -316,10 +316,10 @@ public object PlaceBuilding(...) { return _jw.Result(("id", id)); }
 
 ### Game validation over custom checks
 Trust the game engine's validators (IsValid, BlockValidator). Use them for error reasons instead of reimplementing:
-- `BlockValidator.BlockConflictsWithExistingObject` -- what's blocking a tile
-- `BlockObjectValidationService._blockObjectValidators` -- 9 validators with reason strings
-- `PreviewFactory.Create` + `Reposition` + `IsValid` -- the player's green/red overlay
-- `PositionedBlocks.GetAllBlocks()` -- world-space blocks after rotation, no manual rotation math
+- `BlockValidator.BlockConflictsWithExistingObject`. What's blocking a tile
+- `BlockObjectValidationService._blockObjectValidators`. 9 validators with reason strings
+- `PreviewFactory.Create` + `Reposition` + `IsValid`. The player's green/red overlay
+- `PositionedBlocks.GetAllBlocks()`. World-space blocks after rotation, no manual rotation math
 
 ### Data formats: toon vs json
 All list endpoints accept `format` param. Server writes different output per format:
