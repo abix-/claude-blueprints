@@ -25,7 +25,7 @@ version: "1.0"
 ## Rules
 
 - Don't update docs that aren't affected by the code changes
-- Don't add content to docs that isn't in the code -- docs reflect reality
+- Don't add content to docs that isn't in the code. Docs reflect reality
 - If a known issue was fixed, remove it from the doc and from docs/README.md aggregate list
 - If a new known issue was discovered, add it
 - Adjust ratings if the change improved or degraded the system
