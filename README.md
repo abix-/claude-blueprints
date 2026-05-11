@@ -32,13 +32,13 @@ After bootstrap, edit repo directly, commit, push, then `/load` to apply locally
 
 All skills use directory format: `skills/<name>/SKILL.md`.
 
-### Languages and Frameworks
+### Coding
 
 | Skill | Description |
 |-------|-------------|
 | [code](skills/code/) | Universal development standards |
 | [rust](skills/rust/) | Rust standards, concurrency, unsafe/FFI, async, workspaces (default language for new work) |
-| [bevy](skills/bevy/) | Bevy 0.18 ECS patterns for the Endless project |
+| [bevy](skills/bevy/) | Bevy 0.18 ECS patterns |
 | [wgsl](skills/wgsl/) | WGSL shader patterns for Bevy compute and instanced rendering |
 | [csharp](skills/csharp/) | C# / .NET / Unity mods / NuGet |
 | [godot](skills/godot/) | Godot 4.x, GDScript, NPC optimization |
