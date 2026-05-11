@@ -19,8 +19,8 @@ version: "2.6"
 
 ### skills/ vs docs/
 
-- `skills/` -- instructions that tell Claude *how to do something*: workflows, standards, troubleshooting steps, actions
-- `docs/` -- reference material Claude reads for context: architecture docs, incident findings, migration plans, lookup tables
+- `skills/`. Instructions that tell Claude *how to do something*: workflows, standards, troubleshooting steps, actions
+- `docs/`. Reference material Claude reads for context: architecture docs, incident findings, migration plans, lookup tables
 
 If it has no workflow or actionable instructions for Claude, it's a doc.
 
@@ -75,7 +75,7 @@ hooks:                              # hooks scoped to this skill's lifecycle
 ### Writing Skills
 
 - Write for Claude, not humans
-- Be explicit about scope -- when does this skill apply?
+- Be explicit about scope. When does this skill apply?
 - Say it once. Cut repetition.
 - Keep SKILL.md under 500 lines. Move reference material to separate files.
 
@@ -90,7 +90,7 @@ hooks:                              # hooks scoped to this skill's lifecycle
 
 - Increment on every change
 - Format: `major.minor` (major = breaking, minor = additions/fixes)
-- ALWAYS bump `version` in `.claude-plugin/marketplace.json` when adding or changing skills. NEVER skip this -- plugin cache won't update without it.
+- ALWAYS bump `version` in `.claude-plugin/marketplace.json` when adding or changing skills. NEVER skip this. Plugin cache won't update without it.
 
 ### Parameters and Substitutions
 
@@ -143,16 +143,16 @@ PR comments: !`gh pr view --comments`
 Summarize this pull request.
 ```
 
-Commands execute during preprocessing -- Claude only sees the output, not the commands.
+Commands execute during preprocessing. Claude only sees the output, not the commands.
 
 ### Subagent Execution
 
 `context: fork` runs the skill in an isolated subagent. The skill content becomes the subagent's task. No access to conversation history.
 
-- `agent: Explore` -- read-only codebase exploration
-- `agent: Plan` -- architecture and design
-- `agent: general-purpose` -- full tool access (default if omitted)
-- `agent: <custom>` -- any agent defined in `.claude/agents/`
+- `agent: Explore`. Read-only codebase exploration
+- `agent: Plan`. Architecture and design
+- `agent: general-purpose`. Full tool access (default if omitted)
+- `agent: <custom>`. Any agent defined in `.claude/agents/`
 
 Only use `context: fork` for skills with explicit tasks. Reference-only skills (guidelines, conventions) should run inline.
 
@@ -160,7 +160,7 @@ Only use `context: fork` for skills with explicit tasks. Reference-only skills (
 
 ### @ Imports
 
-`@` inlines another file -- Claude reads the target as if it were pasted in place.
+`@` inlines another file. Claude reads the target as if it were pasted in place.
 
 ```markdown
 @skills/code/SKILL.md
@@ -170,7 +170,7 @@ Only use `context: fork` for skills with explicit tasks. Reference-only skills (
 
 - Relative paths resolve from the file containing the `@`
 - `@/c/code/path` uses absolute path
-- Skills with `user-invocable: false` or default frontmatter are auto-discovered by description -- no `@` import needed
+- Skills with `user-invocable: false` or default frontmatter are auto-discovered by description. No `@` import needed
 - Docs always need `@` imports (they're not auto-discovered)
 
 ### Directives
@@ -181,7 +181,7 @@ Keep lean: one rule per line, no headers for short sections.
 
 ## Plugins
 
-Team skills are distributed via plugins. No clone required -- marketplace can be a git URL.
+Team skills are distributed via plugins. No clone required. Marketplace can be a git URL.
 
 ### What plugins load
 
@@ -222,7 +222,7 @@ Two memory systems:
 
 Shared team context loaded via `@` imports in CLAUDE.md. Checked into git.
 
-- `memory/team.md` -- team stack, responsibilities, priorities, custom tooling
+- `memory/team.md`. Team stack, responsibilities, priorities, custom tooling
 - Add new files for stable team knowledge that all members need
 
 Only put things here that are:
@@ -232,7 +232,7 @@ Only put things here that are:
 
 ### Personal memory (`~/.claude/projects/<project>/memory/`)
 
-Claude's auto-memory per project. Persists across conversations for one user. Claude manages this automatically -- it writes learnings, patterns, and project state here.
+Claude's auto-memory per project. Persists across conversations for one user. Claude manages this automatically. It writes learnings, patterns, and project state here.
 
 - `MEMORY.md` is always loaded into context (keep under 200 lines)
 - Create topic files for detailed notes, link from MEMORY.md
@@ -253,7 +253,7 @@ Plugin hooks live in `hooks/hooks.json` at the plugin root. They ship with the p
 
 ### SessionStart context injection
 
-`SessionStart` and `UserPromptSubmit` are the only hooks whose stdout is added as context Claude can see. Use this to inject always-on team rules from the plugin cache -- replaces the need for `@` imports and local clones.
+`SessionStart` and `UserPromptSubmit` are the only hooks whose stdout is added as context Claude can see. Use this to inject always-on team rules from the plugin cache. Replaces the need for `@` imports and local clones.
 
 ```json
 {
@@ -308,9 +308,9 @@ JSON on stdin with `hook_event_name` and `tool_input`.
 
 Custom bash script that renders session info below the prompt. File: `~/.claude/statusline.sh`
 
-### Windows: DISABLED -- zombie process bug
+### Windows: DISABLED. Zombie process bug
 
-On Windows, statusline spawns `bash.exe` (Git Bash) per update. These are never killed when the parent exits -- no signal propagation through MSYS2. Produces ~1 orphan/minute. 88 zombies observed in under 2 hours.
+On Windows, statusline spawns `bash.exe` (Git Bash) per update. These are never killed when the parent exits. No signal propagation through MSYS2. Produces ~1 orphan/minute. 88 zombies observed in under 2 hours.
 
 Tracked in [#18405](https://github.com/anthropics/claude-code/issues/18405). Inline `jq` command still spawns bash.exe, so no user-side fix exists. Statusline is disabled in settings.json until resolved.
 
@@ -350,7 +350,7 @@ exceeds_200k_tokens                             # true if context exceeds 200k
 
 ### Gotchas
 
-- `printf '%b'` interprets backslash escapes -- Windows paths get mangled (`\Users` -> bell + `Users`). Escape with `${VAR//\\/\\\\}` before printing.
+- `printf '%b'` interprets backslash escapes. Windows paths get mangled (`\Users` -> bell + `Users`). Escape with `${VAR//\\/\\\\}` before printing.
 - `cwd`, `workspace.current_dir`, and `workspace.project_dir` are usually identical. Only differ if you `cd` or `/add-dir`.
 - `printf '%b'` does NOT eat `%` signs (unlike `printf` format strings). Single `%` works.
 
@@ -398,4 +398,4 @@ echo "$input" | jq '.' 2>/dev/null || echo "$input"
 
 ## Notes
 
-`permissions.deny` in settings.json is broken -- [#6699](https://github.com/anthropics/claude-code/issues/6699). Use hooks instead.
+`permissions.deny` in settings.json is broken. [#6699](https://github.com/anthropics/claude-code/issues/6699). Use hooks instead.
