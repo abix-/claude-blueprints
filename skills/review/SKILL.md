@@ -13,11 +13,11 @@ Uses `endless-cli` for all BRP interaction.
 
 Invoke with one of these forms:
 
-- `/review` -- auto-pick PR via `k3sc take`
-- `/review 194` -- review PR `#194` in `endless`
-- `/review k3sc 38` -- review PR `#38` in `k3sc`
-- `/review issue 247` -- review issue `#247` in `endless` (no PR required)
-- `/review issue k3sc 15` -- review issue `#15` in `k3sc`
+- `/review`. Auto-pick PR via `k3sc take`
+- `/review 194`. Review PR `#194` in `endless`
+- `/review k3sc 38`. Review PR `#38` in `k3sc`
+- `/review issue 247`. Review issue `#247` in `endless` (no PR required)
+- `/review issue k3sc 15`. Review issue `#15` in `k3sc`
 
 ### PR mode vs Issue mode
 
@@ -29,8 +29,8 @@ Invoke with one of these forms:
 
 For PR auto-pick: `k3sc take` is the ONLY method. Do NOT manually pick from `gh pr list`.
 
-- `k3sc take --worker claude-a` -- reserve next PR for worker `claude-a`
-- `k3sc release --repo endless --pr 194` -- release reservation when done
+- `k3sc take --worker claude-a`. Reserve next PR for worker `claude-a`
+- `k3sc release --repo endless --pr 194`. Release reservation when done
 
 `/review` is not read-only. It may update docs on the PR branch, commit review-only doc changes, post findings, and ask `Merge or skip?`.
 
@@ -76,7 +76,7 @@ NEVER recommend merge unless ALL acceptance criteria checkboxes are satisfied. T
    - Otherwise, document it as a blocker and fail the review.
    - NEVER recommend merge with unmet criteria.
 4. An issue with 11/12 acceptance criteria met is NOT ready for merge. 100% or nothing.
-5. **If the issue has no checkboxes**, state this as a finding -- the PR cannot pass.
+5. **If the issue has no checkboxes**, state this as a finding. The PR cannot pass.
 
 ## Step 0: Parse arguments
 
@@ -303,16 +303,16 @@ If the PR is missing doc updates, changelog entry, or has stale docs:
 3. Add CHANGELOG.md entry if missing
 4. Commit doc updates on the PR branch before continuing review
 
-This is the same checklist as `/done` -- the reviewer applies it when the implementer missed it.
+This is the same checklist as `/done`. The reviewer applies it when the implementer missed it.
 
 If you cannot map a changed code path to an acceptance item, required doc update, regression test, benchmark, or authority-doc requirement where required, record a finding.
 
 ### Compliance gate
 
 **Read all three docs** at the start of every review:
-- `docs/k8s.md` -- Def/Instance/Controller architecture
-- `docs/authority.md` -- data ownership and source-of-truth rules
-- `docs/performance.md` -- hot-path patterns, anti-patterns, review procedure
+- `docs/k8s.md`. Def/Instance/Controller architecture
+- `docs/authority.md`. Data ownership and source-of-truth rules
+- `docs/performance.md`. Hot-path patterns, anti-patterns, review procedure
 
 **Check every changed file** against these rules:
 - **k8s.md**: base values come from registry Defs, never cached on instances. Adding a new variant = 1 enum + 1 registry entry. Systems read Def at spawn/reconcile time.
@@ -330,7 +330,7 @@ If the issue is labeled `feature`:
 - If the spec says X and the code does Y, that is a blocker
 - Any unmet spec item is a blocker, not a "nice to have"
 
-Bug and test issues are exempt -- the issue body is the spec.
+Bug and test issues are exempt. The issue body is the spec.
 
 ### DRY and generalization check
 
@@ -389,7 +389,7 @@ Every code change MUST have regression tests. No exceptions. No "will add later"
 5. **What counts**: a unit test, integration test, or ECS world test that sets up specific conditions and asserts the correct outcome.
 6. **What does NOT count**: existing tests merely updated to compile with new API names. Renaming `set_occupancy` -> `set_present` in existing tests is mechanical, not a regression test.
 
-If behavior changed and no regression tests exist in the diff, record a finding even if the existing suite passes. This is a **BLOCKER** -- fix-forward by writing the test, or fail the review.
+If behavior changed and no regression tests exist in the diff, record a finding even if the existing suite passes. This is a **BLOCKER**. Fix-forward by writing the test, or fail the review.
 
 ## Step 7: Build
 
@@ -562,7 +562,7 @@ For perf PRs, expand the BEFORE -> AFTER block with benchmark numbers:
 List regression tests with one-line descriptions of what they verify.
 End with "Merge or skip?"
 
-## Step 19: Ask human -- merge/close or skip?
+## Step 19: Ask human. Merge/close or skip?
 
 Ask only after posting the review comment.
 
