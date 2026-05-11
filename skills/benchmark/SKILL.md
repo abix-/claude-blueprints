@@ -27,7 +27,7 @@ version: "1.0"
 Combined 50K: X.Xms (X.X% of 16ms budget)
 ```
 
-5. **Summarize**: Print a short analysis comparing to the previous entry (if any) — which systems improved, regressed, or stayed the same. Include the Factorio-style budget math.
+5. **Summarize**: Print a short analysis comparing to the previous entry (if any). Which systems improved, regressed, or stayed the same. Include the Factorio-style budget math.
 
 ## Rules
 
