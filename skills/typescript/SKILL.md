@@ -7,28 +7,32 @@ updated: "2026-05-11"
 ---
 # TypeScript / JavaScript
 
-**Provenance note:** User-authored TypeScript across all repos is
-near-zero. The 31K TS that GitHub reports under
+**Provenance note:** This skill is **canonical TS/JS best-practices,
+not user-style.** No user-authored TypeScript exists. The 31K TS that
+GitHub reports for
 [`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions)
-lives in the `filter-anything-everywhere/` subdirectory, which is
-a vendored copy of an upstream extension (the standalone fork at
-[`abix-/filter-anything-everywhere`](https://github.com/abix-/filter-anything-everywhere)
-mirrors it). The TS examples in this skill are kept because they
-illustrate good patterns, but the style is canonical / upstream,
-not "this user's preferences."
+all lives in the vendored `filter-anything-everywhere/` subdirectory
+(upstream extension). Hush itself is Rust+WASM with thin plain-JS
+bootstrap shims, NOT TypeScript.
 
-Source surfaces (mixed authorship):
+Mixed authorship in
+[`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions):
 
-- [`abix-/chromium-extensions/filter-anything-everywhere`](https://github.com/abix-/chromium-extensions/tree/main/filter-anything-everywhere)
-  -- vendored TS/jQuery/Jest extension. Reference patterns for
-  `tsconfig.json`, narrowing, MV2/3 layout.
-- [`abix-/chromium-extensions/hush`](https://github.com/abix-/chromium-extensions/tree/main/hush)
-  -- user-authored. Plain JS shims fronting a Rust/WASM core
-  (`mainworld.js`, `background.js`, `content.js`). No TypeScript.
+- `filter-anything-everywhere/`. Vendored TS/jQuery/Jest extension.
+  Used here as a reference for `tsconfig.json`, narrowing patterns,
+  and MV2/3 extension layout. **Not user style.**
+- `hush/`. User-authored, but it's **Rust + WASM**. The `.js`
+  files (`background.js`, `mainworld.js`, `content.js`) are tiny
+  event-bridging shims around the WASM core, not TypeScript at all.
 
-The decision between TS and plain JS in this codebase is **not**
-"always TS." Tiny bootstrap shims and content scripts are written
-in plain JS because adding a build step costs more than it saves.
+Use this skill as a canonical reference when writing TS or JS in
+this stack. Don't expect it to encode user style; there isn't one
+to mine yet.
+
+The decision between TS and plain JS for new extension work is **not**
+"always TS." Tiny bootstrap shims and content scripts can stay plain
+JS because adding a build step costs more than it saves. This is
+the Hush pattern.
 
 ## When to pick TS vs JS
 
