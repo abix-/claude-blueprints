@@ -611,8 +611,9 @@ crate root unless noted.
 - Read the `rust` + `code` skills before writing code.
 - For the HTTP debug endpoint pattern, read the
   `runtime-control-http` skill.
-- For Grounded 2 specifics (offsets, damage paths, deploy),
-  read the `grounded2-rpg` skill.
+- For per-game specifics (offsets, damage paths, deploy targets),
+  read the matching game skill: `grounded2`,
+  `outworld-station`, etc.
 - ASCII in source, docs, commits. Unicode allowed in terminal
   output.
 - Commits on `main`, lowercase concise message, push

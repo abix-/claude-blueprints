@@ -1,26 +1,35 @@
 ---
-name: grounded2-rpg
-description: Grounded 2 - RPG System mod (`grounded2-rpg` crate, abix-/Grounded2Mods repo). Authoritative on Grounded 2 game specifics -- offsets, damage paths, status table, deploy targets, the RPG skill catalog. Use when writing code under `grounded2-rpg/`. For ueforge framework doctrine (composition model, k8s pattern, hot reload, discovery), read the `ueforge` skill instead. Not for playing the game.
+name: grounded2
+description: Modding Grounded 2 (Obsidian survival, UE5 + UE4SS). Authoritative on Grounded 2 game specifics -- exes, image-relative offsets, ASurvivalCharacter/UHealthComponent field layouts, three damage paths (combat / fall / env), Table_StatusEffects, deploy folder, the mod inventory. Mod code lives in `abix-/Grounded2Mods` (the `grounded2-rpg` crate is the current shipped mod). For ueforge framework doctrine (composition model, k8s pattern, hot reload, discovery), read the `ueforge` skill. Not for playing the game.
 user-invocable: false
-version: "4.0"
+version: "5.0"
 updated: "2026-05-11"
 ---
-# Grounded 2 RPG-System Mod
+# Grounded 2 -- modding
 
-A Factorio-style RPG / level-up mod for **Grounded 2**, loaded
-by UE4SS as a CPPMod. Player kills creatures -> earns XP ->
-levels up -> spends skill points on a flat catalog of skills
-(cap level 100, `sqrt(level/100)` diminishing returns).
-Inspired by Factorio RPG System, RimWorld RPG Mod, the
-War3CS / War3FT line. Repo: `abix-/Grounded2Mods`.
+Per-game modding skill for **Grounded 2** (Obsidian, UE5 5.x +
+UE4SS). Authoritative on what is specific to this game: exes,
+image-relative offsets, key class field layouts, damage pipeline,
+status-effect table, deploy folder. Framework doctrine (the
+`ueforge` crate that this game's mod is built on) is in the
+`ueforge` skill -- no overlap.
+
+Repo: `abix-/Grounded2Mods`. Current shipped mod is the
+`grounded2-rpg` crate (a Factorio-style RPG / level-up mod);
+future Grounded 2 mods land in the same repo as additional crates
+or features under the same `grounded2-rpg` mod, per the "one mod
+per game" project rule.
+
+## The shipped mod: `grounded2-rpg`
+
+A Factorio-style RPG / level-up mod, loaded by UE4SS as a CPPMod.
+Player kills creatures -> earns XP -> levels up -> spends skill
+points on a flat catalog of skills (cap level 100,
+`sqrt(level/100)` diminishing returns). Inspired by Factorio RPG
+System, RimWorld RPG Mod, the War3CS / War3FT line.
 
 The crate is `grounded2-rpg` (renamed from `better-backpack`).
 Log file: `grounded2_rpg.log`. UE4SS mod name: `Grounded2RPG`.
-
-**This skill is Grounded-2-specific only.** For the framework
-itself -- the composition model, k8s pattern, hot reload,
-discovery, the five framework modules, hardening doctrine,
-`cargo deploy` -- read the `ueforge` skill. No overlap here.
 
 ## Project rule: ONE mod per game
 
