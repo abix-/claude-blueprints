@@ -193,6 +193,25 @@ Description of what it does.
 ```
 ```
 
+## TODO doc hygiene
+
+The TODO doc is for open work only. Completed work belongs in the
+authoritative per-subject doc that explains how the thing works.
+
+When asked to clean up or update a TODO:
+
+1. FIRST move completed entries into the matching authoritative
+   doc (per crate `docs/` folder, organized by subject:
+   `data-table.md`, `hooks.md`, `lifecycle.md`, etc.). Preserve
+   the explanatory content. Do not lose data. If the right doc
+   does not exist yet, create it.
+2. THEN strip the TODO to just open items so what is left is
+   obvious at a glance.
+3. NEVER delete completed entries from the TODO without first
+   confirming the explanation is captured somewhere authoritative.
+
+The TODO is a queue, not an archive.
+
 ## Rules
 
 - ALWAYS `mkdocs build` before committing to catch warnings
@@ -204,3 +223,6 @@ Description of what it does.
 - Use content tabs for CLI vs HTTP examples
 - `site/` goes in .gitignore. Never commit build output
 - Test locally with `mkdocs serve` before pushing
+- TODO is for open work only. Move completed entries to the
+  authoritative per-subject doc FIRST, then trim. Never lose
+  explanatory content in the cleanup
