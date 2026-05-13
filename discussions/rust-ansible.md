@@ -313,4 +313,105 @@ contributor flywheel**. pyinfra exists, is excellent, has been around for
 overcome the same adoption gravity unless it nails a specific underserved
 wedge.
 
+## Impact on the existing Ansible Python module ecosystem
+
+You lose most of the ecosystem on day one. That's the central pain. Here is
+the module-by-module reality.
+
+### How Ansible modules work today
+
+Each module is a Python file that:
+1. Receives JSON args via stdin or argv
+2. Uses `AnsibleModule` helper (arg validation, fact merging, changed/failed reporting)
+3. Does its thing, prints JSON to stdout
+4. Gets shipped to target, executed by Python on target
+
+The "module" is a contract: JSON in, JSON out, exit code, with semantics for
+`changed`, `failed`, `diff`, `check_mode`. The contract is reusable. The
+Python implementation is not, if the goal is no Python on target.
+
+### What survives, what dies
+
+**Survives trivially (port in days):**
+- `command`, `shell`, `raw`, `script`. Already just run things on target.
+- `file`, `stat`, `copy`, `fetch`. Filesystem ops, easy in Rust.
+- `service`, `systemd`, `cron`. Shell out to systemctl/cron.
+- `lineinfile`, `blockinfile`, `replace`, `template`. Text munging + minijinja.
+- `apt`, `dnf`, `yum`, `pacman`, `apk`. Shell out to package managers.
+- `user`, `group`, `authorized_key`, `hostname`, `timezone`, `mount`, `sysctl`.
+- `git`, `get_url`, `unarchive`, `uri` (HTTP requests).
+
+Maybe 40-60 modules. Covers ~80% of real-world playbooks for plain server config.
+
+**Hard but doable (port in weeks-months each):**
+- Cloud modules: `amazon.aws.*` (~200 modules), `google.cloud.*`,
+  `azure.azcollection.*`. Each wraps a cloud SDK call. Rust has
+  `aws-sdk-rust`, `google-cloud-rust`, `azure-sdk-for-rust`. Mechanical but
+  voluminous. This is the bulk of modern Ansible value.
+- Kubernetes: `kubernetes.core.*`. Rust has `kube-rs`. Few dozen modules.
+- VMware: `community.vmware.*`. ~150 modules. Rust SDK story is weaker.
+- Network devices: `cisco.ios.*`, `arista.eos.*`, `juniper.junos.*`. These
+  talk API/SSH-CLI to devices, not Python-on-device. Port the API/CLI logic.
+
+**Effectively lost (won't get rewritten):**
+- Long tail of community modules in Galaxy: ~20,000 modules across all
+  collections. 99% are niche. Most don't matter to most users, but the one
+  you need will always be the missing one.
+
+### The three compatibility strategies
+
+**1. API-compatible rewrite (pyinfra model).**
+Match the YAML interface. Playbook drops in. Modules are Rust-native. Drop
+coverage of obscure modules.
+- Pro: clean, fast, no Python anywhere.
+- Con: rebuild from zero. Don't claim Ansible compatibility (Red Hat
+  trademark) and watch which modules you mimic too closely.
+
+**2. Hybrid bridge mode.**
+Rust controller is primary. For unsupported modules, spawn a Python sidecar
+on the controller that runs the module against the target via the Ansible
+connection plugin. Still requires Python on target for Python-based modules,
+but only for modules the user opts into.
+- Pro: full ecosystem fallback. Users can adopt incrementally.
+- Con: defeats the "no Python anywhere" promise. Complex codebase. Two
+  execution paths.
+
+**3. Module API translation layer.**
+Define a stable Rust-side module contract (e.g.
+`fn run(args: T) -> Result<ModuleResult>`). Provide a Python module shim
+that translates between Ansible's module protocol and yours, so existing
+Python modules can run against the runtime if the user accepts Python on the
+target.
+- Pro: future-proof, separates contract from implementation.
+- Con: most users won't run Python modules anyway, so this is engineering
+  surface for a small audience.
+
+### Licensing reality
+
+Ansible core and most modules are GPLv3. Implications:
+- Reimplementing module behavior from spec/observation is fine. APIs aren't
+  copyrightable in most jurisdictions.
+- Copying module source into a Rust repo taints the whole repo with GPLv3.
+- Running unmodified Ansible modules from a Rust controller via a separate
+  process is the "system library" / "mere aggregation" case. Probably fine,
+  but get a lawyer if commercializing.
+- Forking Ansible modules and embedding the translated logic is the danger zone.
+
+Safe path: clean-room rewrite of the module contract, look at module
+*documentation* for behavior (not source), implement in Rust.
+
+### Bottom line
+
+The Ansible Python module ecosystem is the single biggest reason you can't
+just "replace Ansible." A Rust tool can:
+- **Match** the playbook YAML format (no IP risk, huge UX win).
+- **Port** the core 50-100 modules covering real-world use.
+- **Cede** the long tail (cloud SDK breadth, niche community modules).
+- **Optionally** bridge to Python for users who need specific modules.
+
+The strategic question becomes **which 50 modules to port first.** That list
+defines the addressable user base on day one. Suggested ranking: filesystem
++ package + service + user/group + template + git + systemd. That's the
+"configure a Linux box" wedge and it's achievable in months, not years.
+
 ## Notes / scratch
