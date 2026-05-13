@@ -1016,4 +1016,137 @@ This is the order-of-magnitude gain. **Not "Rust is faster than Python"
 microbenchmarks.** It's eliminating the per-task ceremony: Python startup,
 module transfer, tmp dir setup, separate process per task, all of it.
 
+## Mid-migration benefit (the most important section)
+
+Most users will live in mid-migration state for years. If the gains there
+are weak, the whole approach fails. If the gains there are strong, there's
+an immediate adoption story.
+
+### The non-obvious truth
+
+**Most of the gain comes from the controller, not from the modules.**
+Going from "Ansible controller + 100% Python modules" to "Rust controller +
+100% Python modules" gives ~70-80% of the maximum possible speed gain.
+Native modules are incremental on top.
+
+This means: **day 1 of adoption, with zero native modules ported, you
+already get most of the benefit.** Native modules are long-tail bonus.
+
+### What you get immediately, day 1 (zero native modules ported)
+
+**1. Controller-side parallelism.**
+Rust + tokio scales to thousands of concurrent SSH connections in one
+process. Default Ansible 5-fork model becomes 500-way real parallelism
+without memory pressure. Applies to every task regardless of module language.
+- Real impact: 10k-host plays go from "shard or die" to "runs in one shot."
+
+**2. SSH connection persistence beyond ControlPersist's 60-second window.**
+russh keeps the SSH session alive in the controller process for the entire
+play. No reconnect overhead. Same connection serves native and Python tasks.
+
+**3. Pre-flight dependency analysis across the whole play.**
+Walk every task before running. Build dep map (Python versions, packages,
+target arch). Fail fast with complete report. Works even if every task is
+Python-bridged.
+
+**4. Better error reporting and debugging.**
+Structured task execution log, machine-readable JSON callback output, faster
+surfacing of failures. Independent of module language.
+
+**5. No new playbook syntax to learn.**
+Existing playbooks, roles, vaults, inventories work unchanged. Zero
+operator-side migration cost.
+
+### What incrementally accrues as native modules ship
+
+For tasks using a ported module:
+1. Zero Python startup (~100-200 ms saved per task per host)
+2. Zero module transfer (logic is in the controller binary)
+3. Zero tmp-dir ceremony (no mkdir/scp/cleanup dance)
+4. Immunity to OS Python drift for that module
+5. Batch potential (multiple native tasks share a single SSH exec)
+
+Multiplicative with parallelism, not additive. If 1000 hosts run in parallel
+and 60% of tasks become native, wall-clock improves on the parallel critical
+path, not just the serial sum.
+
+### Concrete math: a mid-migration play
+
+Scenario: 30-task play, 200 hosts, linear strategy. 18 native (60%),
+12 still Python.
+
+| Mode | Per-host time | Wall clock (200 hosts) |
+|---|---|---|
+| Vanilla Ansible (forks=5, pipelining on) | ~6 sec | ~4 min |
+| Vanilla Ansible (forks=50, pipelining on) | ~6 sec | ~50 sec |
+| Rust controller, 0% native (day 1) | ~6 sec | ~10 sec |
+| Rust controller, 60% native (mid-migration) | ~3.5 sec | ~6 sec |
+| Rust controller, 100% native | ~1.5 sec | ~3 sec |
+
+- Ansible to Rust controller (zero native modules): **5-25x faster**
+- 0% native to 60% native: **~1.7x further faster**
+- 60% native to 100% native: **~2x further faster**
+
+**The first jump is the big one. Native modules are gravy.**
+
+### Other mid-migration wins (not just speed)
+
+**1. Risk-free incremental adoption.**
+Drop in the binary. Run playbooks. Nothing breaks. If something does,
+`runtime: python` pins the offending task back to vanilla behavior.
+
+**2. Native modules become a release-train improvement.**
+Every release ships more native modules. Users automatically get faster
+runs without changing anything. Like a free CPU upgrade.
+
+**3. Measurable migration progress.**
+`--runtime-report` tells you "30 tasks total, 18 native, 12 python." Track
+across teams, set targets, prioritize porting the modules used most.
+
+**4. Native modules don't fight OS upgrades.**
+The 60% of tasks that are native become immune to "Python 3.10 deprecated
+something boto3 needs." Each port is a permanent reduction in OS-drift
+surface area.
+
+**5. Pre-flight catches Python dep issues before tasks run.**
+Mid-migration you still have Python dep risk for the 12 Python tasks. The
+controller can tell you upfront: "host web-01 missing boto3, will fail at
+task 8." Today, Ansible discovers this at task 8 with cryptic errors.
+
+**6. Hybrid lets you keep rare modules.**
+Don't have to wait for someone to port `community.zabbix.zabbix_host_update`
+before adopting. The 0.1% of obscure modules stay Python forever. Still work.
+
+### The honest costs of mid-migration
+
+**1. Behavior drift between native and Python implementations.**
+Native `apt` and Python `apt` could differ on an edge case. Mitigated by:
+extensive test harness diffing against vanilla Ansible, and the
+`runtime: python` escape hatch.
+
+**2. More surface area to debug.**
+"Is this a native module bug or a Python module bug?" The `[native]` /
+`[python:fqcn]` tag on every task line tells users which path ran.
+
+**3. Two code paths in the controller.**
+Engineering burden, not user-facing.
+
+**4. Documentation has to cover both runtimes.**
+Native modules need their own docs. They claim Ansible-compatible behavior
+but the only true source of truth is the test suite.
+
+### Strategic point
+
+**Mid-migration is not a transitional phase to grit through. It is the
+steady state for most users for the lifetime of the product.** Design must
+make mid-migration feel like the normal mode, not a degraded mode.
+
+The analysis above says it already is the normal mode in user experience:
+controller-side gains arrive immediately, native module count gradually
+improves performance and dependency posture over time. No awkward valley.
+
+This is the **adoption story**: install binary, get 5-25x speedup on day 1
+with zero changes, then accrue further gains automatically as native
+modules ship.
+
 ## Notes / scratch
