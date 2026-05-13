@@ -1573,4 +1573,74 @@ Worth the addition. Agent mode is what justifies "this is more than a
 faster Ansible" - it's a fundamentally better model for the hosts that can
 support it, while not abandoning the hosts that can't.
 
+## Naming and trademark
+
+The tool cannot be Ansible. "Ansible" is a Red Hat trademark and using it in
+the product name is brand confusion. But **describing compatibility with
+Ansible is permitted under nominative fair use** and is routine across the
+industry.
+
+### What is NOT allowed
+
+1. Naming the product with "Ansible" in it (e.g. `rust-ansible`,
+   `ansible-rs`, `Ansible++`). Brand confusion.
+2. Using the Ansible logo or trade dress.
+3. Implying Red Hat endorses or sponsors the project.
+4. Claiming the product IS Ansible or is an official Ansible product.
+
+### What IS allowed (and routine)
+
+1. "Compatible with Ansible playbooks"
+2. "Drop-in replacement for ansible-playbook"
+3. "Runs your existing Ansible playbooks and roles"
+4. "Works with Ansible collections"
+
+These are standard nominative fair use. Industry precedent:
+- CockroachDB: "PostgreSQL-compatible"
+- Yugabyte: "PostgreSQL-compatible"
+- MariaDB: "MySQL-compatible"
+- DocumentDB (AWS): "MongoDB-compatible"
+- Many products: "Kubernetes-compatible", "S3-compatible API"
+
+If "Ansible-compatible" were inherently illegal, all of these companies'
+marketing would be illegal too. They are not.
+
+### Safety phrase
+
+Include this once in the README footer / project landing page:
+> *Not affiliated with Red Hat. Ansible is a trademark of Red Hat, Inc.*
+
+That single sentence covers the disclaimer. JetPorch did the same. After
+that, market compatibility honestly.
+
+### Naming shortlist (independent product name)
+
+The product itself needs an independent name. Shortlist:
+
+| Name | Pros | Cons |
+|---|---|---|
+| **Forge** | Fits Chef/Puppet/Salt naming culture (workshop metaphor); short, memorable | Puppet Forge marketplace collision; common software word |
+| Conductor | Orchestration metaphor, semantically right | Netflix Conductor exists; search collisions |
+| Marshal / Marshall | Coordinates operations | Ruby's Marshal module; generic |
+| Rax | Short, made-up, no collision | Meaningless until explained |
+| Plow / Plowman | Workmanlike, ties to "fields" of hosts | Domain availability decent; obscure metaphor |
+| Anvil | Workshop metaphor, sturdy | Some existing products use it |
+| Wagon / Wain | "Carries the load," underused | Less obvious metaphor |
+
+**Working recommendation: Forge.** Fits the workshop/trade metaphor space
+the user community already lives in (Chef cooks, Puppet pulls strings, Salt
+seasons, **Forge shapes**). Short, memorable, neutral in tone. Puppet Forge
+collision is annoying but survivable; one is a tool, the other is a module
+marketplace.
+
+A close second is **Rax** if you want zero collision and don't mind
+explaining the name.
+
+### Tagline candidates
+
+- "Ansible-compatible automation, in Rust."
+- "Drop-in for ansible-playbook. Native modules, persistent agents,
+  no Python tax."
+- "Runs your Ansible playbooks 10x faster, no rewrite."
+
 ## Notes / scratch
