@@ -1149,4 +1149,177 @@ This is the **adoption story**: install binary, get 5-25x speedup on day 1
 with zero changes, then accrue further gains automatically as native
 modules ship.
 
+## AWX / Ansible Automation Platform integration
+
+AWX is the orchestration/UI layer on top of Ansible. The drop-in approach
+extends naturally to AWX with bounded engineering effort.
+
+### How AWX works today
+
+AWX is a Django web app + PostgreSQL + Redis + Celery workers. The user-
+facing piece (inventories, credentials, projects, job templates, workflows,
+RBAC, schedules, web UI) is independent of Ansible itself.
+
+When a job runs, AWX:
+1. Pulls the project (git repo with playbooks)
+2. Spawns a container called an **Execution Environment** (EE) with Ansible
+   + collections installed
+3. Inside the EE, runs `ansible-playbook` via the **ansible-runner** Python
+   library
+4. ansible-runner captures stdout/stderr, parses event JSON from a callback
+   plugin, writes events to `artifacts/<job_id>/job_events/*.json`
+5. AWX reads those event files, stores them in PostgreSQL, streams to the
+   web UI
+
+Integration contract between AWX and Ansible:
+- A CLI binary `ansible-playbook` accepting known args
+- A structured event stream via callback plugin
+- Artifact files in a known directory layout
+- A fact cache writable to a known location
+
+### Three integration patterns
+
+**1. CLI drop-in (lowest effort, highest leverage).**
+Provide `rust-ansible-playbook` as a binary that:
+- Accepts the same CLI flags AWX uses (`-i`, `-e`, `--limit`, `--tags`,
+  `--check`, `--diff`, etc.)
+- Emits the same event JSON format ansible-runner expects
+- Writes the same artifact files in the same paths
+- Honors the same env vars (`ANSIBLE_*`)
+
+Alias `ansible-playbook` to the Rust binary in the EE. AWX doesn't know
+anything changed.
+
+**2. Custom Execution Environment.**
+Ship an AWX-compatible EE container image bundling:
+- Rust controller binary
+- Vanilla Ansible as fallback (belt-and-suspenders)
+- Same collections users have today
+
+AWX users add this EE to their instance and select it on job templates.
+Existing job templates work, just faster.
+
+**3. AWX plugin or fork (much bigger).**
+Patch AWX to natively understand the Rust controller's richer event stream
+and module-runtime telemetry. Not required for adoption; relevant later for
+UI features like per-project migration progress.
+
+**Realistic path: 1 + 2 together.** CLI drop-in + custom EE. Users adopt
+with zero AWX changes.
+
+### What works out of the box
+
+- Job templates, schedules, workflows, RBAC, notifications: AWX-level,
+  **no change**.
+- Inventories (static, git, dynamic via subprocess plugins): unchanged.
+- Credentials (env vars or temp files): unchanged.
+- Project syncs (git clone, ansible-galaxy collection install): unchanged.
+- Notifications (Slack, email, webhook): unchanged.
+- Survey forms, prompted variables: unchanged.
+- Workflows (DAG of job templates): unchanged.
+- Web UI, REST API: completely unchanged.
+
+Entire AWX user experience stays the same. Engine underneath changes.
+
+### What needs engineering work
+
+**1. ansible-runner event format compatibility.**
+This is the contract that matters most. ansible-runner expects a specific
+JSON event stream with fields like `event`, `event_data`, `uuid`,
+`parent_uuid`, `pid`, `created`, `counter`, plus event types like
+`playbook_on_start`, `playbook_on_play_start`, `runner_on_ok`,
+`runner_on_failed`, `verbose`. Rust controller must emit this exactly.
+Effort: ~3-4 weeks.
+
+**2. Artifact directory layout compatibility.**
+`artifacts/<job_id>/job_events/N-uuid.json`, `fact_cache/<host>`, `stdout`,
+etc. Effort: ~1 week.
+
+**3. Custom Python callback plugin compatibility.**
+AWX users sometimes load extra callback plugins (custom logging, metrics).
+These are Python. Ship a "callback compatibility mode" that runs Python
+callbacks via the bridge. Effort: ~2-3 weeks.
+
+**4. Fact caching.**
+AWX uses Ansible's fact cache (JSON file or Redis). Rust controller must
+write to the same locations in the same format. Effort: ~1 week.
+
+**5. Credential plugin compatibility.**
+AWX injects credentials as env vars or temp files: already works with any
+binary. But some credential plugins are Python lookups
+(`lookup('community.aws.aws_secret', ...)`); those need the Python lookup
+bridge (already in core runtime work).
+
+**6. Collection compatibility.**
+AWX/EE uses ansible-galaxy to install collections. Rust controller reads
+from the same paths. Custom action/lookup/filter plugins in collections
+need the Python bridge.
+
+**7. Execution Environment image.**
+Build the OCI container image. Bundle Rust binary, common collections,
+Python runtime (for bridged modules). Publish. Effort: ~1-2 weeks.
+
+**Total AWX integration on top of Tier 1: ~2-3 person-months.**
+
+### Gains for AWX users
+
+Standalone gains plus AWX-specific multipliers:
+
+**1. More jobs per EE worker.**
+EE containers have CPU/memory quotas. Rust controller's footprint is
+dramatically smaller than Ansible's Python-fork model. Same hardware runs
+~3-5x more concurrent jobs.
+
+**2. Faster jobs free up workers sooner.**
+AWX queue throughput improves. 10x faster jobs = 10x throughput on the
+same scheduler infrastructure.
+
+**3. Pre-flight analysis surfaces in the AWX UI.**
+Pre-flight dep report emitted as a special event type AWX renders. Users
+see "this job will fail on 3 hosts due to Python dep mismatch" before the
+job runs.
+
+**4. Migration progress metrics per project.**
+AWX tracks "this project's playbooks are 60% native, 40% Python-bridged."
+
+**5. Reduced infrastructure cost.**
+Faster jobs + smaller footprint = fewer AWX worker nodes for the same
+load. Direct cost savings for large deployments.
+
+### What doesn't change
+
+- Web UI looks identical
+- REST API identical
+- User workflow identical (create job templates, run them, see output stream)
+- Existing automation, integrations, schedules: all unchanged
+
+This is the whole point. AWX users get the engine swap as a **backend
+optimization**, not a product migration.
+
+### Strategic angle
+
+AWX adoption is the moat against "we already have AWX." If the Rust
+controller works as a drop-in inside AWX's existing EE model, the answer
+to "should we switch?" becomes "no switching required, just pull this new
+EE image."
+
+Same logic applies to **Red Hat Ansible Automation Platform (AAP)**:
+Tower + commercial collections + support. AAP runs the same EE model. If
+the EE works for AWX, it works for AAP.
+
+Integration story is **identical for free and paid customers**, which is
+rare and valuable. Most replacement tools have a worse story for
+enterprise users; this one is the same path either way.
+
+### What this does NOT replace
+
+AWX itself. The web UI, RBAC, scheduling, notifications, the whole control
+plane. That's Tier 3 (~18-24 person-months for a credible UI rewrite).
+Don't try to replace AWX in Tier 1 or Tier 2. Live alongside it.
+
+Eventually, if the Rust controller has critical mass, build a Rust-native
+control plane that exposes the controller's richer features (per-task
+runtime telemetry, pre-flight analysis, fleet-wide migration tracking).
+Long-term play, probably needs a company behind it.
+
 ## Notes / scratch
