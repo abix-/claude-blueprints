@@ -889,4 +889,131 @@ The other gains (parallelism, single binary, embedded targets) are
 one-time wins. This one is an *ongoing* relief from a problem that
 otherwise compounds annually.
 
+## How Ansible's module shipping actually works
+
+This is the key context for understanding both the inefficiency and the
+opportunity. Per task, per host, every single time:
+
+### The default flow (no pipelining)
+
+```
+TASK [Install nginx] **********
+1. SSH to target
+2. Run: mkdir -p ~/.ansible/tmp/ansible-tmp-1234-abc/
+3. sftp/scp: upload wrapper.py to that tmp dir
+4. SSH again: python3 ~/.ansible/tmp/ansible-tmp-1234-abc/AnsiballZ_apt.py
+5. Read JSON output from stdout
+6. SSH again: rm -rf ~/.ansible/tmp/ansible-tmp-1234-abc/
+```
+
+A 50-task play on 100 hosts = 5,000 of these dances.
+
+### What's in the AnsiBallZ wrapper
+
+A single generated Python file containing:
+- A base64-encoded zip with the module's source code (`apt.py`, `file.py`, etc.)
+- Plus all `module_utils` the module imports (the import graph gets walked)
+- Plus bootstrap code that extracts the zip to a temp dir, sets up `sys.path`,
+  and `exec()`s the actual module
+- Arguments embedded inline (so wrapper is regenerated per task because args
+  change)
+
+Size: ~100-500 KB for simple modules, several MB for complex ones (AWS
+modules pull in a lot of `module_utils`).
+
+### SSH multiplexing (ControlPersist) softens the pain
+
+Ansible enables SSH's `ControlMaster auto` + `ControlPersist 60s` by default:
+- First SSH does full handshake (expensive)
+- Subsequent SSH commands within 60s reuse the same TCP connection via a
+  Unix socket on the controller
+- Without this, Ansible would be ~5x slower than it already is
+
+### Pipelining: the optimization most people don't enable
+
+Set `pipelining = True` in `ansible.cfg`. The flow becomes:
+```
+1. SSH to target with: python3
+2. Pipe the wrapper.py via stdin
+3. Read JSON output
+```
+
+No file copy, no tmp dir, no cleanup. Typically 2-4x faster.
+
+Not default because: requires `requiretty` off in sudoers, which many
+enterprise configs have on.
+
+### What never goes away even with pipelining
+
+1. **Python interpreter starts fresh per task.** ~100-200 ms cold start,
+   every time. No state preserved between tasks on the same host.
+2. **Module + utils serialized per task.** Same `apt` module sent 50 times
+   to the same host = 50 serializations. Target receives the same code 50
+   times.
+3. **Facts gathered separately.** The `setup` module ships a giant Python
+   script that reads `/proc`, `/sys`, `dmidecode`, etc., returning ~200 KB JSON.
+4. **No batch execution.** Each task is its own SSH round-trip and its own
+   Python process. Ansible cannot say "run these 5 tasks in one shot."
+
+### Where the real overhead is
+
+For a 50-task play, single host, pipelining on:
+- 50 Python startups: ~5-10 seconds pure startup
+- 50 SSH commands: ~5 seconds round-trip overhead (LAN; WAN much worse)
+- 50 module-code transfers (even if cached): cumulative bandwidth + parse cost
+- Actual work: variable
+
+Without pipelining: add ~10-20 seconds of file-copy + cleanup ceremony.
+
+### How the Rust drop-in eliminates this
+
+The biggest gain from the Rust approach is **eliminating the per-task
+Python ceremony entirely.** Specifically:
+
+**1. No Python startup per task (for native modules).**
+Native Rust modules are function calls in the same controller process. Zero
+interpreter startup, zero process fork, zero serialization.
+
+**2. No re-transmission of the same module 50 times.**
+Where Ansible reships `AnsiballZ_apt.py` to the same host for every `apt`
+task, the Rust controller has the module logic compiled into its own binary
+and never sends it across the wire at all.
+
+**3. Persistent SSH session running multiple commands.**
+russh keeps the SSH connection alive in-process (no ControlPersist
+60-second window timing out). Sequential tasks reuse the same channel.
+
+**4. Batched command execution.**
+Native module path can ship multiple operations in one SSH exec:
+`mkdir foo && chmod 755 foo && touch foo/bar` as a single round-trip,
+where Ansible would need three separate AnsiballZ wrapper executions.
+
+**5. No tmp-dir ceremony.**
+No `~/.ansible/tmp/ansible-tmp-*` directories created and torn down per
+task. Native execution writes nothing to the target filesystem unless the
+task itself does.
+
+**6. Fact gathering: streamed or replaced.**
+A native fact-gathering implementation can issue a few targeted commands
+(`uname -a`, `cat /etc/os-release`, `ip -j addr`) instead of shipping a
+~200 KB Python script that parses everything itself. Or skip facts entirely
+when the play doesn't reference them.
+
+### The math on a real play
+
+50-task play, 100 hosts, all native modules, Rust controller:
+- 100 SSH connections opened in parallel: ~1-2 seconds via tokio
+- 50 tasks ran sequentially per host (each ~50 ms work + 1 round trip):
+  ~5-10 seconds per host wall clock
+- Total: ~10-15 seconds
+
+Same play under Ansible (pipelining on):
+- 5 forks at a time across 100 hosts: 20 batches
+- Per batch: 50 tasks * 100-200 ms Python startup * 5 hosts = ~50 seconds
+- Total: ~15-20 minutes
+
+This is the order-of-magnitude gain. **Not "Rust is faster than Python"
+microbenchmarks.** It's eliminating the per-task ceremony: Python startup,
+module transfer, tmp dir setup, separate process per task, all of it.
+
 ## Notes / scratch
