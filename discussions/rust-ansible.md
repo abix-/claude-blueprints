@@ -291,7 +291,9 @@ Loses some Rust advantage on the target side but keeps it on the controller.
   rendering with Jinja2, JSON manipulation, fact gathering), **ship a small
   static helper binary on demand** (Option A, scoped). One musl binary per
   target arch, ~5 MB, contains just the operations that need it.
-- Persistent agent (Option B) explicitly out of scope. Keep it agentless.
+- **Persistent agent (Option B) is in scope as a first-class mode for hosts
+  that can run it (Linux/Windows servers).** See "Hybrid agent + agentless"
+  section below.
 
 This hybrid matches pyinfra's proven model while exploiting Rust's strengths
 for the controller and for the helper binaries.
@@ -1321,5 +1323,220 @@ Eventually, if the Rust controller has critical mass, build a Rust-native
 control plane that exposes the controller's richer features (per-task
 runtime telemetry, pre-flight analysis, fleet-wide migration tracking).
 Long-term play, probably needs a company behind it.
+
+## Hybrid agent + agentless architecture (first-class design)
+
+The world is hybrid. A real fleet contains:
+- **Linux/Windows servers** that can run a persistent agent and benefit
+  enormously from doing so.
+- **Network devices, appliances, storage controllers, firewalls, load
+  balancers** that are closed: SSH or API only. You cannot install anything.
+- **Embedded / IoT** that may or may not accept an agent depending on the
+  hardware and OS.
+
+The Rust controller must support **both transport modes natively**, chosen
+per host (or per host group). Same playbook YAML, same modules, different
+execution paths under the hood.
+
+### Three transport modes, all first-class
+
+**Mode 1: Persistent agent (Linux/Windows servers).**
+- Static Rust binary installed as a service (systemd unit, Windows Service).
+- Listens on an mTLS port (or maintains an outbound connection for NAT/firewall traversal).
+- Controller pushes plans over the persistent channel; agent executes locally; streams results.
+- Cert-based identity, mTLS, no SSH key management at scale.
+- Can run scheduled local reconciliation without controller (cached plan +
+  policy).
+- Can stream local events to controller in real time (file changes, service
+  state, perf metrics).
+
+**Mode 2: Agentless via SSH + native modules / shell transpile.**
+- For hosts where the agent can't run: network devices, appliances, embedded.
+- Native modules either generate shell commands and ssh-exec them, or ship a
+  small static helper binary on demand.
+- This is the previous default architecture (Mode A/C hybrid). Unchanged.
+
+**Mode 3: Agentless via SSH + Python bridge (legacy compat).**
+- For tasks using Python-only modules on agentless hosts.
+- AnsiBallZ wrapper, same as Ansible today.
+- Keeps the long-tail ecosystem working.
+
+A single playbook can use all three modes simultaneously, routed per host.
+The operator configures transport at the inventory level:
+```yaml
+all:
+  children:
+    webservers:
+      hosts:
+        web-[01:50]:
+      vars:
+        ansible_connection: rust_agent
+        rust_agent_endpoint: "{{ inventory_hostname }}:8443"
+
+    network:
+      hosts:
+        sw-core-01:
+        sw-core-02:
+      vars:
+        ansible_connection: ssh
+        ansible_network_os: arista_eos
+
+    legacy_appliances:
+      hosts:
+        nas-01:
+      vars:
+        ansible_connection: ssh
+```
+
+### Why agent mode for managed servers is enormous
+
+Persistent agent eliminates **everything** the agentless/SSH model still
+pays for:
+
+- **No SSH handshake per anything.** Persistent mTLS connection (or outbound
+  long-poll). Sub-millisecond command dispatch.
+- **No per-task process spawn on the target.** Agent is one long-running
+  process; tasks are function calls inside it.
+- **No module transfer.** Native modules are compiled into the agent. Updates
+  ship via package manager or controller-driven update channel.
+- **Persistent state.** Fact cache, file checksums, package state cache, all
+  warm and local. Re-running a playbook is incremental, not from-scratch.
+- **Local reconciliation.** Agent can hold a desired-state policy and
+  reconcile continuously without controller round-trips. Drift detection,
+  auto-remediation.
+- **Event streaming.** File changes, service crashes, log patterns,
+  surfaced to controller in real time without polling.
+- **Better security model.** mTLS cert per agent, easily rotated, no SSH key
+  sprawl. Audit log per agent. No "shared root account."
+- **NAT/firewall friendly.** Outbound-connection mode means hosts behind NAT
+  can be managed without inbound holes.
+
+### Performance with agent mode
+
+Earlier mid-migration table extended:
+
+| Mode | Per-host time (30-task play) | Wall clock (200 hosts) |
+|---|---|---|
+| Vanilla Ansible (forks=5) | ~6 sec | ~4 min |
+| Vanilla Ansible (forks=50) | ~6 sec | ~50 sec |
+| Rust controller, agentless, 0% native | ~6 sec | ~10 sec |
+| Rust controller, agentless, 60% native | ~3.5 sec | ~6 sec |
+| Rust controller, agentless, 100% native | ~1.5 sec | ~3 sec |
+| **Rust controller, agent mode, 100% native** | **~0.3 sec** | **~1 sec** |
+
+Agent mode is another order of magnitude on top of agentless native, because
+all the per-task ceremony (SSH command, process spawn, command parsing,
+exit-code marshaling) is gone.
+
+For **continuous reconciliation** (agent re-evaluates state every N seconds
+locally), the controller round-trip stops being a per-task cost entirely;
+it's only paid when policy changes.
+
+### Why agentless must remain first-class
+
+Network devices and appliances:
+- Cisco IOS, Juniper Junos, Arista EOS, Aruba ArubaOS: closed appliances.
+  CLI over SSH or NETCONF/RESTCONF over HTTPS. You cannot install anything.
+- Storage controllers (NetApp, Pure, Dell EMC): API or SSH-CLI.
+- Firewalls (Palo Alto, Fortinet, Check Point): API or SSH-CLI.
+- Load balancers (F5, Citrix, A10): API or SSH-CLI.
+- Hypervisors (ESXi, Proxmox): API or limited shell.
+
+For these, the SSH path with native modules talking CLI/API is the only
+option. Same drop-in compat story for existing Ansible network modules:
+either port them to Rust natively, or run the Python module via the bridge.
+
+### Agent design (Rust-native)
+
+**Daemon shape:**
+- Single static binary `rust-ansible-agent`
+- systemd unit on Linux, Windows Service on Windows
+- Config: `/etc/rust-ansible/agent.toml` (Linux), `C:\ProgramData\rust-ansible\agent.toml` (Windows)
+- mTLS server cert + CA bundle for client (controller) auth
+- Or outbound mode: agent dials controller on configured interval, holds
+  long-poll for tasks
+
+**Wire protocol:**
+- HTTP/2 or QUIC for low-latency multiplexed RPC
+- Protobuf or msgpack for task payloads (compact, fast)
+- Streaming for long-running tasks and event subscriptions
+
+**Capabilities:**
+- Execute plan (one-shot or continuous-reconcile)
+- Stream events (file change, service state, perf, log patterns)
+- Report state (current facts, last reconcile result, drift report)
+- Self-update (controller-driven or distro package)
+- Local cache (module results, package state, file checksums)
+
+**Trust model:**
+- Agent runs as root (or appropriate equivalent on Windows)
+- mTLS cert per agent, CA-signed
+- Cert rotation via controller or external PKI
+- All actions logged locally + streamed to controller
+
+**Effort to build the agent:**
+- Protocol + RPC framework: 3-4 weeks
+- Daemon implementation (config, lifecycle, IPC): 2-3 weeks
+- Install/update mechanism (systemd unit, Windows Service, package): 2 weeks
+- Local state cache: 2 weeks
+- Event streaming infrastructure: 2-3 weeks
+- Security hardening, cert management: 2 weeks
+- Bootstrap from SSH (turn an agentless host into an agent host): 1-2 weeks
+- **Total: ~3-4 person-months on top of the controller work.**
+
+### What the agent does NOT do
+
+- Replace SSH for network devices, appliances, locked-down hosts. Those stay
+  SSH-only forever.
+- Phone home autonomously. Default mode is controller-driven; outbound
+  long-poll is opt-in for NAT/firewall scenarios.
+- Make decisions on its own without policy. Agent executes plans; the
+  controller (or admin) defines what plans run.
+
+### Gains specifically from agent mode
+
+On top of all the earlier gains:
+
+| Gain | Impact |
+|---|---|
+| Per-task latency | Sub-ms vs. ~50-100ms SSH round-trip |
+| Continuous reconciliation | Drift detected and remediated in seconds, not on the next play run |
+| Real-time event streaming | File/service/log changes surfaced live |
+| Reduced controller load | Agents do work locally; controller is coordination + policy |
+| Better security at scale | mTLS cert per host, no SSH key sprawl |
+| NAT/firewall traversal | Outbound mode works through restrictive networks |
+| Offline capability | Agent can run cached policy when controller unreachable |
+| Local audit trail | Per-host log of every action, tamper-evident |
+| Lower SSH key blast radius | No need for sudo via SSH at scale |
+| Faster fact collection | Facts cached locally, refreshed in background |
+
+### Strategic positioning
+
+Most existing config-management tools force a choice:
+- Ansible: agentless, period.
+- Chef/Puppet/Salt: agent, period.
+- AWX: built around Ansible's agentless model.
+
+**A Rust controller supporting both first-class is a category-defining
+design.** Users don't have to pick a religion. Servers get the agent and
+its benefits; appliances get SSH and the standard Ansible-compatible story.
+The same playbook drives both.
+
+The honest version of the pitch: **"Ansible for what Ansible does, Salt for
+what Salt does, in one tool, with a path to native Rust modules across
+both."**
+
+### Effort recalibration with agent mode
+
+Adds ~3-4 person-months on top of earlier Tier 1 + Tier 2 estimates.
+
+- **Tier 1 + agent**: ~20-25 person-months (was 16-21)
+- **Tier 2 + agent**: ~38-44 person-months (was 35-40)
+- **Tier 3 + agent**: unchanged at ~8-10 person-years (agent already
+  included)
+
+Worth the addition. Agent mode is what justifies "this is more than a
+faster Ansible" - it's a fundamentally better model for the hosts that can
+support it, while not abandoning the hosts that can't.
 
 ## Notes / scratch
