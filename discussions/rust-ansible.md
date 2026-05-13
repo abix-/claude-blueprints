@@ -414,4 +414,160 @@ defines the addressable user base on day one. Suggested ranking: filesystem
 + package + service + user/group + template + git + systemd. That's the
 "configure a Linux box" wedge and it's achievable in months, not years.
 
+## The drop-in compatibility vision (chosen direction)
+
+Reframe: the right architecture is **drop-in replacement for `ansible-playbook`
+that uses native Rust modules where available, falls back to running existing
+Python modules where not.** No migration project. The user installs the new
+binary, points it at their existing playbooks/roles/inventory/vault, and
+everything keeps working. Native Rust takes over silently for tasks where a
+Rust implementation exists.
+
+This is strategy 2 from earlier (hybrid bridge), elevated from fallback to
+primary design constraint. Zero switching cost is the wedge.
+
+### What the user actually sees
+
+```
+$ rust-ansible-playbook site.yml -i inventory
+PLAY [webservers] *********************************************
+
+TASK [Install nginx]                              [native]
+ok: [web-01]
+ok: [web-02]
+
+TASK [Configure firewall]                         [python:ansible.posix.firewalld]
+changed: [web-01]
+changed: [web-02]
+```
+
+Every task line tells the user which runtime ran it. `--runtime-report`
+produces a migration-progress summary across the whole play. As more native
+modules ship, the `[python:...]` lines disappear and Python on the target
+becomes unnecessary for those hosts.
+
+### What "uses all of Ansible" requires technically
+
+1. **Module registry.** Internal table mapping FQCN to a Rust implementation
+   when one exists. Lookup at task dispatch. Unknown? Use Python.
+2. **Ansible module wire protocol (AnsiBallZ).** For Python modules, ship the
+   module + `module_utils` dependencies as a zip-embedded Python script,
+   `scp` to target, run `python3 wrapper.py`, parse JSON. ~1-2 months to
+   re-implement in Rust correctly.
+3. **Playbook + role parser with 100% YAML compatibility.** All of: tasks,
+   handlers, vars, vars_files, defaults, meta, role search paths,
+   include_tasks/import_tasks/include_role/import_role, block/rescue/always,
+   when, loop/with_*, register, notify, delegate_to, run_once, tags,
+   strategies (linear/free/host_pinned), serial, become*, vars_prompt.
+4. **Jinja2 evaluator.** `minijinja` covers the language. Ansible-specific
+   filters (`to_nice_yaml`, `hash`, `password_hash`, ...) get re-implemented
+   as Rust functions. Lookup plugins are Python today; build a Rust registry
+   mirroring built-in lookup names, with Python fallback for unknown ones.
+5. **Inventory: static + dynamic.** INI/YAML trivial. Dynamic inventory and
+   inventory plugins are Python. Easiest path: shell out to `ansible-inventory`
+   and parse its JSON output.
+6. **Vault.** Read/write Ansible Vault file format (AES-256-CTR + PBKDF2).
+   Documented format, ~500 lines of Rust. Mandatory.
+7. **Connection plugins.** SSH via `russh` (pure Rust). WinRM, docker, k8s,
+   local each need an implementation, mostly bounded.
+8. **Become.** Sudo, su, doas, runas, pbrun. Prefix-the-command logic plus
+   password prompt handling over SSH.
+9. **Callback plugins.** Native Rust equivalents for default, json, yaml,
+   minimal. External Python callbacks get dropped or run via Python bridge.
+10. **Strategy plugins.** linear/free/host_pinned native. This is where Rust
+    wins biggest on speed.
+
+### Module runtime: control and identification
+
+**Requirement: the user must always be able to see which runtime ran a task,
+and must be able to override the choice.** Two layers: defaults that Just
+Work, plus escape hatches for everything.
+
+**Default behavior (zero config):**
+- For every task, the controller checks the module registry. If a native Rust
+  implementation exists, use it. Otherwise use the Python module.
+- Every task line in the output is annotated with the runtime that ran it:
+  `[native]`, `[python:fqcn]`, or `[shell]` (for transpiled-to-shell ops).
+- Summary at end of play: `Tasks: 47 native, 12 python, 0 unknown`.
+
+**CLI-level control:**
+```
+--prefer rust          # default. use native if available, fall back to python
+--prefer python        # use python everywhere available (vanilla Ansible mode)
+--require rust         # fail the play if any task would fall back to python
+--require python       # force python execution; useful for parity testing
+--runtime-report       # dry-run plan: show planned runtime per task without running
+--list-native          # show all FQCNs with native Rust implementations
+```
+
+**Per-play default in YAML:**
+```yaml
+- hosts: webservers
+  runtime: rust            # rust | python | auto (default: auto)
+  tasks: ...
+```
+
+**Per-task override:**
+```yaml
+- name: install nginx
+  ansible.builtin.apt:
+    name: nginx
+  runtime: python          # force python for this task only
+```
+
+**Per-module pinning (config file `rust-ansible.cfg`):**
+```yaml
+runtime_overrides:
+  ansible.builtin.template: python   # always use python for templates
+  community.aws.*: python            # any AWS module uses python
+  ansible.builtin.file: rust         # but file always uses rust
+```
+
+This gives four levels of precedence (most specific wins):
+1. Per-task `runtime:` keyword
+2. Per-play `runtime:` keyword
+3. Config file `runtime_overrides`
+4. CLI `--prefer` / `--require`
+
+**Why explicit control matters:**
+- Native and Python implementations can have subtle behavior differences
+  (rounding, default values, edge cases). Users need to pin Python when they
+  hit a bug in a native module.
+- Compliance/audit environments may require "approved" implementations only.
+  Config file pins everything to known-good runtimes.
+- Migration verification: `--require rust` on a host group proves you can
+  remove Python from those targets.
+- Performance debugging: forcing python lets you A/B compare speed and behavior.
+
+### Honest costs
+
+- Engineering surface is 5-10x larger than a clean-room rewrite. You build
+  all of Ansible's runtime *plus* the Python bridge.
+- Python bridge is permanent. Long-tail modules keep Python in the loop forever.
+- Performance ceiling is capped for Python-heavy playbooks. Worst case:
+  Ansible-speed. Best case (all native): 10x faster.
+- Maintenance burden: track Ansible's module API changes, vault format
+  changes, playbook syntax additions.
+
+### Honest wins
+
+- Zero migration friction. 1000 servers don't get touched.
+- Gradual migration story with measurable per-host, per-playbook progress.
+- You don't have to win on breadth, only on the hot path. Python bridge
+  handles the long tail.
+- Adoption story is concrete: "install this binary, see what runs native, port
+  the modules you use most." No big-bang rewrite.
+
+### Effort recalibration (drop-in compat version)
+
+- **Tier 1**: drop-in compat for basic playbooks + 20 native modules.
+  ~9-12 person-months. Ansible-runtime emulation alone is ~6 months.
+- **Tier 2**: vault, dynamic inventory, become, callbacks, 50 native modules.
+  ~2-3 person-years.
+- **Tier 3**: network modules, all strategy/connection plugins, AWX-like UI.
+  ~5+ person-years.
+
+Bigger than clean-room, but with a much higher chance of adoption because
+nobody has to throw anything away.
+
 ## Notes / scratch
