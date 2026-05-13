@@ -1522,9 +1522,43 @@ design.** Users don't have to pick a religion. Servers get the agent and
 its benefits; appliances get SSH and the standard Ansible-compatible story.
 The same playbook drives both.
 
-The honest version of the pitch: **"Ansible for what Ansible does, Salt for
-what Salt does, in one tool, with a path to native Rust modules across
-both."**
+### Why this beats "just use Salt"
+
+Salt is the natural alternative for the agent model. Today the realistic
+choices are:
+
+| Tool | Agent? | Runs your existing Ansible playbooks? |
+|---|---|---|
+| Ansible | No (SSH only) | Yes (it's the source) |
+| Salt | Yes (minions) | **No.** Salt has its own DSL (states, pillars, orchestrate). Migrating means rewriting everything. |
+| Chef | Yes | No. Ruby DSL, recipes/cookbooks. Full rewrite. |
+| Puppet | Yes | No. Puppet DSL, manifests. Full rewrite. |
+| **Rust drop-in (this design)** | **Yes (optional, per host)** | **Yes (unchanged).** |
+
+Salt does have a wrapper module that can shell out to `ansible-playbook`
+from a minion, but the minion needs Ansible installed alongside Salt
+(defeating the simplification), it's wrapping the binary as a subprocess
+rather than native execution, and nobody uses it in production. It's a
+curiosity, not a solution.
+
+So the choice today is:
+- **Stay on Ansible**: keep playbooks, lose agent benefits forever.
+- **Switch to Salt/Chef/Puppet**: get agent benefits, throw away all
+  existing playbooks and rewrite in their DSL.
+- **No third option.**
+
+The Rust drop-in **is** the third option: agent benefits where they help,
+existing Ansible playbooks unchanged. Nobody offers this today.
+
+### The honest pitch
+
+**"Ansible playbooks you already have, running on a Salt-like agent for
+servers, falling back to SSH for everything else, with native Rust modules
+eliminating the Python tax."**
+
+No equivalent tool exists. The closest combinations require rewriting
+playbooks (Salt/Chef/Puppet) or accepting Ansible's ceiling (vanilla
+Ansible).
 
 ### Effort recalibration with agent mode
 
