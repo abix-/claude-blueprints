@@ -570,4 +570,104 @@ This gives four levels of precedence (most specific wins):
 Bigger than clean-room, but with a much higher chance of adoption because
 nobody has to throw anything away.
 
+## Total effort: bottom-up breakdown (drop-in compat approach)
+
+Honest component-by-component estimate, not top-down guesses.
+
+### Tier 1: alpha that runs real playbooks
+
+**Core runtime emulation (the hard part):**
+
+| Component | Effort |
+|---|---|
+| Playbook YAML parser (tasks/plays/blocks/loops/when/register/notify) | 4-6 weeks |
+| Variable precedence engine (22 levels in Ansible) | 2-3 weeks |
+| Jinja2 + ~80 Ansible filters + ~30 tests + lookup shim | 3-4 weeks |
+| Role resolution + loader + dependencies | 2 weeks |
+| Handler dispatch (notify/listen/flush) | 1 week |
+| Strategy engine (linear/free/host_pinned, tokio parallel) | 3 weeks |
+| SSH connection layer (russh + multiplexing + become) | 3 weeks |
+| **AnsiBallZ wrapper (Python module shipping protocol)** | **6-8 weeks** |
+| Inventory (static + dynamic shell-out) | 2-3 weeks |
+| Vault (AES-256-CTR + PBKDF2) | 1-2 weeks |
+| Callback plugins (default/json/yaml/minimal) | 2 weeks |
+| CLI compatibility (ansible-playbook/ansible/ansible-inventory flags) | 2 weeks |
+
+**Core subtotal: 30-40 weeks = 7-9 person-months solo.**
+
+**Plus:**
+- 20 native module implementations (file/copy/template/apt/systemd/...),
+  ~4 days each: **~4 person-months**
+- Runtime routing system (registry, precedence, `--runtime-report`,
+  output annotation): **~1 person-month**
+- Python bridge edge cases (check_mode, diff_mode, async actions,
+  interpreter discovery): **~1-2 person-months**
+- Test harness (diff against vanilla Ansible on real playbooks):
+  **~2-3 person-months**
+- Docs + onboarding: **~1-2 person-months**
+
+**Tier 1 grand total: 16-21 person-months.**
+- Solo: ~14-18 calendar months
+- Two committed people: ~8-11 calendar months
+- Funded team of 4: ~5-7 calendar months
+
+That's "runs real playbooks against real fleets, has rough edges, early
+adopters can use it."
+
+### Tier 2: production-credible
+
+Adds:
+- 30 more native modules: **6 person-months**
+- WinRM, docker, k8s connection plugins: **2 person-months**
+- Native dynamic inventory plugins (AWS, GCP, k8s): **3 person-months**
+- All become methods + edge cases: **1 person-month**
+- Network device support architecture (framework, not modules):
+  **2 person-months**
+- Performance work, scale to 10k hosts: **2 person-months**
+- Bug fixes, polish, packaging: **3 person-months**
+
+**Tier 2 add-on: ~19 person-months on top of Tier 1.**
+
+**Tier 1 + Tier 2: ~35-40 person-months.**
+- ~3 person-years solo
+- ~18 calendar months for two people
+- ~9-12 months for a funded team of 4
+
+### Tier 3: Ansible parity + AWX-equivalent
+
+Adds:
+- 200+ more native modules: **30+ person-months**
+- Network modules (Cisco/Juniper/Arista/etc): **12 person-months**
+- AWX/Tower-equivalent web UI: **18-24 person-months**
+- Compliance/audit, RBAC, enterprise auth: **6+ person-months**
+
+**Tier 3 add-on: 60-80 person-months.**
+
+**Full Tier 3: 8-10 person-years for a real team.** "Red Hat Ansible Tower
+with a Rust core." Not a solo project.
+
+### What dominates the cost
+
+AnsiBallZ wrapper + variable precedence + Jinja2 filters are ~40% of the
+core runtime work. Unglamorous, mostly invisible to users, no shortcut.
+Skipping any of them breaks compatibility with real playbooks.
+
+Native modules are the second-biggest line item but they are *parallelizable*
+and *contributable*. Modules are where outside contributors plug in once the
+core exists.
+
+### Realistic landing zone
+
+A solo or two-person effort lands at **Tier 1 in 8-18 months**. Enough to
+publish, get feedback, attract contributors. The trap is trying Tier 2 alone
+without funding or contributors. Tier 3 requires a company or foundation.
+
+### Comparison to JetPorch's situation
+
+DeHaan was solo on JetPorch and didn't try drop-in compat. He invented a new
+playbook dialect. He still couldn't sustain it past ~18 months. The
+"use existing playbooks" angle changes the user-acquisition math, but the
+engineering cost goes up, not down. Solo founders should expect the same
+outcome unless they have a year of runway and high motivation.
+
 ## Notes / scratch
