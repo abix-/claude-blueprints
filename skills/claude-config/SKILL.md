@@ -26,6 +26,22 @@ If it has no workflow or actionable instructions for Claude, it's a doc.
 
 ## Skills
 
+### IMPORTANT: skills are public
+
+`~/.claude/skills/` syncs to a **public GitHub repo** (claude-blueprints / dotfiles). Treat every `SKILL.md` as public documentation. **Never** put any of the following in a skill file (body or frontmatter):
+
+- Absolute paths that include the username (`C:\Users\<name>\...`, `/home/<name>/...`).
+- Machine-specific install paths (`C:\Games\Steam\steamapps\common\...`, hand-rolled drive letters, hostnames).
+- Repo-specific absolute paths on this machine (`C:\code\<project>\...`); use repo-relative paths instead.
+- API keys, tokens, credential filenames, secret env-var values, internal URLs.
+- Personal info (email, full name, real-life identifiers beyond a public GitHub handle).
+
+Use repo-relative paths (`scripts/deploy.ps1`, `src/...`), env vars (`$env:LOCALAPPDATA`, `$HOME`), or generic placeholders (`<install-root>`, `<game-root>`) when describing locations. Describe structure, let the reader / autodetect resolve absolutes.
+
+Memory files (`~/.claude/projects/<repo>/memory/*.md`) are local-only. Those CAN hold machine paths if needed. Skills cannot.
+
+Before saving a skill, scan the body for `C:\Users\`, `C:\Games\`, `C:\code\`, hostname strings, and email addresses; replace each with a generic equivalent.
+
 ### File Structure
 
 Every skill is a directory with `SKILL.md`:
