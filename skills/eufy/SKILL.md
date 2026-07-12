@@ -2,7 +2,7 @@
 name: eufy
 description: "eufy SoloCam S220 local capture, motion detection, and event records. Rust capture/watcher/thick-client + eufy-security-ws Node server, no HomeBase, no cloud in the video path. Lives in the private eufy repo. Use when working on the capture tool, the detector, zones, the records/index system, the operator UI, or debugging the camera's P2P behavior."
 user-invocable: false
-version: "1.6"
+version: "1.7"
 ---
 # eufy
 
@@ -82,11 +82,26 @@ specifics live in the repo's docs/eufy-solocam-s220.md, not here.
   starting ~80s, quiet first 80s.
 - **Zones, not thresholds, separate animals from vegetation.** Tree
   sway peaks ~10x a squirrel's signal; grass sways too. Zones are
-  labeled rects (--zone "label:x,y,w,h" frame fractions); the area
-  threshold divides by watched pixels so its meaning is stable.
-  Events report their dominant zone; that label is the "what was
-  detected" answer (window-feeder zone = birds, patio zone = ground
-  feeders).
+  labeled rects (frame fractions); the area threshold divides by
+  watched pixels so its meaning is stable. Events report their
+  dominant zone. AUTO zones (--auto-zones): the vision model maps
+  the scene from a 4x3 tile grid of the latest frame (patio/feeder
+  tiles wanted; fence/tree/grass excluded) into zones.json; a big
+  frame change vs zones-reference.jpg (camera moved) remaps loudly,
+  night IR never triggers. Every recording is stamped with its
+  capture zones (capture-<epoch>.zones.json) and every event row
+  carries them, so replay/rescan use the zones the video was
+  RECORDED under; camera moves cannot corrupt history.
+- Color aware diff (--color-aware-diff): RGB decode, per-channel
+  mean cancellation, pixel changed on its LARGEST channel delta.
+  Chroma swings harder than luma under sunlight shifts: calibrated
+  --pixel-delta 18 (15 fired a 9s phantom on a passing cloud, 20+
+  ate the squirrel's tail). Night IR has no chroma; degrades to
+  luma behavior.
+- Solar CANNOT outpace streaming: ~4.5%/h net drain while watching
+  even with the charging flag on (measured 2026-07-12, 86%->1%).
+  The panel only gains while the camera sleeps; watch windows
+  (HH:MM-HH:MM local, windows.json) are the battery lever.
 - **Duration, not peak size, separates animals from moths and light
   flicker.** Ledger-verified 2026-07-11: every real creature held
   motion 11s+ (humans 52-72s, squirrels 32s, bird 11s); every moth /
@@ -113,35 +128,66 @@ specifics live in the repo's docs/eufy-solocam-s220.md, not here.
   after --keep-hours (default 24). events/ clips + thumbnails are
   kept forever. Files not named capture-*/download-* are never
   pruned (that protects the baseline).
-- events/events.jsonl is the ledger; index.html regenerates from it
-  (browser renders local times). The records layer is idempotent
-  (existing clip = skip), so rescans only ever add.
+- events/events.jsonl is the ledger; the UI gallery renders every
+  row from it (index.html was removed 2026-07-12: the UI does it
+  all). Rows carry duration/peak/zone plus bbox (motion bounding
+  box), zones (capture-time zone set), detected/confidence/votes,
+  and the model's verbatim per-frame descriptions (the audit trail
+  that proves keyword gaps). The records layer is idempotent
+  (existing clip = skip), so re-detection only ever adds.
 - Audit pattern: replay recordings on scratch COPIES without mp4
-  siblings for detection-only reports (no clips cut into the index).
+  siblings for detection-only reports (no clips cut into the
+  ledger).
 
 ## Thick client
 
 Iced 0.14 + iced_video_player (GStreamer) in ONE application with
 the watcher on a background thread (jbot shape). Tabs: dashboard
-(health strip, disk counters, battery drain + ETA, gallery), video
-(ONE surface for live + event clips + full recordings, source panel
-beside it; operator-decided consolidation), config (zone preview
-over latest frame, settings, manual rescan), log (datetime-stamped
-ring, newest first). Startup recovery: any raw recording without a
-motion.txt sibling is healed on launch (remux, detect, cut, index);
-kills and crashes cost nothing but the downtime itself.
+(health strip, disk counters, battery drain + ETA, full-ledger
+gallery), video (ONE surface for live + event clips + recordings;
+a per-event panel shows timestamp/duration/peak/verdict with
+confidence, vote counts, and the model's verbatim per-frame
+descriptions; a "show zones" toggle overlays the zones THAT video
+was captured under, 16:9 letterbox-corrected), config (zone
+preview, full settings editor, watch-windows field, rescan button),
+log (datetime ring, newest first). The rescan button drops
+rescan.request; the process owning the ledger (the service in
+viewer mode) picks it up within 2s: remaps auto zones
+UNCONDITIONALLY (a bad map must not survive a rescan; night keeps
+zones with a log line), re-detects kept recordings each with its
+stamped zones, and clears all verdicts so everything re-identifies.
+Startup recovery: any raw recording without a motion.txt sibling
+heals on launch.
 
-Vision labels: moondream (1.8B) via local ollama labels event
-thumbnails (human/squirrel/bird/cat/dog/other); a ledger-scanner
-worker backfills rows missing a verdict. Operator-locked doctrine:
-the model STARTS, does the thing, STOPS (keep_alive "0s", the STRING
-form; integer 0 does not unload on old ollama) and inference is
-NEVER enabled without measuring GPU placement first. The 7B
+Live config files (the pattern: the UI writes, the watcher re-reads
+EVERY segment, zero restarts): config.json (all detection/classify
+knobs; overrides CLI flags), windows.json (watch windows),
+zones.json (activity zones, auto or hand). CLI flags in service.json
+are seeds/fallbacks only. settings.json stays watcher-WRITTEN
+display state that seeds the viewer.
+
+Vision identification: moondream (1.8B) via local ollama. Per event,
+N frames (config dropdown, default 11; odd so a two-way vote cannot
+tie) spread evenly across the motion span; each slot sends its
+SHARPEST frame (variance-of-Laplacian inside the motion bbox, one
+gray decode pass; blur loses to a crisp frame nearby), cropped to
+the event's motion bounding box (pad 25%, floor 20% of frame; crop
+took a squirrel from 40% full-frame confidence to 10/10 votes).
+Every frame gets a verdict by word-boundary keyword match (plurals
+auto-match; wide vocabulary: bird species, rat/mouse/rodent,
+raccoon, possum, rabbit, deer, fox, insect words, and "shadow"
+ordered after the animals so a bird's shadow counts as bird); the
+most common non-"other" label wins, confidence = winner's share of
+all votes. Rows without a bbox get one derived from the clip
+itself, so nothing classifies full-frame. Operator-locked doctrine:
+the model STARTS, does the thing, STOPS (keep_alive "0s", the
+STRING form; integer 0 does not unload on old ollama) and inference
+is NEVER enabled without measuring GPU placement first. The 7B
 default-config attempt silently ran 0/29 layers on GPU (pure CPU, 8
 threads) and degraded the whole machine. moondream ignores one-word
-instructions; it DESCRIBES and the label is extracted with
-word-boundary keyword matching (bare substring turned "scattered"
-into a cat). Hard opt-in: --classify.
+instructions; it DESCRIBES and the label is extracted by
+word-boundary matching (bare substring turned "scattered" into a
+cat). Hard opt-in: --classify.
 
 UI language: config-tab dropdown (English/Spanish), persisted in
 recordings/ui.json; strings are (en, es) pairs at call sites,
