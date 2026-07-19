@@ -2,11 +2,11 @@
 name: factoriobot
 description: factoriobot development and operation. Use when writing factoriobot Rust code, driving its CLI against a live Factorio game, or extending its monitors. Not for playing Factorio by hand.
 user-invocable: false
-version: "1.1"
+version: "1.2"
 ---
 # Factoriobot
 
-AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Factorio 2.x (Space Age) game. Repo: [abix-/factoriobot](https://github.com/abix-/factoriobot) (private). Read docs/factorio-v1-design.md in the repo before design work.
+AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Factorio 2.x (Space Age) game. Repo: [abix-/factoriobot](https://github.com/abix-/factoriobot) (private). Read docs/factorio-design.md (the ONE living design doc) before design work. Three parts: the Rust brain offloads as much as possible (deterministic monitors, proposals, execution), the LLM only judges what rules cannot, the player is final authority and the body. One task at a time: at most one active proposal, verified done from game state before the next.
 
 ## The shape
 
