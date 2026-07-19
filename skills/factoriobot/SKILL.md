@@ -2,7 +2,7 @@
 name: factoriobot
 description: factoriobot development and operation. Use when writing factoriobot Rust code, driving its CLI against a live Factorio game, or extending its monitors. Not for playing Factorio by hand.
 user-invocable: false
-version: "1.2"
+version: "1.3"
 ---
 # Factoriobot
 
@@ -67,6 +67,11 @@ AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Fac
 - Alerts latch: fire once when a condition starts, not on every poll.
 - Bound every queue at creation. Stable entity ids (unit_number), never session-scoped ones.
 - Errors tell the caller what went wrong AND what to do next, with valid options listed.
+
+## Factorio 2.1 API drift (live-verified 2026-07-19)
+
+- LuaRecipe has no `category` and LuaRecipePrototype renamed `category` to `categories` (array of strings). All prior-art projects (FLE included) predate this. When a reader errors with "doesn't contain key", check lua-api.factorio.com/latest before guessing, and read factoriobot.log: every rcon exchange is in it.
+- Trigger technologies (research_trigger on the prototype) cannot be queued with add_research; they complete via in-world actions. Exclude them from research proposals, surface their requirements as goals.
 
 ## Live-verified facts (2026-07-18)
 
