@@ -2,7 +2,7 @@
 name: factoriobot
 description: factoriobot development and operation. Use when writing factoriobot Rust code, driving its CLI against a live Factorio game, or extending its monitors. Not for playing Factorio by hand.
 user-invocable: false
-version: "1.3"
+version: "1.4"
 ---
 # Factoriobot
 
@@ -17,7 +17,7 @@ AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Fac
 
 ## Locked rules
 
-- Zero writes in v1. The partner tells and explains, the player builds.
+- Writes are player-legal actions gated by proposals (approve, reject, auto per category in chat). The lazy player principle: the bot does everything a UI click could do; the player is an approval and design gate plus the physical residue.
 - Hard no-cheating line. Post-v1 hands place blueprints exactly as a player would.
 - Any modded game must work: game knowledge from prototype data at runtime, never hardcoded vanilla lists.
 - Spaghetti is the player's initial base design. Advice works within whatever exists, never pushes a layout.
@@ -30,7 +30,7 @@ AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Fac
 - src/rcon.rs connect + execute_lua_json (lifted from factorio-sensei, MIT, see THIRDPARTY.md)
 - src/lua.rs IIFE reader builders, src/state.rs Deserialize structs, src/error.rs
 - tests/live.rs live tests behind #[ignore]
-- docs/ factorio-vision.md, factorio-research.md, factorio-v1-design.md, factorio-v1-plan-1.md
+- docs/ factorio-vision.md, factorio-research.md, factorio-design.md (the living design), factorio-v1-plan-*.md (execution history)
 - .claude/project_state.md current focus and next steps
 
 ## Commands
@@ -80,5 +80,5 @@ AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Fac
 
 ## Open items
 
-- Empty-inventory serialization untested: Lua {} may arrive as {} not [], Inventory may need serde(default) if it surfaces.
-- Whether RCON silent-commands disable achievements for the save: pending the player checking in-game, record in docs/factorio-v1-design.md.
+- RESOLVED: lua empty tables ({} vs []) handled by the lua_array deserializer on every list field.
+- Whether RCON silent-commands disable achievements for the save: pending the player checking in-game, record in docs/factorio-design.md.
