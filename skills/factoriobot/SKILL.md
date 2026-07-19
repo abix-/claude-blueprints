@@ -2,7 +2,7 @@
 name: factoriobot
 description: factoriobot development and operation. Use when writing factoriobot Rust code, driving its CLI against a live Factorio game, or extending its monitors. Not for playing Factorio by hand.
 user-invocable: false
-version: "1.0"
+version: "1.1"
 ---
 # Factoriobot
 
@@ -35,10 +35,17 @@ AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Fac
 
 ## Commands
 
-- Build and test: `k3sc cargo-lock check | test | build --release`, never bare cargo.
+- Build and test: `k3sc cargo-lock check | test | build --release`, never bare cargo. After a release build, copy the exe from the shared target dir to the user's bin dir on PATH. A running watch locks the exe; stop it before rebuilding.
 - Live tests, game must be hosted: `k3sc cargo-lock test -- --ignored`
-- CLI: `factoriobot ping`, `factoriobot status`. Default address 127.0.0.1:27015.
+- CLI: `factoriobot ping | status | problems | next | watch`. Default address 127.0.0.1:27015. `problems` is the one-shot six-loop health check, `next` is the deterministic what-should-I-do-next (priority: defense, power, research, manufacturing, gathering, transit), `watch` polls (10s fast, 300s slow), latches alerts (fire on start, fire on clear, never repeat), and delivers to stdout plus in-game chat.
 - Game setup: in Factorio's config.ini [other] section, uncomment local-rcon-socket and local-rcon-password, then host via Multiplayer, Host New Game. RCON listens only while hosting, including solo.
+
+## Companion mod
+
+- Lives at mod/factoriobot (info.json + control.lua), installed by copying that folder into the game's mods directory. factorio_version must match the player's game (currently "2.1", they run experimental).
+- Observes and relays only, changes nothing: in-game `/factoriobot <message>` stores to a capped inbox and acks in orange; entity deaths on the player force and finished researches store to a capped event buffer.
+- RCON-only drains: `/factoriobot_poll_inbox` and `/factoriobot_poll_events` return JSON arrays and clear. The daemon polls them each fast tick, degrades gracefully when the mod is absent (warns once, latched conditions keep working).
+- Event alerts are one-shot, not latched: deaths group into one "N structures lost near (x, y)" per poll; research completions announce by name.
 
 ## Lua reader rules
 
