@@ -6,7 +6,7 @@ description: factoriobot development and operation. Use when writing factoriobot
 
 AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Factorio 2.x (Space Age) game. Repo: [abix-/factoriobot](https://github.com/abix-/factoriobot) (private).
 
-**Docs:** repo `README.md` is the index. **one authoritative doc per subject**, each with an `**Authoritative for:**` line. Before design edits → `docs/factorio-design.md`. Before any player-facing words → `docs/factorio-terminology.md`. Before DRY/ownership work → `docs/authority.md`. Before brain↔game transport / latency / **UDP vs RCON** → `docs/transport-latency.md` (locked split + measure before changing pipes). Before fixing a live finding → **`docs/todo.md`** (open issues: severity + recommended fix). Do not invent a parallel doc.
+**Docs:** repo `README.md` is the index. **one authoritative doc per subject**, each with an `**Authoritative for:**` line. Before framework work (modules, roles, playbooks, runs) -> `docs/framework.md`. Before brain work (RCA, selection, interrupts, lanes) -> `docs/brain.md`. Before body work (per-tick control, motion, reach) -> `docs/body.md`. Before efficiency work (value/cost ranking, tuning, waste) -> `docs/efficiency.md`. Before construction work (blueprints, stages, main bus) -> `docs/construction.md`. Before locked product rules / six loops / strategy -> `docs/design.md`. Before any player-facing words -> `docs/terminology.md`. Before DRY/ownership work -> `docs/authority.md`. Before brain-to-game transport / latency / **UDP vs RCON** -> `docs/transport-latency.md` (locked split + measure before changing pipes). Before fixing a live finding -> **`docs/todo.md`** (open issues: severity + recommended fix). Do not invent a parallel doc.
 
 ## Closing open issues (LOCKED)
 
@@ -33,7 +33,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 
 ## Locked rules
 
-- **TAS first:** tool-assisted speedrun. Fastest legal unattended wall-clock / game-time to each milestone. Personal bests are the scoreboard (`docs/factorio-personal-bests.md`). When fixing efficiency issues (`docs/todo.md`), follow **TAS tuning** in `docs/factorio-design.md`: eliminate waste, do not add wait; never trade body progress for quieter logs unless wall-clock also improves.
+- **TAS first:** tool-assisted speedrun. Fastest legal unattended wall-clock / game-time to each milestone. Personal bests are the scoreboard (`docs/personal-bests.md`). When fixing efficiency issues (`docs/todo.md`), follow the tuning doctrine in `docs/efficiency.md`: eliminate waste, do not add wait; never trade body progress for quieter logs unless wall-clock also improves.
 - Writes are player-legal actions gated by proposals (approve, reject, auto per category in chat). The lazy player principle: the bot does everything a UI click could do; the player is an approval and design gate plus the physical residue.
 - Hard no-cheating line. Post-v1 hands place blueprints exactly as a player would.
 - Any modded game must work: game knowledge from prototype data at runtime, never hardcoded vanilla lists.
@@ -80,7 +80,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 - Item movement uses the shared `inventory.transfer` operation plus `transfer-items` YAML role. It pathfinds into reach, uses player-equivalent cursor transfer/split actions, and verifies equal source/destination deltas. Fuel, recipe input, and output collection are parameters of this one path, never separate mechanics.
 - Factory output is authoritative. Acquisition consumes player inventory, queued crafts, machine output, and production already in progress before manual gathering. Keep machines fueled, supplied, emptied, and unblocked; hand mining/chopping is only the smallest proven bootstrap, recovery, or expansion shortfall. Recurring work that a running machine can perform must never be assigned back to the player.
 - The minimum self-sustaining coal mine is two touching burner mining drills facing each other. Insert exactly one piece of coal coal after both real drills close the loop; each output fuels the other, and completion requires both fueled and producing. Use its coal to hand-feed the rest of the burner factory until belts/inserters automate delivery. Four-drill clockwise squares are parameterized expansion layouts, not bootstrap.
-- `connect-items` is the ONE item connection across direct insertion, belts/inserters, bots, trains, rockets, and cargo pods. Output and destination (bus lane, chest, machine input, fuel inventory) plus rate are parameters; mining, smelting, and manufacturing never receive product-specific logistics roles. Shipped paths on `ghost.connect-items`: `destination=main-bus` (drill-fed output → lane) and `destination=fuel` (surplus fuel-mine spine → burner fuel). Words: `docs/factorio-terminology.md`.
+- `connect-items` is the ONE item connection across direct insertion, belts/inserters, bots, trains, rockets, and cargo pods. Output and destination (bus lane, chest, machine input, fuel inventory) plus rate are parameters; mining, smelting, and manufacturing never receive product-specific logistics roles. Shipped paths on `ghost.connect-items`: `destination=main-bus` (drill-fed output → lane) and `destination=fuel` (surplus fuel-mine spine → burner fuel). Words: `docs/terminology.md`.
 - A role call inside a loop uses `args_from: item` to fill every declared role param from the loop item's same-named fields; explicit args override. Never copy one-to-one `${item.<param>}` mapping blocks.
 - DRY parameter doctrine: roles encode reusable mechanics and playbooks encode focused reusable workflows. Resource, item, recipe, technology, entity, count, endpoint, rate, and threshold are runtime parameters unless they change the Factorio workflow itself. Never copy a playbook merely to change iron to copper, one recipe to another, or one count to another.
 - Playbook `params` are the built-in AWX-survey equivalent: every parameter has help and a typed default, with optional min/max/choices. `runs` are named parameter sets used for scheduler order, panel identity, checkpoints, and completion tracking; they do not own copied task lists. Manual overrides use `factoriobot run PLAYBOOK --param NAME=VALUE`.
@@ -117,7 +117,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 
 ## Prior art
 
-- Local clones of every relevant project live in a factorio-refs directory next to the repo checkout. docs/factorio-research.md is the annotated catalog: what is liftable versus ideas-only, with licenses.
+- Local clones of every relevant project live in a factorio-refs directory next to the repo checkout. docs/research.md is the annotated catalog: what is liftable versus ideas-only, with licenses.
 - Lifted code: factorio-sensei's rcon wrapper and lua readers (MIT, attributed in THIRDPARTY.md). FLE's action vocabulary is the reference when hands arrive.
 - Timberbot ([abix-/TimberbornMods](https://github.com/abix-/TimberbornMods)) is the architectural precedent: mod does mechanics, external brain does judgment, errors written for an AI caller, live test harness.
 
@@ -164,4 +164,4 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 ## Open items
 
 - RESOLVED: lua empty tables ({} vs []) handled by the lua_array deserializer on every list field.
-- Whether RCON silent-commands disable achievements for the save: pending the player checking in-game, record in docs/factorio-design.md.
+- Whether RCON silent-commands disable achievements for the save: pending the player checking in-game, record in docs/design.md.
