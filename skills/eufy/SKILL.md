@@ -1,8 +1,6 @@
 ---
 name: eufy
 description: "eufy SoloCam S220 local capture, motion detection, and event records. Rust capture/watcher/thick-client + eufy-security-ws Node server, no HomeBase, no cloud in the video path. Lives in the private eufy repo. Use when working on the capture tool, the detector, zones, the records/index system, the operator UI, or debugging the camera's P2P behavior."
-user-invocable: false
-version: "1.7"
 ---
 # eufy
 
@@ -80,6 +78,14 @@ specifics live in the repo's docs/eufy-solocam-s220.md, not here.
   recordings/baseline-squirrel.h264 is the regression baseline:
   --replay it after any detector change; expect exactly 1 event
   starting ~80s, quiet first 80s.
+- One motion segment is one movement. Track simultaneous movement
+  separately so plant sway and an animal never become one blended
+  box. Drop only provable anchored repeating sway and short-lived
+  specks before classification. Ambiguous motion reaches the model.
+- Classification receives one frame budget per event, divided among
+  its motion segments. Each sample is the sharpest nearby frame
+  cropped to that segment. A label needs at least one quarter of all
+  votes.
 - **Zones, not thresholds, separate animals from vegetation.** Tree
   sway peaks ~10x a squirrel's signal; grass sways too. Zones are
   labeled rects (frame fractions); the area threshold divides by
@@ -138,6 +144,14 @@ specifics live in the repo's docs/eufy-solocam-s220.md, not here.
 - Audit pattern: replay recordings on scratch COPIES without mp4
   siblings for detection-only reports (no clips cut into the
   ledger).
+- Operator corrections live in events/ground_truth.jsonl, separate
+  from derived event results. It uses the classifier's canonical
+  labels, one viewer writer, atomic replacement, and survives every
+  rescan. Detector and classifier tuning is scored against this
+  reviewed corpus.
+- Rescan rebuilds derived events from retained source recordings.
+  Remove old events, clips, and thumbnails for those recordings
+  before re-detection so known false events cannot survive unchanged.
 
 ## Thick client
 
@@ -188,6 +202,16 @@ threads) and degraded the whole machine. moondream ignores one-word
 instructions; it DESCRIBES and the label is extracted by
 word-boundary matching (bare substring turned "scattered" into a
 cat). Hard opt-in: --classify.
+
+The service owns and supervises the local ollama process when
+classification is enabled. A model-server crash restarts through the
+same service lifecycle instead of leaving classification silently
+stalled.
+
+Control-flow outcomes use distinct result variants. A rejected
+privacy scene is not a normal stop: it closes the stream, keeps the
+watch loop alive, and rechecks after 15 minutes. Do not encode both
+outcomes as an empty optional result.
 
 UI language: config-tab dropdown (English/Spanish), persisted in
 recordings/ui.json; strings are (en, es) pairs at call sites,

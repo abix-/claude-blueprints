@@ -1,9 +1,6 @@
 ---
 name: csharp
 description: C# development standards. Use when writing C# code, .NET projects, Unity mods, or NuGet packages. Sourced from [abix-/TimberbornMods](https://github.com/abix-/TimberbornMods) (Timberbot, Bindito DI, publicizer) and [abix-/Schedule1Mods](https://github.com/abix-/Schedule1Mods) (MelonLoader + Harmony + Il2CppInterop).
-user-invocable: false
-version: "1.1"
-updated: "2026-05-11"
 ---
 # C# Development
 
@@ -293,6 +290,23 @@ LINQ is fine in per-request code and one-time initialization.
 Schedule 1 mods use a different stack from Timberborn: IL2CPP Unity +
 MelonLoader runtime + HarmonyLib for patching + Il2CppInterop for
 managed bindings. Reference: [`abix-/Schedule1Mods/EmployeeReset`](https://github.com/abix-/Schedule1Mods).
+
+### Harmony version and runtime resolution
+
+- Verify every special patch parameter and unpatch API against the
+  exact embedded Harmony version. Runtime-parsed parameter names can
+  compile successfully and still fail when the patch is installed.
+- For runtime type lookup, search exact full-name matches across all
+  loaded assemblies before any short-name fallback. Unity assemblies
+  contain colliding short names.
+- Log type and method resolution misses with the requested name,
+  resolved type, and assembly. Returning a null handle silently makes a
+  missing patch look installed.
+- Check whether a patched argument is a class or struct before choosing
+  its injection form. Passing a value-type argument as `object __0`
+  gives the patch a boxed copy, so field mutations do not write back.
+  Use a write-back form supported by the embedded Harmony version, or
+  reject the patch at registration.
 
 ### Mod entry point
 

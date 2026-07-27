@@ -24,6 +24,19 @@ Before deleting any Open row:
 
 Three parts: the Rust brain offloads as much as possible (deterministic monitors, proposals, execution), the LLM only judges what rules cannot, the player is final authority and the body. One task at a time: at most one active proposal, verified done from game state before the next.
 
+## Factory desired state (approved 2026-07-27)
+
+- The manifest remains authority for intended buildings.
+- The factory audit reports missing, nonfunctional, wrong, extra, and satisfied buildings.
+- Compile every audit result into the existing work pool used by all body work. Do not add another scheduler or repair queue.
+- Missing buildings use existing build or restore work. Nonfunctional buildings use existing fuel, input, power, or configuration work. Wrong and extra buildings use explicit adopt or remove work.
+- authored parent requirements are scheduling dependencies. The copper base must complete before the copper lab can bid as realizable.
+- Preserve each building's stable identity, exact arguments, completion condition, and blocker through execution.
+- Applying work, probing progress, deciding completion, and reviewing logs use the same completion condition.
+- The coal bootstrap keeps one persistent starting-fuel work item across gathering and transfer so exactly one piece of coal is loaded once.
+- Existing playbooks execute selected work. They never rediscover the same desired state independently.
+- Acceptance requires the copper base, then copper lab, all planned copper transport drained, one coal bootstrap load, unchanged placement failure escalation, foreground idle below 3 percent, and fuel shortage below 15 percent.
+
 ## The shape
 
 - One Rust binary, two roles: CLI subcommands now (ping, status), long-running watch mode later.

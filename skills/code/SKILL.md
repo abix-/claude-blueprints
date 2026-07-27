@@ -1,9 +1,6 @@
 ---
 name: code
 description: Universal development standards across every language. Sourced from patterns recurring in abix- Rust, Go, C#, Python, and TS code. Use when writing any code.
-user-invocable: false
-version: "4.0"
-updated: "2026-05-11"
 ---
 # Code
 
@@ -39,6 +36,30 @@ choices.
   Don't leave half the codebase using the old form.
 - SystemParam bundles, helper structs, shared utility functions are
   the typical extractions in this codebase.
+
+## Authority and lifecycle
+
+- One fact has one authority. Applying work, checking progress,
+  deciding completion, rendering status, and reviewing logs must read
+  the same record or completion condition.
+- If initialization starts a listener, watcher, worker, scanner, or
+  other long-lived resource, register its cleanup in the
+  same initialization path. A reload test must prove the old generation
+  released ports, threads, callbacks, and registries.
+- Durable learned or user-authored state must survive reloads. Key it
+  to stable domain identity, mark every mutation dirty, write
+  atomically, restore after identity is available, and flush on
+  shutdown.
+
+## Migrations
+
+- Before replacing a workflow or moving it into data, list its
+  completion checks, failure behavior, and locked safety behavior.
+  Preserve each one in the new schema and execution path.
+- Test the dangerous negative case. A migration that loads its new
+  rows but drops a safety gate is broken.
+- Enumerate every caller of a changed shared contract and verify each
+  against the new semantics.
 
 ## Naming
 
@@ -135,6 +156,14 @@ choices.
 
 - When fixing a bug, reproduce it in a test first. Red, then green.
 - When adding behavior, test the behavior, not the implementation.
+- Prefer evidence in this order:
+  - Measured behavior from recorded runs, timings, and outcomes.
+  - The live configuration or runtime structure the program consumes.
+  - Source text is valid only for proving an absence, such as a
+    forbidden call or second implementation.
+- A positive word search is not behavior coverage. If deleting the
+  behavior while keeping the word leaves the test green, rewrite the
+  test.
 - Test names describe the asserted property:
   `TestSortPRReviewCandidatesPrioritizesPerfThenFixThenOldest`. Long
   is fine.
