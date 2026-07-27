@@ -1,10 +1,7 @@
 ---
-name: approve
-description: Approve and merge a PR after human review. Posts approval comments, merges, closes issue, cleans up branch.
-user-invocable: true
-version: "1.0"
+name: "approve"
+description: "Approve and merge a PR after human review. Posts approval comments, merges, closes issue, cleans up branch."
 ---
-
 # Approve
 
 Human-only approval command. Merges a PR that passed /review.

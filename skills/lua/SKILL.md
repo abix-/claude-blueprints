@@ -1,9 +1,6 @@
 ---
-name: lua
-description: Lua scripting standards for game modding (Project Zomboid Build 42, Factorio) and WezTerm configuration. The only user-authored Lua in scope is the WezTerm config; the PZ + Factorio repos here are vendored Steam Workshop / community-mod uploads, used as reference patterns, not as user-style sources.
-user-invocable: false
-version: "1.1"
-updated: "2026-05-11"
+name: "lua"
+description: "Lua scripting standards for game modding (Project Zomboid Build 42, Factorio) and WezTerm configuration. The only user-authored Lua in scope is the WezTerm config; the PZ + Factorio repos here are vendored Steam Workshop / community-mod uploads, used as reference patterns, not as user-style sources."
 ---
 # Lua
 
@@ -15,12 +12,12 @@ are reference patterns for the respective engines, not user style.
 Source surfaces:
 
 - [claude-blueprints/wezterm/.wezterm.lua](https://github.com/abix-/claude-blueprints/blob/main/wezterm/.wezterm.lua)
-  -- the only user-authored Lua. WezTerm 5.4, full standard library,
+ . The only user-authored Lua. WezTerm 5.4, full standard library,
   event hooks.
 - [abix-/CustomizableContainers](https://github.com/abix-/CustomizableContainers)
-  -- vendored Project Zomboid Build 42 mod (Kahlua, PZ event API).
+ . Vendored Project Zomboid Build 42 mod (Kahlua, PZ event API).
 - [abix-/Fluid-Void-Extra](https://github.com/abix-/Fluid-Void-Extra)
-  -- vendored Factorio mod (Lua 5.2, sandboxed, data + control phases).
+ . Vendored Factorio mod (Lua 5.2, sandboxed, data + control phases).
 
 ## Target versions
 
@@ -103,11 +100,11 @@ Events.OnLoad.Add(OnLoad)
   returns Java booleans that aren't `truthy` to Lua in unexpected
   ways.
 - **Files under `media/lua/`**:
-  - `client/` -- runs on the player's machine, can read input,
+  - `client/`. Runs on the player's machine, can read input,
     UI, sounds.
-  - `server/` -- multiplayer authoritative logic.
-  - `shared/` -- both. Used for tables, constants, definitions.
-- **`media/lua/shared/01_*.lua`** -- the numeric prefix forces
+  - `server/`. Multiplayer authoritative logic.
+  - `shared/`. Both. Used for tables, constants, definitions.
+- **`media/lua/shared/01_*.lua`**. The numeric prefix forces
   load order. Lower numbers load first.
 - **Build 42 changes**: many APIs moved or were renamed. Always
   check the mod is targeting B42 (`apiVersion = 12.0` in

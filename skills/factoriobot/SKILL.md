@@ -1,6 +1,6 @@
 ---
-name: factoriobot
-description: factoriobot development and operation. Use when writing factoriobot Rust code, driving its CLI against a live Factorio game, or extending its monitors. Not for playing Factorio by hand.
+name: "factoriobot"
+description: "factoriobot development and operation. Use when writing factoriobot Rust code, driving its CLI against a live Factorio game, or extending its monitors. Not for playing Factorio by hand."
 ---
 # Factoriobot
 
@@ -12,12 +12,12 @@ AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Fac
 
 Open issues live in `docs/todo.md` keyed by **stable short titles** (no serial numbers).
 
-**Code-landed ≠ closed.** Shipping a fix only gets a row to “code-landed”. Closing requires **gameplay-log proof**.
+**Code-landed != closed.** Shipping a fix only gets a row to "code-landed". Closing requires **gameplay-log proof**.
 
 Before deleting any Open row:
 
 1. **Grep the attempt log(s)** (`factoriobot-YYYYMMDD-HHMMSS.log`) for the failure string / playbook outcome that defined the issue.
-2. **Write the proof into `docs/changelog.md` first**. Attempt id, playbook name, executor outcome (`DONE` / `DEFERRED` / absence of the abort string), and **log line number(s)** (e.g. `130656 L157958`). “Looks better” / “should be fixed” / “superseded in code” is **not** proof.
+2. **Write the proof into `docs/changelog.md` first**. Attempt id, playbook name, executor outcome (`DONE` / `DEFERRED` / absence of the abort string), and **log line number(s)** (e.g. `130656 L157958`). "Looks better" / "should be fixed" / "superseded in code" is **not** proof.
 3. **Only then** delete the row from `docs/todo.md`.
 4. If the bug still appears in a later attempt log, **keep the row open** (or reopen it). Counter-evidence wins.
 5. RCON Lua payload text that merely *contains* an old error string is not evidence; count only executor/INFO/`recv` error lines.
@@ -41,7 +41,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 
 - One Rust binary, two roles: CLI subcommands now (ping, status), long-running watch mode later.
 - Every read is one RCON round trip: a Lua IIFE string wrapped as `/silent-command rcon.print(helpers.table_to_json(<iife>))`, JSON back, serde into typed structs in src/state.rs.
-- Claude Code is the judgment layer and drives the CLI through Bash. No MCP, no Python client.
+- The current agent is the judgment layer and drives the CLI through its configured Windows shell. No MCP, no Python client.
 - Framework: six loops (resource gathering, resource transit, manufacturing, power, research, defense). Each loop gets state readers, deterministic health checks, and next-step logic. Later game phases deepen loops, never add new structure.
 
 ## Locked rules
@@ -82,7 +82,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 
 - Logs are one per save attempt: `factoriobot-<local-time stamp>.log` in the repo checkout (cwd fallback). Every process start opens a fresh stamped file, and the watch rotates to a new one when the game tick goes backward, the new-save-attempt signal. To troubleshoot the current attempt, read the newest `factoriobot-*.log`; it starts with the build version and the previous file's last line names its successor. Never let one shared log grow forever; a 1.6 GB single log cost a real session.
 - `FACTORIOBOT_LOG` pins one fixed file with no rotation (escape hatch only); `RUST_LOG` sets the level. Default is debug, so every rcon exchange lands in the log.
-- Diagnosis order: **`factoriobot diagnose [log]` first** (peak findings: abort storm, poll spam, body idle, action-id churn, background thrash, interrupt cost. Exit 1 on warn+). Then the panel **Health:** line / `Copy status`, then grepping the newest attempt log (`op_attempt`, `player_action`, `bottleneck_decision`, `error`), then `factoriobot status | problems | next`. Live watch already prints latched run-health digests to stdout and the panel; chat only on severity ≥ warn.
+- Diagnosis order: **`factoriobot diagnose [log]` first** (peak findings: abort storm, poll spam, body idle, action-id churn, background thrash, interrupt cost. Exit 1 on warn+). Then the panel **Health:** line / `Copy status`, then grepping the newest attempt log (`op_attempt`, `player_action`, `bottleneck_decision`, `error`), then `factoriobot status | problems | next`. Live watch already prints latched run-health digests to stdout and the panel; chat only on severity >= warn.
 - The scheduler hides failures behind retry/backoff: an apparent stall is usually a retryable desired-state loop or an interrupt waiting on its condition. The attempt log names the exact waiting task and its instruction.
 - The RCON client has a 5-second operation timeout. A Lua reader that runs longer abandons its in-flight response and leaves the shared connection reading every previous command's reply (live-observed as a permanent one-packet "Response ID mismatch" skew). The framework rebuilds the connection on any execute error, so one clean retry recovers; a reader that regularly exceeds 5 seconds is itself the defect and must be split or bounded.
 
@@ -93,7 +93,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 - Item movement uses the shared `inventory.transfer` operation plus `transfer-items` YAML role. It pathfinds into reach, uses player-equivalent cursor transfer/split actions, and verifies equal source/destination deltas. Fuel, recipe input, and output collection are parameters of this one path, never separate mechanics.
 - Factory output is authoritative. Acquisition consumes player inventory, queued crafts, machine output, and production already in progress before manual gathering. Keep machines fueled, supplied, emptied, and unblocked; hand mining/chopping is only the smallest proven bootstrap, recovery, or expansion shortfall. Recurring work that a running machine can perform must never be assigned back to the player.
 - The minimum self-sustaining coal mine is two touching burner mining drills facing each other. Insert exactly one piece of coal coal after both real drills close the loop; each output fuels the other, and completion requires both fueled and producing. Use its coal to hand-feed the rest of the burner factory until belts/inserters automate delivery. Four-drill clockwise squares are parameterized expansion layouts, not bootstrap.
-- `connect-items` is the ONE item connection across direct insertion, belts/inserters, bots, trains, rockets, and cargo pods. Output and destination (bus lane, chest, machine input, fuel inventory) plus rate are parameters; mining, smelting, and manufacturing never receive product-specific logistics roles. Shipped paths on `ghost.connect-items`: `destination=main-bus` (drill-fed output → lane) and `destination=fuel` (surplus fuel-mine spine → burner fuel). Words: `docs/terminology.md`.
+- `connect-items` is the ONE item connection across direct insertion, belts/inserters, bots, trains, rockets, and cargo pods. Output and destination (bus lane, chest, machine input, fuel inventory) plus rate are parameters; mining, smelting, and manufacturing never receive product-specific logistics roles. Shipped paths on `ghost.connect-items`: `destination=main-bus` (drill-fed output -> lane) and `destination=fuel` (surplus fuel-mine spine -> burner fuel). Words: `docs/terminology.md`.
 - A role call inside a loop uses `args_from: item` to fill every declared role param from the loop item's same-named fields; explicit args override. Never copy one-to-one `${item.<param>}` mapping blocks.
 - DRY parameter doctrine: roles encode reusable mechanics and playbooks encode focused reusable workflows. Resource, item, recipe, technology, entity, count, endpoint, rate, and threshold are runtime parameters unless they change the Factorio workflow itself. Never copy a playbook merely to change iron to copper, one recipe to another, or one count to another.
 - Playbook `params` are the built-in AWX-survey equivalent: every parameter has help and a typed default, with optional min/max/choices. `runs` are named parameter sets used for scheduler order, panel identity, checkpoints, and completion tracking; they do not own copied task lists. Manual overrides use `factoriobot run PLAYBOOK --param NAME=VALUE`.
@@ -105,7 +105,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 - Schedule useful player work while machines run. Gather the next proven shortfall, build a ready ghost, collect another output, or move toward the next site; wait only when the dependency graph proves no independent task is ready. Automated coal delivery removes hand-loading, not fuel monitoring; electric power gets equivalent capacity/fuel/satisfaction checks.
 - A built mining drill owns that raw resource. `craft.ensure` must not hand-mine a temporary shortage for any resource with a built compatible drill; refuel, unblock, collect, or wait for the factory instead. Hand mining is only bootstrap/recovery when no operable factory path exists.
 - Starter scale-out shapes are parameterized, but runtime identity is always per building. Reserve complete research-tier capacity invisibly, then materialize exactly the current staged unit before construction; reconciling an earlier stage must never expose or prune future reserved units. `build-layout-ghosts` is the ONE construction lifecycle: planners tag ghosts with a layout id, `ghost.targets` returns **at most one** remaining ghost (`limit: 1`), and the role acquires/builds/verifies that building before re-reading remaining until complete. Never snapshot a full ghost list for the whole loop. Stale/vanished targets abort the playbook (live 21:01). Never use aggregate resource counts as construction completion because independent layouts may mine the same resource.
-- Opening electricity through Automation is **live-verified 2026-07-21:** Steam Power trigger → steam plant → powered lab on copper `opening-science-island` (poles via `power_ensure` + prune against the full desired chain) → `research.feed` loads packs → Automation researched. Then named mini-factory cells (science/gear) start on the same layout. Defense/turrets and factory-made science still need live-confirm.
+- Opening electricity through Automation is **live-verified 2026-07-21:** Steam Power trigger -> steam plant -> powered lab on copper `opening-science-island` (poles via `power_ensure` + prune against the full desired chain) -> `research.feed` loads packs -> Automation researched. Then named mini-factory cells (science/gear) start on the same layout. Defense/turrets and factory-made science still need live-confirm.
 - Smelted resources use `units` (one copper drill feeding one furnace initially, then 4, 8, or later measured stages through the same playbook). The first starter growth boundary is 4x iron, 4x copper, and 4x stone before main-bus transit becomes eligible. Resources needed raw and smelted use `raw_drills`, `raw_output_container`, and `smelting_units`: stone has one drill feeding an iron chest for raw stone plus a separate drill feeding a furnace for stone bricks. Every output container is independently built and its inventory participates in the shared factory-first collection path by stable `unit_number`. Never fork per-resource or per-count playbooks.
 - Burner-tier iron and copper scale through named parameter sets on the same `produce-smelted-resource` playbook. Immediately after the two-drill coal bootstrap, copper bootstrap and 4x iron are both eligible; iron's larger strategic production deficit must select 4x iron first. Stone needed for furnaces is an exact acquisition shortfall, not a prerequisite production playbook. Later stages reuse the same parameters. Both resources remain serviced by the shared hand-refueling interrupt until automated coal delivery is built as its own mechanics-focused playbook.
 - When an interrupt completes, immediately repaint the paused playbook's authoritative panel-task snapshot before resuming execution; the panel must never remain visually stuck on a completed interrupt.
@@ -168,7 +168,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 - Build gather candidates from live entity prototypes whose mineable products intersect current raw needs. Search circular radii outward (`8, 16, 32, 64, 128, 256`) and stop at the first radius covering every need. Never combine all resources, trees, and rocks into one capped large-area query: thousands of ore tiles can consume the limit and hide the nearest useful rock.
 - Emergency stop is a persistent per-player latch, not a one-tick input write. It cancels the stored action, clears player-action/all autos, rejects new `start_gather` calls, and changes the button to `Resume player actions`. Only that explicit resume clears the latch.
 
-## Live-verified facts (2026-07-18 → 2026-07-21)
+## Live-verified facts (2026-07-18 -> 2026-07-21)
 
 - ping and status work end to end against a hosted Space Age game. helpers.table_to_json and the power reader confirmed live (tests/live.rs, run with `-- --ignored`).
 - RCON answers with EMPTY responses while the game is still loading a save. Treat an empty response shortly after connect as retry-able, not as a code bug.

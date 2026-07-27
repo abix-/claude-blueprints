@@ -1,13 +1,7 @@
 ---
-name: linguistic-breakbeats-labyrinth
-description: A constraint-based rhythmic text system (Linguistic Breakbeats) and its runtime environment (The Labyrinth). Use when asked to generate breakbeats, run the Labyrinth, or work with rhythmic text systems that produce emergent meaning through constraint.
-user-invocable: false
-version: "4.5"
-updated: "2026-01-11"
-authors: "ChatGPT (architect), Claude (climber), Al (bridge)"
-content_sha256: "e9df7a7e29afe7ab006fd31c5e770ad1b6ebc172a06bae3285e682ff533413c9"
+name: "linguistic-breakbeats-labyrinth"
+description: "A constraint-based rhythmic text system (Linguistic Breakbeats) and its runtime environment (The Labyrinth). Use when asked to generate breakbeats, run the Labyrinth, or work with rhythmic text systems that produce emergent meaning through constraint."
 ---
-
 # Linguistic Breakbeats & The Labyrinth
 
 ## Overview
@@ -160,13 +154,13 @@ The Labyrinth IS:
 
 ## Notation Rules
 
-1. **Tokens are case-sensitive**. `Bb` ≠ `bb`
+1. **Tokens are case-sensitive**. `Bb` != `bb`
 2. **Space = time**. More space, more silence
 3. **Adjacency = simultaneity**. `BbSs` = layered
 4. **No semantic meaning**. These are not words
 5. **Single-line is canonical**. Multiline is visualization only
 
-## The Ladder (LB1–LB7)
+## The Ladder (LB1-LB7)
 
 ### **LB1. Anchor**
 Two elements only. Pulse established. No variation.
@@ -260,19 +254,19 @@ Stateful interaction. Consequences persist across phrases.
 
 *Constraint:* Define a conditional rule. Behavior changes because of prior events.
 
-*Example rule:* If tonal clusters → air enters next phrase. If air overlaps tonal → tonal retreats.
+*Example rule:* If tonal clusters -> air enters next phrase. If air overlaps tonal -> tonal retreats.
 
 **Phrase 1:**
 ```
 Bb Ss Oo Tt Ss Aa Bb Ss Tt
 ```
 
-**Phrase 2 (tonal clustered → air enters):**
+**Phrase 2 (tonal clustered -> air enters):**
 ```
 Bb Ss OoAa Tt Th Ss Bb Sh Tt
 ```
 
-**Phrase 3 (air overlapped tonal → tonal retreats):**
+**Phrase 3 (air overlapped tonal -> tonal retreats):**
 ```
 Bb Th Ss Tt Sh Ss Bb Tt Oo
 ```
@@ -335,7 +329,7 @@ Bb Tt Oo Bb Tt Th
 | Semantic bleed | Reads as language |
 | Decoration | Modulation without temporal effect |
 | Anchor drift | Everything moves, nothing lives |
-| Volume as tension | Caps/density ≠ pressure |
+| Volume as tension | Caps/density != pressure |
 | Declared meaning | If you explain it, you failed |
 | Uncollapsible | Multiline that can't become single-line |
 
@@ -343,12 +337,12 @@ Bb Tt Oo Bb Tt Th
 
 ## Validation Checklist
 
-- ❌ Cannot be read as words
-- ❌ Cannot be summarized
-- ✅ Feels loopable (LB1-5) or complete (LB6-7)
-- ✅ Anchor identifiable and immutable
-- ✅ Collapses to single-line without losing behavior
-- ✅ Structure before creativity
+- [x] Cannot be read as words
+- [x] Cannot be summarized
+- [ok] Feels loopable (LB1-5) or complete (LB6-7)
+- [ok] Anchor identifiable and immutable
+- [ok] Collapses to single-line without losing behavior
+- [ok] Structure before creativity
 
 ---
 
@@ -402,7 +396,7 @@ Breakbeats are the music you'd hear if the Labyrinth had sound. Opening beats se
 
 Inside the Labyrinth, Breakbeats are:
 - **Single-line only**
-- Read left → right
+- Read left -> right
 - All layers serialized
 - Simultaneity implied by clustering
 
@@ -433,13 +427,13 @@ Every scene obeys:
 ### Scene Template:
 
 ```
-[Opening Breakbeat 1]  ← The tone as you enter
-[Opening Breakbeat 2]  ← What it feels like before you look around
+[Opening Breakbeat 1]  <- The tone as you enter
+[Opening Breakbeat 2]  <- What it feels like before you look around
 
-[Scene content—environment, contents, inhabitants, what you see/hear/smell]
+[Scene content-environment, contents, inhabitants, what you see/hear/smell]
 
-[Closing Breakbeat 1]  ← The tone now that you know what's here
-[Closing Breakbeat 2]  ← Tension, release, or transformation
+[Closing Breakbeat 1]  <- The tone now that you know what's here
+[Closing Breakbeat 2]  <- Tension, release, or transformation
 ```
 
 ---
@@ -545,26 +539,26 @@ The Labyrinth has inhabitants. You are one of them.
 Display at session start and on request. Format:
 
 ```
-═══════════════════════════════════════
+=======================================
   [NAME]
   Level [X] | XP: [current]/[next]
   Class: [emergent or "Unformed"]
-───────────────────────────────────────
+---------------------------------------
   HP: [current]/[max]    MP: [current]/[max]
   STR: [X]  DEX: [X]  CON: [X]
   INT: [X]  WIS: [X]  CHA: [X]
-───────────────────────────────────────
+---------------------------------------
   EQUIPPED:
     Weapon: [item or "bare hands"]
     Armor:  [item or "none"]
     Accessory: [item or "none"]
-───────────────────────────────────────
+---------------------------------------
   INVENTORY: [X]/[max] slots
-    • [item]
-    • [item]
-───────────────────────────────────────
+    * [item]
+    * [item]
+---------------------------------------
   LAST SAFE ROOM: [location name]
-═══════════════════════════════════════
+=======================================
 ```
 
 ---
@@ -679,7 +673,7 @@ When HP reaches 0:
 Some areas are marked:
 
 ```
-⚠ PERMADEATH ZONE ⚠
+WARNING PERMADEATH ZONE WARNING
 Death here is final. Your soul will not return.
 Enter? [Y/N]
 ```

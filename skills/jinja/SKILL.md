@@ -1,9 +1,6 @@
 ---
-name: jinja
-description: Jinja2 templating standards. Use when writing Jinja templates, especially in Ansible playbooks/roles, AWX, and any YAML-with-templating context. Built from canonical Jinja docs + Ansible recommended practices.
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "jinja"
+description: "Jinja2 templating standards. Use when writing Jinja templates, especially in Ansible playbooks/roles, AWX, and any YAML-with-templating context. Built from canonical Jinja docs + Ansible recommended practices."
 ---
 # Jinja2
 

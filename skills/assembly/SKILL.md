@@ -1,9 +1,6 @@
 ---
-name: assembly
-description: x86-64 assembly for reverse engineering game binaries, reading IDA/Ghidra/Cutter output, computing image-relative offsets, and writing inline asm or shellcode for UE4SS Rust mods. Built from the Intel SDM, MS x64 ABI doc, Agner Fog's optimization manuals, and game-modding community practice.
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "assembly"
+description: "x86-64 assembly for reverse engineering game binaries, reading IDA/Ghidra/Cutter output, computing image-relative offsets, and writing inline asm or shellcode for UE4SS Rust mods. Built from the Intel SDM, MS x64 ABI doc, Agner Fog's optimization manuals, and game-modding community practice."
 ---
 # x86-64 Assembly
 

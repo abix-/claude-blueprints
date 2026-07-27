@@ -1,9 +1,7 @@
 ---
-name: wsl
-description: Manage WSL2 Ubuntu 24.04 on Windows 10. Use when checking WSL status, running commands inside WSL2, or troubleshooting the WSL environment.
-version: "2.0"
+name: "wsl"
+description: "Manage WSL2 Ubuntu 24.04 on Windows 10. Use when checking WSL status, running commands inside WSL2, or troubleshooting the WSL environment."
 ---
-
 WSL2 runs Ubuntu 24.04 on this Windows 10 Home N machine. k3s and BuildKit run inside it as systemd services.
 
 ## Environment

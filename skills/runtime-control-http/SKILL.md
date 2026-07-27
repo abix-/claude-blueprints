@@ -1,9 +1,6 @@
 ---
-name: runtime-control-http
-description: Pattern for an embedded HTTP control plane in a long-running process (game mod, simulator, GUI app, daemon) that exposes ALL runtime state plus the ability to drive ANY in-process operation. The first thing to build in a new project. It enables research, investigation, prototyping, and TDD. Use when starting any modding/embedding/long-running-process project, when adding observability or test surfaces to an existing one, or when answering "how do I see/poke this thing at runtime".
-user-invocable: false
-version: "1.5"
-updated: "2026-05-09"
+name: "runtime-control-http"
+description: "Pattern for an embedded HTTP control plane in a long-running process (game mod, simulator, GUI app, daemon) that exposes ALL runtime state plus the ability to drive ANY in-process operation. The first thing to build in a new project. It enables research, investigation, prototyping, and TDD. Use when starting any modding/embedding/long-running-process project, when adding observability or test surfaces to an existing one, or when answering \"how do I see/poke this thing at runtime\"."
 ---
 # Runtime Control HTTP
 
@@ -418,7 +415,7 @@ the truth, and the control plane is how you talk to it.
   handles the IO + scheduling.
 - **Client**: Go binary `endless-cli` wraps BRP with `key:value`
   CLI args. Source `llm-player/main.go`. See
-  `~/.claude/skills/endless-cli/SKILL.md`.
+  the `endless-cli` skill.
 
 ### WPF / desktop client
 

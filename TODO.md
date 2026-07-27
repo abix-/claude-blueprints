@@ -1,5 +1,20 @@
 # TODO
 
+## Shared Claude and Codex runtime
+
+- [x] Keep shared skills in `skills/`.
+- [x] Keep Claude-only instructions, settings, hooks, and skills in `claude/`.
+- [x] Keep Codex-only instructions and skills in `codex/`.
+- [x] Preserve foreground-only work in Codex and use PowerShell on Windows.
+- [x] Install either runtime with `install.ps1`.
+- [x] Check installed drift with `sync-check.py`.
+- [x] Validate every shared and Codex-only skill with the official Codex
+      validator.
+- [x] Parse Claude-only skill frontmatter and settings in tests.
+- [x] Run both installers against temporary homes in tests.
+- [x] Run the Claude session hook against an installed temporary home.
+- [x] Keep installed source files ASCII.
+
 ## dehyphen rollout (em-dash + double-hyphen sweep)
 
 Status: source-file support shipped for the languages we actually

@@ -1,9 +1,6 @@
 ---
-name: ueforge
-description: ueforge framework: the base layer every UE4SS Rust mod in the Grounded2Mods workspace builds on. Authoritative on the composition model (Effect/Trigger/Skill), the Def/Registry/Instance/Controller pattern, hot reload, discovery, hardening doctrine, and the five framework modules (rpg, stacks, difficulty, inventory, damage). Use when writing or modifying code under `ueforge/` in [abix-/Grounded2Mods](https://github.com/abix-/Grounded2Mods), or when promoting a pattern out of a game crate into the framework.
-user-invocable: false
-version: "1.0"
-updated: "2026-05-11"
+name: "ueforge"
+description: "ueforge framework: the base layer every UE4SS Rust mod in the Grounded2Mods workspace builds on. Authoritative on the composition model (Effect/Trigger/Skill), the Def/Registry/Instance/Controller pattern, hot reload, discovery, hardening doctrine, and the five framework modules (rpg, stacks, difficulty, inventory, damage). Use when writing or modifying code under `ueforge/` in [abix-/Grounded2Mods](https://github.com/abix-/Grounded2Mods), or when promoting a pattern out of a game crate into the framework."
 ---
 # ueforge: the framework
 
@@ -51,7 +48,7 @@ Three concerns, three vocabularies, each with its own Def:
   payload passed to `Effect::apply`.
 
 - **`Hook`** (the mechanism): `HookDef` is the vtable patch on a
-  UE5 class. **Hooks ≠ Triggers.** Triggers BUILD ON hooks plus
+  UE5 class. **Hooks != Triggers.** Triggers BUILD ON hooks plus
   filter + decode + typed dispatch. N:M between hooks and
   triggers. Some triggers (Periodic, OnSlotChange) install no
   hooks at all. Skill authors compose at the Trigger layer.
@@ -356,7 +353,7 @@ table is still the runtime authority for `Type` / cooldown /
 etc.; StatusDef captures only the bits we mutate.
 
 `EStatusEffectValueType` distinguishes `mul` (vanilla 1.0,
-contribution = `1 ± bonus`) and `add` (vanilla 0.0,
+contribution = `1 +/- bonus`) and `add` (vanilla 0.0,
 contribution = scaled bonus). See `ueforge/docs/status-effects.md`.
 
 ## Hooks (`ProcessEventHook`)
@@ -578,7 +575,7 @@ crate root unless noted.
 | `state.rs`        | `SkillsState` (xp/level/skill_points/skill_levels + schema_version) |
 | `store.rs`        | `SlotStore` (atomic save, fsync temp, slot-path validation) |
 | `poller.rs`       | `SlotPoller` + `PollerHandle` (stop flag + panic counter) |
-| `slot_key.rs`     | `SlotKeyResolver` (class_name + guid_offset → filename) |
+| `slot_key.rs`     | `SlotKeyResolver` (class_name + guid_offset -> filename) |
 | `tracker.rs`      | `Tracker<A>` + `XpResult`                             |
 | `disabled.rs`     | `DisabledSkills` (arc_swap)                           |
 | `vanilla.rs`      | `VanillaCache`                                        |

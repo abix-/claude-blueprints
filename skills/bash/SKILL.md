@@ -1,9 +1,6 @@
 ---
-name: bash
-description: Bash scripting standards for shell scripts, CI workflows, and one-off automation. Built from Google Shell Style Guide, ShellCheck rules, and BashFAQ canonical patterns.
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "bash"
+description: "Bash scripting standards for shell scripts, CI workflows, and one-off automation. Built from Google Shell Style Guide, ShellCheck rules, and BashFAQ canonical patterns."
 ---
 # Bash
 

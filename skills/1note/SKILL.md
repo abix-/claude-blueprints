@@ -1,8 +1,6 @@
 ---
-description: Read and search OneNote notebooks via COM interop
-disable-model-invocation: true
-allowed-tools: Bash
-version: "1.0"
+name: "1note"
+description: "Read and search OneNote notebooks via COM interop"
 ---
 Run the OneNote PowerShell script with the user's arguments:
 

@@ -1,9 +1,6 @@
 ---
-name: yaml
-description: YAML standards for config files, Ansible playbooks, k8s manifests, GitHub Actions, docker-compose, and any project config. Built from the YAML 1.2 spec, yamllint defaults, and the practical pitfalls (Norway problem, type coercion, anchor gotchas).
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "yaml"
+description: "YAML standards for config files, Ansible playbooks, k8s manifests, GitHub Actions, docker-compose, and any project config. Built from the YAML 1.2 spec, yamllint defaults, and the practical pitfalls (Norway problem, type coercion, anchor gotchas)."
 ---
 # YAML
 

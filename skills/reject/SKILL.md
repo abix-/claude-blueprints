@@ -1,11 +1,7 @@
 ---
-name: reject
-description: Close a failed PR, comment findings on the issue, and reset. Use after /review when verdict is needs work.
-argument-hint: "[repo] <PR-number> <issue-number>"
-disable-model-invocation: true
-version: "1.0"
+name: "reject"
+description: "Close a failed PR, comment findings on the issue, and reset. Use after /review when verdict is needs work."
 ---
-
 # Reject
 
 Close a PR that failed /review, post findings on the linked issue, and reset.

@@ -1,8 +1,6 @@
 ---
-description: Check Rust dependencies for updates and apply them
-disable-model-invocation: true
-allowed-tools: Bash, Read, Edit, WebFetch
-version: "1.0"
+name: "deps"
+description: "Check Rust dependencies for updates and apply them"
 ---
 Check all Endless Rust dependencies for available updates:
 

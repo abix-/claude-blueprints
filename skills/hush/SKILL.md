@@ -1,9 +1,6 @@
 ---
-name: hush
-description: Hush: a firewall-style rule engine for Chrome (MV3) with a Rust/WASM detection core and a Leptos UI. Per-site (or global) rules over seven actions: block/allow (network), neuter/silence (script capture + exfil), remove/hide (DOM), spoof (fingerprint APIs). Lives in [`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions) repo. Use when modifying Hush detectors, rules, the rule schema, the Rust engine, the popup, the options page, or the seeded site profiles.
-user-invocable: false
-version: "1.0"
-updated: "2026-05-11"
+name: "hush"
+description: "Hush: a firewall-style rule engine for Chrome (MV3) with a Rust/WASM detection core and a Leptos UI. Per-site (or global) rules over seven actions: block/allow (network), neuter/silence (script capture + exfil), remove/hide (DOM), spoof (fingerprint APIs). Lives in [`abix-/chromium-extensions`](https://github.com/abix-/chromium-extensions) repo. Use when modifying Hush detectors, rules, the rule schema, the Rust engine, the popup, the options page, or the seeded site profiles."
 ---
 # Hush. Chrome firewall-style rule engine
 
@@ -107,16 +104,16 @@ specific, not via DNR `initiatorDomains`.
 Evaluation is **first-match-wins within each action**, top-down in
 authoring order. Cross-action ordering is meaningless (Block gates
 network, Remove/Hide touch DOM, Spoof touches fingerprint APIs).
-Block↔Allow override runs through DNR priority, not table position.
+Block<->Allow override runs through DNR priority, not table position.
 
 ### Spoof kinds (current)
 
 | Kind             | What it returns                                                                 |
 | ---------------- | ------------------------------------------------------------------------------- |
-| `webgl-unmasked` | `UNMASKED_VENDOR_WEBGL` / `UNMASKED_RENDERER_WEBGL` → `"Google Inc."` / `"ANGLE (Generic)"` |
-| `canvas`         | `toDataURL` / `toBlob` → constant 1×1 PNG; `getImageData` → zero-init ImageData |
-| `audio`          | `OfflineAudioContext.startRendering` → silent AudioBuffer                       |
-| `font-enum`      | `measureText` → synthetic metrics (width depends only on text length)           |
+| `webgl-unmasked` | `UNMASKED_VENDOR_WEBGL` / `UNMASKED_RENDERER_WEBGL` -> `"Google Inc."` / `"ANGLE (Generic)"` |
+| `canvas`         | `toDataURL` / `toBlob` -> constant 1x1 PNG; `getImageData` -> zero-init ImageData |
+| `audio`          | `OfflineAudioContext.startRendering` -> silent AudioBuffer                       |
+| `font-enum`      | `measureText` -> synthetic metrics (width depends only on text length)           |
 
 ## Threat model (one paragraph)
 
@@ -183,7 +180,7 @@ runs each step. The chain has an anchor at v3 (rule entries are
 strings still parse for back-compat).
 
 Add a migration step when changing schema: bump the version,
-append a step that converts vN → vN+1, never rewrite past steps
+append a step that converts vN -> vN+1, never rewrite past steps
 (forward-only chain).
 
 ## Runtime self-tests

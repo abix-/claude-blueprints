@@ -1,5 +1,5 @@
 ---
-name: eufy
+name: "eufy"
 description: "eufy SoloCam S220 local capture, motion detection, and event records. Rust capture/watcher/thick-client + eufy-security-ws Node server, no HomeBase, no cloud in the video path. Lives in the private eufy repo. Use when working on the capture tool, the detector, zones, the records/index system, the operator UI, or debugging the camera's P2P behavior."
 ---
 # eufy

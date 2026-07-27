@@ -7,9 +7,9 @@
 param()
 
 $skills = @(
-    "$env:USERPROFILE\.claude\skills\try-harder.md"
-    "$env:USERPROFILE\.claude\skills\code.md"
-    "$env:USERPROFILE\.claude\skills\claude-config.md"
+    "$env:USERPROFILE\.claude\skills\try-harder\SKILL.md"
+    "$env:USERPROFILE\.claude\skills\code\SKILL.md"
+    "$env:USERPROFILE\.claude\skills\claude-config\SKILL.md"
 )
 
 foreach ($skill in $skills) {

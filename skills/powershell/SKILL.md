@@ -1,9 +1,6 @@
 ---
-name: powershell
-description: PowerShell standards covering function shape, VMware PowerCLI, modules, and Pester testing. Sourced from [abix-/powershell-practical](https://github.com/abix-/powershell-practical) (Aluminium module, 10k LOC vSphere automation). Use when writing PowerShell.
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "powershell"
+description: "PowerShell standards covering function shape, VMware PowerCLI, modules, and Pester testing. Sourced from [abix-/powershell-practical](https://github.com/abix-/powershell-practical) (Aluminium module, 10k LOC vSphere automation). Use when writing PowerShell."
 ---
 # PowerShell
 

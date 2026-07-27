@@ -1,9 +1,6 @@
 ---
-name: debloat
-description: Strip Windows of junk services, AppX packages, scheduled tasks, startup entries, and telemetry. Use when the user wants to clean up Windows, disable bloatware, or optimize for performance.
-disable-model-invocation: true
-version: "1.0"
-updated: "2026-03-13"
+name: "debloat"
+description: "Strip Windows of junk services, AppX packages, scheduled tasks, startup entries, and telemetry. Use when the user wants to clean up Windows, disable bloatware, or optimize for performance."
 ---
 # Windows Debloat
 

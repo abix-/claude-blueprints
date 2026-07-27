@@ -1,9 +1,7 @@
 ---
-name: k3s
-description: k3s Kubernetes cluster running in WSL2 Ubuntu 24.04. Use when troubleshooting the cluster itself, nodes, networking, storage, or WSL2 integration.
-version: "3.0"
+name: "k3s"
+description: "k3s Kubernetes cluster running in WSL2 Ubuntu 24.04. Use when troubleshooting the cluster itself, nodes, networking, storage, or WSL2 integration."
 ---
-
 k3s is a lightweight Kubernetes distribution running inside WSL2 Ubuntu 24.04 on this Windows 10 machine.
 
 ## Access

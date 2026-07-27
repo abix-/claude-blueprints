@@ -1,9 +1,6 @@
 ---
+name: "review"
 description: "Review a PR or issue against hard merge gates: acceptance checklist, compliance, docs, regression tests, benchmarks, DRY, spec verification. Works for both PRs and standalone issues."
-argument-hint: "[issue N | PR-number | repo PR-number]"
-disable-model-invocation: false
-allowed-tools: Bash, Read, Grep, Glob, Edit, Write
-version: "5.0"
 ---
 Automated human-review workflow for agent PRs and issues. Multi-repo, workspace-aware.
 
@@ -115,13 +112,13 @@ Print the plan in this exact format:
 ## /review execution plan
 
  PARSED
- ──────────────────────────────────────
+ --------------------------------------
  repo:       {repo-short-name} ({owner/repo})
  PR:         #{N} or auto-pick via k3sc take
  worker:     {basename of cwd}
 
  STEP   ACTION                              COMMAND / DETAIL
- ──────────────────────────────────────────────────────────────────────────────
+ ------------------------------------------------------------------------------
   1     resolve PR                          k3sc take --worker {worker}
                                             OR use PR #{N} directly
   2     read PR metadata                    gh pr view {N} --repo {owner/repo} --json ...
@@ -145,7 +142,7 @@ Print the plan in this exact format:
  22     ask merge or skip                   wait for human decision
 
  REQUIRED GATES (always)
- ──────────────────────────────────────
+ --------------------------------------
  - linked issue with acceptance checklist
  - PR checklist coverage (issue ref, acceptance, docs, tests, benchmarks)
  - associated docs updated
@@ -155,7 +152,7 @@ Print the plan in this exact format:
  - automated tests pass
 
  CONDITIONAL GATES
- ──────────────────────────────────────
+ --------------------------------------
  - regression tests          if behavior changed / bug fix / logic change
  - benchmark coverage        if perf-related (title, labels, diff, claims)
  - performance.md review     if perf-related
@@ -512,33 +509,33 @@ Print a rich, colorful summary to the terminal (wezterm). Use this format:
  repo: {owner/repo}
 
  WHAT THIS PR DOES
- ──────────────────────────────────────
+ --------------------------------------
  {1-3 sentence plain-english summary of what changed and why}
 
  BEFORE -> AFTER
- ──────────────────────────────────────
+ --------------------------------------
  {concrete before/after description of the change -- what existed before, what exists after}
  {for code changes: old behavior -> new behavior}
  {for docs/assets: file didn't exist -> file added, or old content -> new content}
  {for perf PRs: old timing -> new timing with numbers}
 
  CHECK                        RESULT
- ─────────────────────────────────────
- ✅ Linked issue               #{issue}
- ✅ Acceptance checklist        N/N
- ✅ PR checklist                covered
- ✅ Docs                        updated / n/a
- ✅ authority.md                compliant
- ✅ k8s.md                      compliant
- ✅ performance.md              compliant / n/a
- ✅ Build                       pass
- ✅ Tests                       N/N pass
- ✅ Regression tests            N new
- ✅ Benchmarks                  Criterion verified / n/a
- ⏭️  BRP launch                 not run
- ✅ Perf verification           numbers confirmed / n/a
+ -------------------------------------
+ [ok] Linked issue               #{issue}
+ [ok] Acceptance checklist        N/N
+ [ok] PR checklist                covered
+ [ok] Docs                        updated / n/a
+ [ok] authority.md                compliant
+ [ok] k8s.md                      compliant
+ [ok] performance.md              compliant / n/a
+ [ok] Build                       pass
+ [ok] Tests                       N/N pass
+ [ok] Regression tests            N new
+ [ok] Benchmarks                  Criterion verified / n/a
+ next  BRP launch                 not run
+ [ok] Perf verification           numbers confirmed / n/a
 
-Use ✅ for pass, ❌ for fail, ⏭️ for skipped/not run.
+Use [ok] for pass, [x] for fail, next for skipped/not run.
 ```
 
 **VERDICT: READY TO MERGE** or **VERDICT: NEEDS WORK**
@@ -547,7 +544,7 @@ For perf PRs, expand the BEFORE -> AFTER block with benchmark numbers:
 
 ```
  BEFORE -> AFTER
- ──────────────────────────────────────
+ --------------------------------------
  BEFORE ({source}):
    scenario: 50k NPCs / 50k buildings / 50k trees-rocks / mixed
    avg:  Xus

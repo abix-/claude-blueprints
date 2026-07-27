@@ -1,8 +1,6 @@
 ---
-name: docs
-description: Build, preview, and deploy MkDocs Material documentation sites. Use when working on docs, mkdocs.yml, or GitHub Pages.
-version: "1.0"
-allowed-tools: Bash, Read, Edit, Write, Glob, Grep
+name: "docs"
+description: "Build, preview, and deploy MkDocs Material documentation sites. Use when working on docs, mkdocs.yml, or GitHub Pages."
 ---
 # Docs
 

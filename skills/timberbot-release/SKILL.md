@@ -1,9 +1,6 @@
 ---
-name: timberbot-release
-description: Build, test, and release Timberbot mod to GitHub and Steam Workshop
-disable-model-invocation: true
-argument-hint: "[version]"
-version: "1.0"
+name: "timberbot-release"
+description: "Build, test, and release Timberbot mod to GitHub and Steam Workshop"
 ---
 # Timberbot Release
 

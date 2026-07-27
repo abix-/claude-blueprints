@@ -1,9 +1,6 @@
 ---
-name: python
-description: Python standards and the Python environment on this Windows machine. Sourced from abixio/tests, abixio/build.py, endless/scripts, and claude-blueprints/scripts. Read when running Python or writing scripts.
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "python"
+description: "Python standards and the Python environment on this Windows machine. Sourced from abixio/tests, abixio/build.py, endless/scripts, and claude-blueprints/scripts. Read when running Python or writing scripts."
 ---
 # Python
 

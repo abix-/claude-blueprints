@@ -2,31 +2,34 @@
 
 **Status: active. Skills and hooks evolve frequently**
 
-Personal Claude configuration shared across Claude Code instances.
+Personal agent configuration shared across Claude and Codex. The repository
+name remains unchanged so existing clones and automation keep working.
 
 ## Structure
 
 ```
 claude-blueprints/
-  skills/             # All skills (directory format: skills/<name>/SKILL.md)
-  hooks/              # General-purpose hooks (skill injection, etc.)
+  skills/             # Skills shared by Claude and Codex
+  claude/             # Claude-only instructions, settings, hooks, and skills
+  codex/              # Codex-only instructions and skills
   scripts/            # Supporting scripts referenced by skills
-  extensions/         # Browser extensions (Hush)
   wezterm/            # WezTerm config
   archive/            # Unfinished or retired work (see archive/*/STATUS.md)
-  CLAUDE.md           # Global context (copy to ~/.claude/)
-  settings.json       # Global settings with hooks (copy to ~/.claude/)
+  install.ps1         # Windows installer for either or both runtimes
+  sync-check.py       # Installation and drift authority
 ```
 
 ## Quick Setup
 
-```bash
+```powershell
 git clone https://github.com/abix-/claude-blueprints.git
+Set-Location .\claude-blueprints
+.\install.ps1 -Runtime all
 ```
 
-Then tell Claude: *"Bootstrap my ~/.claude from claude-blueprints"*
-
-After bootstrap, edit repo directly, commit, push, then `/load` to apply locally.
+Use `-Runtime claude` or `-Runtime codex` to install only one runtime. Shared
+skills install into each runtime's supported skill location. Edit this
+repository, commit, push, then run the matching load skill to apply locally.
 
 ## Skills
 
@@ -144,27 +147,30 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | [/reject](skills/reject/) | Close a failed PR, comment findings, reset |
 | [/done](skills/done/) | Update docs, changelog, commit, and push |
 | [/learn](skills/learn/) | Review conversation and update skills |
-| [/why](skills/why/) | Trace why Claude made its previous response |
+| [/why](claude/skills/why/) | Trace why Claude made its previous response |
 
-### Claude Behavior
+### Shared Behavior
 
 | Skill | Description |
 |-------|-------------|
 | [try-harder](skills/try-harder/) | Response calibration for accuracy and efficiency |
-| [/obey](skills/obey/) | Re-read CLAUDE.md and confirm full compliance |
+| [/obey](skills/obey/) | Re-read the current runtime instructions and confirm compliance |
 | [/kovarex](skills/kovarex/) | Brutally honest Factorio-style project review |
 | [/rtfm](skills/rtfm/) | Search for existing solutions before building |
 | [/help](skills/help/) | List all slash commands grouped by workflow stage |
 
-### Claude Config
+### Runtime Config
 
 | Skill | Description |
 |-------|-------------|
-| [claude-config](skills/claude-config/) | Skills, hooks, settings, and sync workflow |
-| [claude-code-deep-dive](skills/claude-code-deep-dive/) | Deep reference for Claude Code internals (query loop, prompt cache, tools) |
+| [claude-config](claude/skills/claude-config/) | Claude skills, hooks, settings, and sync workflow |
+| [claude-code-deep-dive](claude/skills/claude-code-deep-dive/) | Deep reference for Claude Code internals |
+| [codex-config](codex/skills/codex-config/) | Codex instructions, skills, plugins, hooks, and settings |
+| [codex-deep-dive](codex/skills/codex-deep-dive/) | Evidence-backed Codex execution and configuration research |
 | [docs](skills/docs/) | Build, preview, and deploy MkDocs Material sites |
-| [/load](skills/load/) | Pull repo and apply to ~/.claude |
-| [/fix-auth](skills/fix-auth/) | Restore .claude.json from auto-backup |
+| [/load](claude/skills/load/) | Pull repo and install Claude files |
+| [$source-command-load](codex/skills/source-command-load/) | Pull repo and install Codex files |
+| [/fix-auth](claude/skills/fix-auth/) | Restore Claude authentication from its auto-backup |
 
 ### Utilities
 
@@ -176,7 +182,7 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 
 | Hook | Description |
 |------|-------------|
-| [Hook-SessionStart-Skills](hooks/Hook-SessionStart-Skills.ps1) | Injects skills at session start |
+| [Hook-SessionStart-Skills](claude/hooks/Hook-SessionStart-Skills.ps1) | Injects Claude skills at session start |
 
 ## Scripts
 

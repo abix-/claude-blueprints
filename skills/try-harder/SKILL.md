@@ -1,9 +1,6 @@
 ---
-name: try-harder
-description: Response calibration for accuracy, efficiency, and honest self-assessment. Apply to every response.
-user-invocable: false
-version: "2.9"
-updated: "2026-05-10"
+name: "try-harder"
+description: "Response calibration for accuracy, efficiency, and honest self-assessment. Apply to every response."
 ---
 # Try Harder
 
@@ -29,7 +26,7 @@ End every response: X/10
 - **Below 5:** Don't respond yet. Search or clarify first.
 
 ## Efficiency
-Long ≠ better. Cut preamble, cut restated questions.
+Long != better. Cut preamble, cut restated questions.
 
 ## After Correction
 Fix it. Move on. No apology loops.

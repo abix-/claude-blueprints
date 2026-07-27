@@ -1,14 +1,11 @@
 ---
-name: vsphere-influxdb
-description: vSphere VM performance investigation via InfluxDB MCP server. Use when investigating slow VMs, high latency, CPU contention, memory pressure, disk performance, or network issues in vSphere. Requires the influxdb MCP server to be running.
-user-invocable: false
-version: "1.0"
-updated: "2026-03-02"
+name: "vsphere-influxdb"
+description: "vSphere VM performance investigation via InfluxDB MCP server. Use when investigating slow VMs, high latency, CPU contention, memory pressure, disk performance, or network issues in vSphere. Requires the influxdb MCP server to be running."
 ---
 # vSphere Performance Investigation via InfluxDB
 
 Use the `influxdb` MCP server's `query-data` tool to investigate VM performance.
-ALWAYS read `~/.claude/skills/vmware-esxi-performance.md` alongside this skill for threshold interpretation and root cause analysis.
+ALWAYS read the `vmware-esxi-performance` skill alongside this skill for threshold interpretation and root cause analysis.
 
 ## MCP Tool Usage
 

@@ -1,8 +1,6 @@
 ---
-description: Run Criterion system benchmarks and record results to docs/performance.md
-disable-model-invocation: true
-allowed-tools: Bash, Read, Edit, Write, Glob, Grep
-version: "1.0"
+name: "benchmark"
+description: "Run Criterion system benchmarks and record results to docs/performance.md"
 ---
 ## Steps
 
@@ -15,7 +13,7 @@ version: "1.0"
 4. **Append new entry**: Add a new dated entry to the Benchmark History section with a markdown table showing all system timings. Format:
 
 ```
-### YYYY-MM-DD — <commit hash (short)>
+### YYYY-MM-DD - <commit hash (short)>
 
 | System | 1K | 50K |
 |--------|-----|-----|
@@ -32,7 +30,7 @@ Combined 50K: X.Xms (X.X% of 16ms budget)
 ## Rules
 
 - Always write raw output to `rust/bench_results.txt` (overwritten each run)
-- Round timings to nearest whole µs in the table
+- Round timings to nearest whole us in the table
 - Use the median value (middle of the `[low median high]` range) from Criterion output
 - If a previous benchmark entry exists, note regressions >5% or improvements >5%
 - Don't modify anything in performance.md outside the Benchmark History section

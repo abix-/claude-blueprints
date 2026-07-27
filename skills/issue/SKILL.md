@@ -1,10 +1,6 @@
 ---
-name: issue
-description: Create, claim, and work GitHub issues across project repos ([abix-/endless](https://github.com/abix-/endless), [abix-/k3sc](https://github.com/abix-/k3sc)). Use when the user invokes `issue` with an explicit issue number, wants the next eligible issue claimed, or wants to create new issues. For claim/work flows, read and execute `C:/code/endless/docs/ai-collab-workflow.md`.
-argument-hint: "[repo issue-number | issue-number | description of issues to create]"
-disable-model-invocation: false
-allowed-tools: Bash, Read, Grep, Glob, Edit, Write
-version: "6.0"
+name: "issue"
+description: "Create, claim, and work GitHub issues across project repos ([abix-/endless](https://github.com/abix-/endless), [abix-/k3sc](https://github.com/abix-/k3sc)). Use when the user invokes `issue` with an explicit issue number, wants the next eligible issue claimed, or wants to create new issues. For claim/work flows, read and execute `C:/code/endless/docs/ai-collab-workflow.md`."
 ---
 ## Modes
 

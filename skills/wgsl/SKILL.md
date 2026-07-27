@@ -1,9 +1,6 @@
 ---
-name: wgsl
-description: WGSL shader patterns for Bevy 0.18 compute and instanced rendering. Use when writing or modifying .wgsl shaders.
-user-invocable: false
-version: "1.0"
-updated: "2026-02-08"
+name: "wgsl"
+description: "WGSL shader patterns for Bevy 0.18 compute and instanced rendering. Use when writing or modifying .wgsl shaders."
 ---
 # WGSL Shaders. Endless Project
 
@@ -13,15 +10,15 @@ updated: "2026-02-08"
 - `shaders/projectile_compute.wgsl`. Projectile movement + spatial grid collision detection
 
 ## WGSL vs GLSL (porting gotchas)
-These bit us during the GLSL→WGSL port:
-- `vec2(0.0)` → `vec2<f32>(0.0, 0.0)`. No implicit broadcast
-- `int/uint/float` → `i32/u32/f32`. Explicit types everywhere
-- `gl_GlobalInvocationID.x` → `@builtin(global_invocation_id) global_id: vec3<u32>` then `global_id.x`
-- `layout(push_constant)` → `var<uniform>`. WGSL has no push constants, use uniform buffer
-- `layout(set=0, binding=0, std430) buffer` → `@group(0) @binding(0) var<storage, read_write>`
-- `atomicAdd(grid_counts[i], 1)` → `atomicAdd(&grid_counts[i], 1)`. Needs `&` reference
+These bit us during the GLSL->WGSL port:
+- `vec2(0.0)` -> `vec2<f32>(0.0, 0.0)`. No implicit broadcast
+- `int/uint/float` -> `i32/u32/f32`. Explicit types everywhere
+- `gl_GlobalInvocationID.x` -> `@builtin(global_invocation_id) global_id: vec3<u32>` then `global_id.x`
+- `layout(push_constant)` -> `var<uniform>`. WGSL has no push constants, use uniform buffer
+- `layout(set=0, binding=0, std430) buffer` -> `@group(0) @binding(0) var<storage, read_write>`
+- `atomicAdd(grid_counts[i], 1)` -> `atomicAdd(&grid_counts[i], 1)`. Needs `&` reference
 - `atomicStore` / `atomicLoad` also need `&` reference
-- Atomic buffers: `array<int>` → `array<atomic<i32>>`. Must declare atomic type
+- Atomic buffers: `array<int>` -> `array<atomic<i32>>`. Must declare atomic type
 - **Variable shadowing forbidden**. WGSL won't let you redeclare `dy` in nested loops. Use `dy2`, `dy3` etc. for separate grid scans.
 - `clamp(int_val, 0, max)` works. `min()`/`max()` work on scalars.
 - `#version 450` / `#[compute]`. Remove all GLSL preprocessor directives
@@ -71,8 +68,8 @@ Memory: grid_counts = 64KB, grid_data = 3MB
 
 ## Separation Physics
 3x3 neighbor scan, asymmetric push strengths:
-- Moving → settled neighbor: `push_strength = 0.2` (barely blocks me)
-- Settled → moving neighbor: `push_strength = 2.0` (shove me aside)
+- Moving -> settled neighbor: `push_strength = 0.2` (barely blocks me)
+- Settled -> moving neighbor: `push_strength = 2.0` (shove me aside)
 - Exact overlap: golden angle spread `angle = f32(i) * 2.399 + f32(j) * 0.7`
 - TCP dodge: perpendicular to movement direction, consistent side-picking via `if (i < u32(j))`
 - Backoff: `persistence = 1.0 / f32(1 + my_backoff)`, cap at 200
@@ -141,27 +138,27 @@ struct Params {
     count: u32,           // 4 bytes
     separation_radius: f32, // 4 bytes
     separation_strength: f32, // 4 bytes
-    delta: f32,           // 4 bytes — 16 aligned ✓
+    delta: f32,           // 4 bytes - 16 aligned [ok]
     grid_width: u32,      // ...
     grid_height: u32,
     cell_size: f32,
-    max_per_cell: u32,    // 16 aligned ✓
+    max_per_cell: u32,    // 16 aligned [ok]
     arrival_threshold: f32,
     mode: u32,
     combat_range: f32,
-    _pad2: f32,           // pad to 48 bytes (16-aligned) ✓
+    _pad2: f32,           // pad to 48 bytes (16-aligned) [ok]
 }
 ```
 Rust side must match with `#[repr(C)]` + bytemuck. Field order and padding must be identical.
 
 ## Shader Loading
-- **Compute shaders**: loaded via raw wgpu `include_str!` → `ShaderModuleDescriptor` in gpu.rs
+- **Compute shaders**: loaded via raw wgpu `include_str!` -> `ShaderModuleDescriptor` in gpu.rs
 - **Render shaders**: loaded via Bevy asset system (`shader_defs: vec![]` in `RenderPipelineDescriptor`). Bevy handles compilation.
 
 ## Common Gotchas
 - **No variable shadowing**. Use `dy2`, `dx3`, `n2` etc. for separate loop scopes
 - **Atomic requires `&`**. `atomicAdd(&grid_counts[i], 1)` not `atomicAdd(grid_counts[i], 1)`
-- **`SPRITE_SIZE` ≠ render size**. Must match atlas cell pixels (16px), quad expansion handles visual size
+- **`SPRITE_SIZE` != render size**. Must match atlas cell pixels (16px), quad expansion handles visual size
 - **UV Y-flip not needed**. Wgpu texture coordinates are top-left origin, matching the atlas layout. Don't flip.
 - **Bind group numbering matters**. Texture in group 0, camera in group 1. Swapping breaks Transparent2d.
 - **`read_write` for all storage**. Even read-only buffers use `read_write` in compute. WGSL is lenient here and it avoids needing separate bind group layouts.

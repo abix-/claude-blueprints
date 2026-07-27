@@ -1,6 +1,8 @@
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 REPO = Path(__file__).resolve().parents[1]
 LEARN_SKILL = REPO / "skills" / "learn" / "SKILL.md"
@@ -12,7 +14,8 @@ class LearnSkillContractTests(unittest.TestCase):
         cls.text = LEARN_SKILL.read_text(encoding="utf-8")
 
     def test_is_agent_neutral(self):
-        self.assertIn("name: learn", self.text)
+        _, frontmatter, _ = self.text.split("---", 2)
+        self.assertEqual("learn", yaml.safe_load(frontmatter)["name"])
         self.assertIn("repository-authoritative", self.text)
         self.assertNotIn("~/.claude", self.text.lower())
         self.assertNotIn("~/.codex", self.text.lower())

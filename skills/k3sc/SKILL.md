@@ -1,9 +1,7 @@
 ---
-name: k3sc
-description: k3sc Go binary. Claude agent operator, CLI, and TUI. Use when developing k3sc features, fixing bugs, adding commands, or modifying the operator/scanner/controller.
-version: "1.0"
+name: "k3sc"
+description: "k3sc Go binary. Claude agent operator, CLI, and TUI. Use when developing k3sc features, fixing bugs, adding commands, or modifying the operator/scanner/controller."
 ---
-
 # k3sc
 
 Go binary that manages Claude Code agents as k8s pods. One binary serves as both the in-cluster operator and the Windows CLI.

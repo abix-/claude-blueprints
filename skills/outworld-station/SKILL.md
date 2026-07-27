@@ -1,9 +1,6 @@
 ---
-name: outworld-station
-description: Modding Outworld Station (Spacescape Salvage Station, UE 5.4.4 + UE4SS). Authoritative on OWS-specific facts: the Steam exe, image-relative offsets, GObjects layout (WrappedChunked), DataTable cache-propagation gotcha, deploy folder, the shipped feature inventory. Mod code is the `outworld-station-tweaks` crate in [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods). For ueforge framework doctrine, read the `ueforge` skill. Not for playing the game.
-user-invocable: false
-version: "1.0"
-updated: "2026-05-11"
+name: "outworld-station"
+description: "Modding Outworld Station (Spacescape Salvage Station, UE 5.4.4 + UE4SS). Authoritative on OWS-specific facts: the Steam exe, image-relative offsets, GObjects layout (WrappedChunked), DataTable cache-propagation gotcha, deploy folder, the shipped feature inventory. Mod code is the `outworld-station-tweaks` crate in [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods). For ueforge framework doctrine, read the `ueforge` skill. Not for playing the game."
 ---
 # Outworld Station: modding
 

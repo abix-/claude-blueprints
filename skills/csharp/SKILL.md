@@ -1,6 +1,6 @@
 ---
-name: csharp
-description: C# development standards. Use when writing C# code, .NET projects, Unity mods, or NuGet packages. Sourced from [abix-/TimberbornMods](https://github.com/abix-/TimberbornMods) (Timberbot, Bindito DI, publicizer) and [abix-/Schedule1Mods](https://github.com/abix-/Schedule1Mods) (MelonLoader + Harmony + Il2CppInterop).
+name: "csharp"
+description: "C# development standards. Use when writing C# code, .NET projects, Unity mods, or NuGet packages. Sourced from [abix-/TimberbornMods](https://github.com/abix-/TimberbornMods) (Timberbot, Bindito DI, publicizer) and [abix-/Schedule1Mods](https://github.com/abix-/Schedule1Mods) (MelonLoader + Harmony + Il2CppInterop)."
 ---
 # C# Development
 

@@ -1,8 +1,6 @@
 ---
-description: Inspect a Bevy entity via endless-cli. See endless-cli skill for full command reference.
-disable-model-invocation: true
-allowed-tools: Bash
-version: "1.2"
+name: "entity"
+description: "Inspect a Bevy entity via endless-cli. See endless-cli skill for full command reference."
 ---
 ```bash
 endless-cli get_entity $ARGUMENTS

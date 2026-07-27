@@ -3,3 +3,7 @@
 
 # Stray build artifacts from sibling repos
 .cargo-build.lock
+
+# Python test caches
+__pycache__/
+*.pyc

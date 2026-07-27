@@ -1,9 +1,6 @@
 ---
-name: bevy
-description: Bevy 0.18 ECS patterns for the Endless colony sim. Use when writing Rust/WGSL for this project.
-user-invocable: false
-version: "2.5"
-updated: "2026-03-08"
+name: "bevy"
+description: "Bevy 0.18 ECS patterns for the Endless colony sim. Use when writing Rust/WGSL for this project."
 ---
 # Bevy 0.18. Endless Project
 
@@ -57,11 +54,11 @@ Game exposes JSON-RPC on `localhost:15702`. See `endless-cli` skill for all comm
 ## System Scheduling
 Four ordered phases via `Step` enum:
 ```
-Step::Drain → Step::Spawn → ApplyDeferred → Step::Combat → Step::Behavior → collect_gpu_updates
+Step::Drain -> Step::Spawn -> ApplyDeferred -> Step::Combat -> Step::Behavior -> collect_gpu_updates
 ```
-- **Drain**: reset, drain queues, sync GPU readback → `GpuReadState` resource
+- **Drain**: reset, drain queues, sync GPU readback -> `GpuReadState` resource
 - **Spawn**: `spawn_npc_system`, `apply_targets_system`
-- **Combat**: `process_proj_hits → cooldown → attack → damage → death → cleanup` (chained)
+- **Combat**: `process_proj_hits -> cooldown -> attack -> damage -> death -> cleanup` (chained)
 - **Behavior**: arrival, energy, healing, economy, decisions (parallel within set)
 - `collect_gpu_updates` runs after Behavior, batches all `GpuUpdateMsg` into `GPU_UPDATE_QUEUE`
 
@@ -80,12 +77,12 @@ Register with `.add_message::<T>()` not `.add_event::<T>()`.
 
 ## GPU Update Flow (Zero-Clone Architecture)
 Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
-→ `collect_gpu_updates` drains into `GPU_UPDATE_QUEUE` (single Mutex lock)
-→ `populate_gpu_state` (PostUpdate) drains into `NpcGpuState` (per-index dirty tracking, compute fields only)
-→ `build_visual_upload` updates dirty visual slots in persistent `NpcVisualUpload` (event-driven, not full rebuild)
-→ Extract phase reads both via `Extract<Res<T>>` (zero clone, immutable reference)
-→ Compute data: per-dirty-index upload with coalescing. Visual data: per-dirty-index upload (full rebuild on startup/load).
-→ **Coalesced uploads**: Adjacent dirty indices merged into single `write_buffer` calls. Two strategies: strict coalescing (exact adjacency only) for GPU-authoritative buffers (positions, arrivals). No gap merging; gap-based coalescing (merge nearby indices with gap threshold) for CPU-authoritative buffers (targets, speeds, factions, healths). Reduces wgpu call count dramatically.
+-> `collect_gpu_updates` drains into `GPU_UPDATE_QUEUE` (single Mutex lock)
+-> `populate_gpu_state` (PostUpdate) drains into `NpcGpuState` (per-index dirty tracking, compute fields only)
+-> `build_visual_upload` updates dirty visual slots in persistent `NpcVisualUpload` (event-driven, not full rebuild)
+-> Extract phase reads both via `Extract<Res<T>>` (zero clone, immutable reference)
+-> Compute data: per-dirty-index upload with coalescing. Visual data: per-dirty-index upload (full rebuild on startup/load).
+-> **Coalesced uploads**: Adjacent dirty indices merged into single `write_buffer` calls. Two strategies: strict coalescing (exact adjacency only) for GPU-authoritative buffers (positions, arrivals). No gap merging; gap-based coalescing (merge nearby indices with gap threshold) for CPU-authoritative buffers (targets, speeds, factions, healths). Reduces wgpu call count dramatically.
 
 ## Data Authority
 - **GPU owns**: positions, spatial grid, combat targets
@@ -105,7 +102,7 @@ Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
 ## GPU Readback Pattern (Async via Bevy `Readback`)
 - 6 `ShaderStorageBuffer` assets as readback targets: npc_positions, combat_targets, npc_factions, npc_health, proj_hits, proj_positions
 - `ReadbackHandles` resource (ExtractResource) holds handles, extracted to render world
-- Compute nodes `copy_buffer_to_buffer` from compute buffers → readback asset buffers (via `RenderAssets<GpuShaderStorageBuffer>`)
+- Compute nodes `copy_buffer_to_buffer` from compute buffers -> readback asset buffers (via `RenderAssets<GpuShaderStorageBuffer>`)
 - `Readback::buffer(handle)` entities fire `ReadbackComplete` observers each frame (async, no blocking poll)
 - Observers write directly to `Res<GpuReadState>`, `Res<ProjHitState>`, `Res<ProjPositionState>`
 - `GpuReadState` + `ProjPositionState` have `ExtractResource`. Cloned to render world for instanced rendering
@@ -132,10 +129,10 @@ Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
 - `NextEntityUid` resource allocates fresh UIDs; save/load preserves+restores the counter
 
 ## Component Patterns
-- **Two-enum state machine**: `Activity` (what they're doing) × `CombatState` (combat overlay). Replaced 13 marker components.
+- **Two-enum state machine**: `Activity` (what they're doing) x `CombatState` (combat overlay). Replaced 13 marker components.
   - `Activity`: Idle, Working, OnDuty{ticks_waiting}, Patrolling, GoingToWork, GoingToRest, Resting, GoingToHeal, HealingAtFountain{recover_until}, Wandering, Raiding{target}, Returning{loot: Vec<(ItemKind, i32)>}
   - `CombatState`: None, Fighting{origin}, Fleeing
-  - `activity.is_transit()` → true for movement activities (Patrolling, GoingToWork, GoingToRest, GoingToHeal, Wandering, Raiding, Returning)
+  - `activity.is_transit()` -> true for movement activities (Patrolling, GoingToWork, GoingToRest, GoingToHeal, Wandering, Raiding, Returning)
   - CombatState is orthogonal. Activity is preserved through combat, NPC resumes when combat ends
 - Jobs: `Job::Farmer(0)`, `Job::Archer(1)`, `Job::Raider(2)`, `Job::Fighter(3)`, `Job::Miner(4)`, `Job::Crossbow(5)`
 - Key components: `GpuSlot(usize)`, `Health(f32)`, `CachedStats` (max_health, damage, range, cooldown, speed, etc.), `Energy(f32)`, `Faction(i32)`, `TownId(i32)`, `BaseAttackType` (Melee/Ranged), `ManualTarget` enum (Npc/Building/Position variants. Player-forced targets)
@@ -149,13 +146,13 @@ Systems emit `GpuUpdateMsg(GpuUpdate::SetTarget { idx, x, y })` etc.
 These broke during the migration and were fixed in commits. Reference when touching render code:
 
 ### RenderCommand / Pipeline
-- `RenderSet::*` → `RenderSystems::*` (e.g. `Prepare` → `PrepareResources`, `Queue` → `Queue`)
+- `RenderSet::*` -> `RenderSystems::*` (e.g. `Prepare` -> `PrepareResources`, `Queue` -> `Queue`)
 - `entry_point` is `Option<Cow<str>>`. Use `Some(Cow::from("vertex"))` not `"vertex".into()`
 - Transparent2d **requires** `DepthStencilState`: format `Depth32Float`, `depth_write_enabled: false`, `depth_compare: GreaterEqual`. Without this, nothing renders.
 - MSAA must be queried from `&Msaa` in `queue_npcs` and passed to pipeline specialization. `specialize()` key is `(bool, u32)` for (HDR, sample_count). `MultisampleState::count` must match the view's MSAA.
 
 ### Bind Groups & Layouts
-- `render_device.create_bind_group_layout()` → `BindGroupLayoutDescriptor::new()` (deferred creation)
+- `render_device.create_bind_group_layout()` -> `BindGroupLayoutDescriptor::new()` (deferred creation)
 - Store `BindGroupLayoutDescriptor`, get actual layout via `pipeline_cache.get_bind_group_layout(&descriptor)` at bind group creation time
 - `SetMesh2dViewBindGroup` removed from `bevy::sprite_render`. Texture bind group goes in slot 0
 
@@ -167,7 +164,7 @@ These broke during the migration and were fixed in commits. Reference when touch
 - Generic `MaterialDrawFunction` replaced with phase-specific variants (e.g. `MainPassOpaqueDrawFunction`). Custom render pipelines must use the correct phase draw function.
 
 ### Entity Terminology
-- `EntityRow` → `EntityIndex`, `Entity::row()` → `Entity::index()` (0.18 rename)
+- `EntityRow` -> `EntityIndex`, `Entity::row()` -> `Entity::index()` (0.18 rename)
 
 ### Query Types
 - `ROQueryItem` takes two lifetime params: `ROQueryItem<'w, 'w, ...>` (not one)
@@ -276,7 +273,7 @@ be fast" matters.
 
 ## ECS Source-of-Truth Pattern
 - **NpcEntry** (6-field index in EntityMap): slot, entity, job, faction, town_idx, dead. All gameplay state lives in ECS components, not NpcEntry.
-- **ECS components own state**: Health, CombatState, Activity, Energy, Home, Personality, CachedStats, NpcFlags, NpcWorkState, etc. EntityMap is index-only for NPCs (slot↔Entity, grid, kind/town/spatial).
+- **ECS components own state**: Health, CombatState, Activity, Energy, Home, Personality, CachedStats, NpcFlags, NpcWorkState, etc. EntityMap is index-only for NPCs (slot<->Entity, grid, kind/town/spatial).
 - **SystemParam bundles** for query groups: `DecisionNpcState`, `NpcDataQueries`, `DeathResources`, `SaveNpcQueries`, `DirtyWriters`. Group related queries to stay under 16-param limit while enabling focused per-system access.
 - **Shared test materialization**: `materialize_test_world` hook in `tests/mod.rs` runs on first `Update` in `AppState::Running` before `Step::Behavior`, calls `world::materialize_generated_world()`. All test scenes share this path. No per-test manual building spawns.
 
@@ -285,7 +282,7 @@ be fast" matters.
 - **Sprite size in shader**: `SPRITE_SIZE` must match atlas cell size (16px), not an arbitrary render size.
 - **ExtractResource**: First-class extraction path. Clones to render world only when changed (built-in change detection). Use for straightforward resource extraction. Use custom extract systems (`Extract<Res<T>>`) when you need custom logic or zero-clone ownership patterns. Render world cannot write back.
 - **ApplyDeferred**: Runs between Spawn and Combat to flush entity commands before combat queries.
-- **Static queues**: Only for CPU→GPU update boundaries (GPU_UPDATE_QUEUE, PROJ_GPU_UPDATE_QUEUE). GPU→CPU uses Bevy's async `Readback` + `ReadbackComplete`. Prefer MessageWriter everywhere else.
+- **Static queues**: Only for CPU->GPU update boundaries (GPU_UPDATE_QUEUE, PROJ_GPU_UPDATE_QUEUE). GPU->CPU uses Bevy's async `Readback` + `ReadbackComplete`. Prefer MessageWriter everywhere else.
 - **CPU-side combat validation**: GPU combat targets must be validated CPU-side (entity map + faction + health guards) before applying damage. GPU can return stale/invalid indices.
 - **Duplicate resource borrows**: If a system has both `Res<Foo>` AND a `SystemParam` bundle that also borrows `Foo`, Bevy silently skips the system (white screen, no error). Fix: remove the standalone `Res<Foo>` and access through the bundle.
 - **Extract entity leak**: Extract systems that `commands.spawn()` batch entities must despawn stale copies first. Without this, render world accumulates duplicate entities every frame.
@@ -301,8 +298,8 @@ be fast" matters.
 - **Data-driven build menu**: `BuildingKind` enum + `BuildMenuContext` with `selected_build: Option<BuildingKind>` + `build_tab: DisplayCategory` for category tabs (Economy/Military/Tower).
 - Building names: FarmerHome, ArcherHome, MinerHome, Waypoint, CrossbowHome, FighterHome (not House, Barracks, MineShaft, GuardPost)
 - **Upgrade system**: `UpgradeStatDef` per NPC category (Military, Farmer, Miner, Town). `UpgradeStatKind` enum for stat types. Prereqs, multi-resource costs, `EffectDisplay` variants (Percentage, CooldownReduction, Unlock, FlatPixels, Discrete). Stored per-town in `TownUpgrades`.
-- **Loot system**: `NpcDef.loot_drop: LootDrop` (item, min, max). `ItemKind` enum (Food, Gold + 9 equipment variants: Helm, Armor, Weapon, Shield, Gloves, Boots, Belt, Amulet, Ring). `ItemDef` registry + `item_def(kind)` lookup. Death drops loot, buildings can be looted. `equipment_drop_rate` only non-zero for Raiders (0.30). All other NPC types have 0.0. Equipment items: `roll_loot_item()` → killer's `CarriedLoot.equipment` → delivered to `TownInventory` on return home → auto-equip system distributes hourly.
-- **Equipment on death**: `NpcEquipment::all_items()` + `CarriedLoot.equipment` transfer to killer at 50% per-item (deterministic hash roll). NPC killers → CarriedLoot, tower killers → TownInventory directly.
+- **Loot system**: `NpcDef.loot_drop: LootDrop` (item, min, max). `ItemKind` enum (Food, Gold + 9 equipment variants: Helm, Armor, Weapon, Shield, Gloves, Boots, Belt, Amulet, Ring). `ItemDef` registry + `item_def(kind)` lookup. Death drops loot, buildings can be looted. `equipment_drop_rate` only non-zero for Raiders (0.30). All other NPC types have 0.0. Equipment items: `roll_loot_item()` -> killer's `CarriedLoot.equipment` -> delivered to `TownInventory` on return home -> auto-equip system distributes hourly.
+- **Equipment on death**: `NpcEquipment::all_items()` + `CarriedLoot.equipment` transfer to killer at 50% per-item (deterministic hash roll). NPC killers -> CarriedLoot, tower killers -> TownInventory directly.
 
 ## Building Lifecycle
 - **`place_building()`** (world.rs): Unified function for all building creation (player, AI, world gen, save/load). Validates position, deducts cost, creates `BuildingInstance` in EntityMap, allocates GPU slot, sets HP, fires dirty signals, updates wall auto-tile. Takes `BuildContext` for runtime validation (water/foreign territory rejection). `hp_override` for save/load.

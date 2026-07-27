@@ -1,9 +1,6 @@
 ---
-name: rust
-description: Rust development standards and patterns: concurrency primitives, zero-alloc hot paths, unsafe + FFI doctrine, async patterns, workspace structure, build profiles, testing, crate preferences. Cites canonical examples in public abix- repos. **Rust is the default language for new work.** Use when writing Rust; for ECS / Bevy code read the `bevy` skill, for WGSL shaders the `wgsl` skill.
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "rust"
+description: "Rust development standards and patterns: concurrency primitives, zero-alloc hot paths, unsafe + FFI doctrine, async patterns, workspace structure, build profiles, testing, crate preferences. Cites canonical examples in public abix- repos. **Rust is the default language for new work.** Use when writing Rust; for ECS / Bevy code read the `bevy` skill, for WGSL shaders the `wgsl` skill."
 ---
 # Rust
 
@@ -65,7 +62,7 @@ allocator traffic per fire**. To meet that:
   compare is then a pointer / integer compare, not a string
   compare. See ueforge's `LazyFunctionPtr`,
   `find_class_fast` (name-cached), `NameResolver::to_string`
-  (FName u64 → String cache), `UClass::cached_native_properties`
+  (FName u64 -> String cache), `UClass::cached_native_properties`
   (`Arc<[NativeProperty]>` after first lookup).
 - Branch out of the hot path **EARLY**. First lines of any
   per-frame callback: cheap atomic loads + branches that bail
@@ -97,7 +94,7 @@ one: don't ship-then-optimize.
   abixio's `encode_and_write` does this for >= 1MB PUTs:
   `mpsc(8)` between encode task and writer task. Matches
   rustfs's mpsc pattern + minio's ring-buffer-per-writer
-  design. 1GB PUT went 317 → 449 MB/s.
+  design. 1GB PUT went 317 -> 449 MB/s.
 - **Choose between buffering and streaming based on size.**
   abixio's `WalShardWriter` is dual-mode: <= 64KB buffered in
   RAM, >= 1MB promoted to streaming so disk write overlaps
@@ -124,7 +121,7 @@ one: don't ship-then-optimize.
   `deny` once clean. Reviewers grep `SAFETY:` to audit invariants.
 - **Premature `unsafe` is a code smell.** Prove the safe
   alternative is insufficient first.
-- **`catch_unwind` at every Rust → foreign boundary.** Any
+- **`catch_unwind` at every Rust -> foreign boundary.** Any
   callback the host calls from C / FFI / a vtable / a
   `ProcessEvent` trampoline must `catch_unwind` so a Rust
   panic doesn't unwind into a frame that doesn't know what
@@ -389,7 +386,7 @@ For Drop-free Defs (`&'static str`s, primitives, fn pointers),
 `&[Def]` (slice of values) works without the indirection: pick
 based on whether the Def has Drop-having state.
 
-### Def → Registry → Instance → Controller (k8s-style)
+### Def -> Registry -> Instance -> Controller (k8s-style)
 
 For any subsystem with "schema + storage + runtime instance +
 behavior" shape (skills, hooks, ops, building types, debug
@@ -539,7 +536,7 @@ providers in the tree.
 - `.clone()` to silence borrow errors: scope the borrow instead.
 - `.unwrap()` in production paths.
 - Adding error handling for scenarios that can't happen
-  (CLAUDE.md rule). Validate at system boundaries; trust
+  (global instruction rule). Validate at system boundaries; trust
   internal code + framework guarantees.
 - `#[non_exhaustive]` on workspace-internal types every
   consumer constructs as a struct literal: you update
@@ -569,7 +566,7 @@ These landed across multiple projects. Apply by default:
 - Dispatch handlers **outside** the registry mutex so a panic
   / SEH inside a handler doesn't poison the lock.
 - Every `unsafe { ... }` carries a `// SAFETY:` line.
-- Every Rust → foreign boundary `catch_unwind`s.
+- Every Rust -> foreign boundary `catch_unwind`s.
 
 ## Canonical references
 
@@ -690,7 +687,7 @@ Know what each std type costs. Pick deliberately.
 - **`Iterator::sum`** / **`product`** / **`min`** / **`max`** are
   faster than rolling your own; SIMD-vectorized for primitives.
 - **`rayon::par_iter`** for embarrassingly parallel work over
-  large collections. Setup cost is ~1µs; not worth it for <1ms of
+  large collections. Setup cost is ~1us; not worth it for <1ms of
   serial work.
 
 ## Allocation profiling

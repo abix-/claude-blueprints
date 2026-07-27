@@ -1,9 +1,6 @@
 ---
-name: infrastructure-troubleshooting
-description: Systematic methodology for diagnosing infrastructure problems across compute, storage, network, and virtualization layers. Use as the starting framework for any troubleshooting scenario, then reference platform-specific skills (vmware-esxi-performance, etc.) for deep dives.
-user-invocable: false
-version: "1.1"
-updated: "2026-01-18"
+name: "infrastructure-troubleshooting"
+description: "Systematic methodology for diagnosing infrastructure problems across compute, storage, network, and virtualization layers. Use as the starting framework for any troubleshooting scenario, then reference platform-specific skills (vmware-esxi-performance, etc.) for deep dives."
 ---
 # Infrastructure Troubleshooting Methodology
 
@@ -26,13 +23,13 @@ Start here for methodology, go to child skills for commands and thresholds.
 Work from the bottom of the stack up. Symptoms at the application layer often have root causes in infrastructure.
 
 ```
-Application Layer     ← Symptoms appear here
-    ↓
-Operating System      ← Guest drivers, kernel, services
-    ↓
-Virtualization        ← VM config, hypervisor scheduling, virtual hardware
-    ↓
-Infrastructure        ← Physical compute, storage, network
+Application Layer     <- Symptoms appear here
+    v
+Operating System      <- Guest drivers, kernel, services
+    v
+Virtualization        <- VM config, hypervisor scheduling, virtual hardware
+    v
+Infrastructure        <- Physical compute, storage, network
 ```
 
 **Rule:** Don't chase symptoms. Isolate which layer owns the problem before diving deep.
@@ -53,22 +50,22 @@ Infrastructure        ← Physical compute, storage, network
 
 ```
 Performance problem reported
-    │
-    ├── Affecting multiple VMs/apps?
-    │       YES → Infrastructure layer (storage, network, host)
-    │       NO  → VM-specific or app-specific
-    │
-    ├── Correlates with time of day?
-    │       YES → Contention, scheduled jobs, backups
-    │       NO  → Configuration or hardware issue
-    │
-    ├── Did anything change recently?
-    │       YES → Start there (patches, config, new workloads)
-    │       NO  → Gradual degradation or intermittent failure
-    │
-    └── Can you reproduce it?
-            YES → Capture data during reproduction
-            NO  → Set up monitoring to catch next occurrence
+    |
+    +-- Affecting multiple VMs/apps?
+    |       YES -> Infrastructure layer (storage, network, host)
+    |       NO  -> VM-specific or app-specific
+    |
+    +-- Correlates with time of day?
+    |       YES -> Contention, scheduled jobs, backups
+    |       NO  -> Configuration or hardware issue
+    |
+    +-- Did anything change recently?
+    |       YES -> Start there (patches, config, new workloads)
+    |       NO  -> Gradual degradation or intermittent failure
+    |
+    +-- Can you reproduce it?
+            YES -> Capture data during reproduction
+            NO  -> Set up monitoring to catch next occurrence
 ```
 
 ---
@@ -79,8 +76,8 @@ Performance problem reported
 
 **First question:** Is latency from the array (DAVG) or the hypervisor (KAVG)?
 
-- High DAVG, low KAVG → Array problem
-- Low DAVG, high KAVG → Hypervisor throttling or queue saturation
+- High DAVG, low KAVG -> Array problem
+- Low DAVG, high KAVG -> Hypervisor throttling or queue saturation
 
 **Deep dive:** See `vmware-esxi-performance` skill for metrics, thresholds, esxtop commands, and DSNRO tuning.
 
@@ -93,8 +90,8 @@ Performance problem reported
 iperf3 -c <target> -t 30 -P 4
 ```
 
-- iperf fast, application slow → Protocol issue (SMB, iSCSI tuning)
-- iperf slow → Network path issue
+- iperf fast, application slow -> Protocol issue (SMB, iSCSI tuning)
+- iperf slow -> Network path issue
 
 **Bandwidth Delay Product (BDP):**
 ```
@@ -122,7 +119,7 @@ Even 1-2% loss destroys TCP throughput.
 **Quick isolation:**
 1. Create test rule with no threat profiles
 2. Compare performance
-3. If faster → tune profiles, not disable
+3. If faster -> tune profiles, not disable
 
 **Palo Alto quick checks:**
 ```
@@ -157,7 +154,7 @@ netsh interface tcp show global
 **Wireshark analysis:**
 1. Filter: `tcp.flags.syn == 1` to find handshake
 2. Check SYN packet for Window Scale option
-3. During transfer: Statistics → TCP Stream Graph → Round Trip Time
+3. During transfer: Statistics -> TCP Stream Graph -> Round Trip Time
 4. Look for retransmissions: `tcp.analysis.retransmission`
 
 ### WAN Performance
@@ -270,10 +267,10 @@ When documenting troubleshooting:
 [What's affected, what's working normally]
 
 ## Data Collected
-[Logs, metrics, captures — with timestamps]
+[Logs, metrics, captures - with timestamps]
 
 ## Layer Isolation
-[Infrastructure → Virtualization → OS → Application]
+[Infrastructure -> Virtualization -> OS -> Application]
 
 ## Root Cause
 [Which layer, which component, why]

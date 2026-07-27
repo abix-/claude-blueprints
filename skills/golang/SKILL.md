@@ -1,9 +1,6 @@
 ---
-name: golang
-description: Go development standards. Use when writing Go. Sourced from k3sc, the canonical reference repo.
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "golang"
+description: "Go development standards. Use when writing Go. Sourced from k3sc, the canonical reference repo."
 ---
 # Go
 
@@ -267,7 +264,7 @@ func runClaim(cmd *cobra.Command, args []string) error {
 - Many agents run on Windows under Git Bash / PowerShell. Test paths
   with forward slashes via `filepath.ToSlash` if surfacing to shell.
 - BOM handling: `sigs.k8s.io/yaml` does not strip UTF-8 BOM. If reading
-  files PowerShell may have written, strip `﻿` from the head.
+  files PowerShell may have written, strip `` from the head.
 - Killing processes: `taskkill /F /IM name.exe` on Windows;
   `os.Process.Kill()` elsewhere. Guard with `runtime.GOOS`.
 

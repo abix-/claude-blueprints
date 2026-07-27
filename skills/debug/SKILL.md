@@ -1,8 +1,6 @@
 ---
-description: Check Rust compiler errors and runtime logs
-disable-model-invocation: true
-allowed-tools: Bash, Read, Edit, Grep, Write
-version: "1.0"
+name: "debug"
+description: "Check Rust compiler errors and runtime logs"
 ---
 Debug the Endless Bevy project:
 

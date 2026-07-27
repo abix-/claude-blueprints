@@ -1,7 +1,6 @@
 ---
-name: n
-description: Auto-pick next PR/issue and start reviewing it immediately
-disable-model-invocation: false
+name: "n"
+description: "Auto-pick next PR/issue and start reviewing it immediately"
 ---
 Run `k3sc next` to find the next item, then immediately invoke `/review` on it. No prompting, no asking. Just start the review.
 

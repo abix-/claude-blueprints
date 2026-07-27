@@ -1,7 +1,6 @@
 ---
-description: List all available slash commands grouped by workflow stage
-disable-model-invocation: false
-user-invocable: true
+name: "help"
+description: "List all available slash commands grouped by workflow stage"
 ---
 # Slash Command Reference
 
@@ -42,7 +41,7 @@ user-invocable: true
 | `/ctop` | Dashboard of agent pods, issues, cluster health | Check what agents are doing |
 | `/deps` | Check Rust dependencies for updates | Dependency maintenance |
 | `/fix-auth` | Restore .claude.json from auto-backup | Auth token corrupted |
-| `/load` | Pull claude-blueprints repo and apply to ~/.claude | Sync skills/config from repo |
+| `/load` | Pull claude-blueprints and install the current runtime | Sync skills and runtime config from repo |
 
 ## Research & Quality
 
@@ -56,7 +55,7 @@ user-invocable: true
 
 | Command | What it does | When to use |
 |---------|-------------|-------------|
-| `/obey` | Re-read CLAUDE.md and confirm compliance | Session start or trust verification |
+| `/obey` | Re-read the current runtime instructions and confirm compliance | Session start or trust verification |
 | `/learn` | Review conversation and update skills | After discovering something worth remembering |
 | `/why` | Trace why Claude made its previous response | Debug unexpected behavior |
 | `/kovarex` | Brutally honest project review | Reality check on roadmap and priorities |

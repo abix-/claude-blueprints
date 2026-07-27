@@ -1,9 +1,6 @@
 ---
-name: ahk
-description: AutoHotkey v2 scripting standards for Windows automation, hotkeys, and game macros. Built from the official AHK v2 docs and the AHK community conventions. v1 reached EOL in March 2024.
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "ahk"
+description: "AutoHotkey v2 scripting standards for Windows automation, hotkeys, and game macros. Built from the official AHK v2 docs and the AHK community conventions. v1 reached EOL in March 2024."
 ---
 # AutoHotkey v2
 
@@ -287,7 +284,7 @@ finally {
   walk is not).
 - **Avoid `Sleep 0` in tight loops.** Use `Sleep 1` or rework with
   a timer. `Sleep 0` yields once per loop and still burns CPU.
-- **`Map` over `Object` for arbitrary keys** -- Maps are
+- **`Map` over `Object` for arbitrary keys**. Maps are
   hash-table-backed with predictable performance; objects pay
   property-lookup overhead.
 - **Compile string concatenation in a loop into one expression**, or
@@ -328,7 +325,7 @@ NumpadAdd::{
 
 - `MsgBox("got here: " . val)` is the default REPL.
 - `OutputDebug "value=" val` writes to DebugView (sysinternals).
-- `ListVars`, `ListHotkeys`, `ListLines` -- runtime introspection
+- `ListVars`, `ListHotkeys`, `ListLines`. Runtime introspection
   windows.
 - `KeyHistory` shows the last 40 keystrokes; invaluable for hotkey
   conflicts.
@@ -356,6 +353,6 @@ NumpadAdd::{
 - `WinGetTitle` for matching. Use `ahk_exe` / `ahk_class` instead.
 - Global state when a class would scope it.
 - String concat in a loop without a `Buffer`. O(n^2).
-- `Run` with a user-supplied string -- shell injection.
+- `Run` with a user-supplied string. Shell injection.
 - Skipping `#Requires AutoHotkey v2.0`. The next user will run it
   on v1 and waste an hour.

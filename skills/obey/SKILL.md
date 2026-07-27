@@ -1,9 +1,11 @@
 ---
-description: "Re-read CLAUDE.md and confirm full compliance with every rule. Use at session start or when trust needs to be verified."
-version: "1.2"
-allowed-tools: Read
+name: "obey"
+description: "Re-read the current runtime instruction file and confirm full compliance with every rule. Use at session start or when trust needs to be verified."
 ---
-Re-read `~/.claude/CLAUDE.md` using the Read tool. Group rules by section. Print a formatted table with one row per rule.
+Determine the current runtime from the active tools and instructions. Re-read
+`~/.claude/CLAUDE.md` for Claude or `~/.codex/AGENTS.md` for Codex. Never read
+authentication or credential files. Group rules by section and print one row
+per rule.
 
 Use this exact format. The heading is a markdown heading OUTSIDE any code fence. The table is inside a code fence.
 
@@ -11,21 +13,21 @@ Use this exact format. The heading is a markdown heading OUTSIDE any code fence.
 
 ```
  SECTION                       RULE                                                          STATUS
- ──────────────────────────────────────────────────────────────────────────────────────────────────────
- Skills                        read try-harder SKILL.md, never skip                          ✅ ACK
- Skills                        read matching skill before starting                           ✅ ACK
- Git                           push immediately, concise lowercase, no Co-Authored-By        ✅ ACK
- Formatting                    never Unicode, always ASCII                                   ✅ ACK
+ ------------------------------------------------------------------------------------------------------
+ Skills                        read try-harder SKILL.md, never skip                          [ok] ACK
+ Skills                        read matching skill before starting                           [ok] ACK
+ Git                           push immediately, concise lowercase, no Co-Authored-By        [ok] ACK
+ Formatting                    never Unicode, always ASCII                                   [ok] ACK
  ...
 
  CONFLICTS
- ──────────────────────────────────────────────────────────────────────────────────────────────────────
+ ------------------------------------------------------------------------------------------------------
  (none)
 ```
 
-Use ✅ for acknowledged, ❌ for conflict. Condense each rule to a short phrase in the RULE column. Keep it under 60 chars. Do not paraphrase the intent, just shorten.
+Use [ok] for acknowledged, [x] for conflict. Condense each rule to a short phrase in the RULE column. Keep it under 60 chars. Do not paraphrase the intent, just shorten.
 
-Assign semantic section names based on rule topic: Skills, Git, Formatting, Confidence, Verification, Secrets, Working Directory, Agents, k3s. Use the CLAUDE.md header name for rules under a header. For rules outside a header, choose the best semantic name from that list.
+Assign semantic section names based on rule topic: Skills, Git, Formatting, Confidence, Verification, Secrets, Working Directory, Agents, k3s. Use the current runtime instruction file's header name for rules under a header. For rules outside a header, choose the best semantic name from that list.
 
 End with:
 

@@ -1,8 +1,7 @@
 ---
-name: learn
-description: Review conversations or recent work across repositories, extract verified reusable lessons, and update repository-authoritative skills. Use when the user asks to learn from recent work, review the last N days, or improve skills from corrections and commit history.
+name: "learn"
+description: "Review conversations or recent work across repositories, extract verified reusable lessons, and update repository-authoritative skills. Use when the user asks to learn from recent work, review the last N days, or improve skills from corrections and commit history."
 ---
-
 # Learn
 
 Turn verified experience into concise skill guidance. Invocation is approval to

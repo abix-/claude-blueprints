@@ -1,9 +1,6 @@
 ---
-name: timberborn
-description: Timberbot mod DEVELOPMENT. Use when writing C# mod code, Python client code, tests, or docs. Not for playing the game. Use /timberbot for gameplay.
-user-invocable: false
-version: "5.0"
-updated: "2026-03-28"
+name: "timberborn"
+description: "Timberbot mod DEVELOPMENT. Use when writing C# mod code, Python client code, tests, or docs. Not for playing the game. Use /timberbot for gameplay."
 ---
 # Timberbot Development
 
@@ -333,7 +330,7 @@ timberbot.py debug target:get path:$.AllComponents.[20].Overridable
 
 ## Timberbot Skill Maintenance
 
-The `/timberbot` skill (`docs/timberbot.md` in repo, `~/.claude/skills/timberbot/SKILL.md` local) is a **game reference**, not a strategy guide.
+The `timberbot` skill (`docs/timberbot.md` in its repo) is a **game reference**, not a strategy guide.
 
 **Design principles:**
 - Facts only. No behavioral directives (no NEVER/ALWAYS/MUST/CRITICAL). State what IS true, not what to do
@@ -350,16 +347,15 @@ The `/timberbot` skill (`docs/timberbot.md` in repo, `~/.claude/skills/timberbot
 **Faction awareness is critical.** Folktails and Iron Teeth have different buildings, crops, food chains, wellbeing needs, power sources, and population mechanics. Every section that varies by faction must cover both. A wrong prefab name (e.g. "FarmHouse.Folktails" which doesn't exist) wastes an entire game turn.
 
 **When updating the timberbot skill:**
-1. Edit the repo file (`docs/timberbot.md`) first
-2. Copy to local (`~/.claude/skills/timberbot/SKILL.md`), fix frontmatter (remove install blurb, set title to "Timberbot - Game Reference")
-3. Bump version in both
-4. New API endpoints: add to the API quick reference table
-5. New error codes: add to the Error codes table with code prefix and meaning
-6. New game mechanics: add under "Game mechanics" section as facts
-7. Error format changes: keep the Error codes section in sync with `TimberbotJw.Error()` output format
-8. Grep for behavioral language (`NEVER|ALWAYS|MUST|CRITICAL|Do NOT|Should`) and convert to factual statements
+1. Edit the authoritative repo file (`docs/timberbot.md`) first
+2. Update the shared `timberbot` skill in claude-blueprints through a reviewed change
+3. New API endpoints: add to the API quick reference table
+4. New error codes: add to the Error codes table with code prefix and meaning
+5. New game mechanics: add under "Game mechanics" section as facts
+6. Error format changes: keep the Error codes section in sync with `TimberbotJw.Error()` output format
+7. Grep for behavioral language (`NEVER|ALWAYS|MUST|CRITICAL|Do NOT|Should`) and convert to factual statements
 
-**Keep in sync:** repo and local must be identical except frontmatter. After editing repo, always `cp docs/timberbot.md ~/.claude/skills/timberbot/SKILL.md` and fix the header.
+**Keep in sync:** the Timberbot repo is authority. Installed skills are generated copies from claude-blueprints.
 
 ## API Rules
 
@@ -398,8 +394,8 @@ Release: `python release.py` (build + ZIP) or `python release.py --release` (+ t
    - `docs/api-reference.md` (full endpoint docs with request/response)
    - `docs/timberbot.md` (API quick reference table)
    - `docs/features.md` (feature matrix row)
-   - `~/.claude/skills/timberbot/SKILL.md` (gameplay skill API table)
-   - `~/.claude/skills/timberborn/SKILL.md` (dev skill endpoint table)
+   - the `timberbot` skill (gameplay skill API table)
+   - the `timberborn` skill (dev skill endpoint table)
 3. For new response fields (like `flooded` on find_placement), verify the api-reference response table includes them
 4. Check `docs/steam-workshop-description.txt` and `docs/getting-started.md` for stale command examples
 5. Grep for old endpoint names across all docs to catch stragglers

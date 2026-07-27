@@ -1,8 +1,6 @@
 ---
-name: abixio
-description: AbixIO Rust S3-compatible erasure-coded object server. Single binary, two-tier write path (WAL + file), per-object FTT, multi-volume + multi-node, openraft control plane. Lives in [`abix-/abixio`](https://github.com/abix-/abixio) (server) and [`abix-/abixio-ui`](https://github.com/abix-/abixio-ui) (CLI + benchmark harness). Use when working on the core (storage, EC, WAL, write cache, read cache, TLS, S3 protocol, raft, metrics, lifecycle, healing), the abixio-ui CLI / benchmark harness, or the docs.
-version: "3.0"
-updated: "2026-05-11"
+name: "abixio"
+description: "AbixIO Rust S3-compatible erasure-coded object server. Single binary, two-tier write path (WAL + file), per-object FTT, multi-volume + multi-node, openraft control plane. Lives in [`abix-/abixio`](https://github.com/abix-/abixio) (server) and [`abix-/abixio-ui`](https://github.com/abix-/abixio-ui) (CLI + benchmark harness). Use when working on the core (storage, EC, WAL, write cache, read cache, TLS, S3 protocol, raft, metrics, lifecycle, healing), the abixio-ui CLI / benchmark harness, or the docs."
 ---
 # abixio
 
@@ -89,7 +87,7 @@ you are touching:
 | `src/bench/stats.rs`                | BenchResult, Stats, JSON output, baseline compare |
 | `src/bench/l1_disk.rs`              | L1 HTTP ingress (renamed. PUT flow order)   |
 | `src/bench/l2_compute.rs`           | L2 S3 protocol (in-memory pipe, no TCP, isolated) |
-| `src/bench/l3_storage.rs`           | L3 storage pipeline (VolumePool, write-path × cache matrix) |
+| `src/bench/l3_storage.rs`           | L3 storage pipeline (VolumePool, write-path x cache matrix) |
 | `src/bench/l4_http.rs`              | L4 compute (hashing + RS encode)              |
 | `src/bench/l5_s3proto.rs`           | L5 raw disk                                   |
 | `src/bench/l6_s3storage.rs`         | L6 s3s + real VolumePool                      |
@@ -109,8 +107,8 @@ all 19 techniques carried over or improved. Today:
 - **WAL tier (`--write-tier=wal`, default)**: append-only log
   with background materialize to the file tier. Zero-copy hot
   path: `MaterializeRequest` uses `Arc<str>`; worker reads from
-  mmap instead of receiving data copies. WAL append is ~3 µs at
-  4 KB in release (was 26 µs before mmap-write + try_send +
+  mmap instead of receiving data copies. WAL append is ~3 us at
+  4 KB in release (was 26 us before mmap-write + try_send +
   ack-after-append optimizations). Versioned + has heal path
   (kovarex #4 enforced).
 - **File tier (`--write-tier=file`)**: direct
@@ -119,7 +117,7 @@ all 19 techniques carried over or improved. Today:
 
 `WalShardWriter` is **dual-mode**: small PUTs (<= 64 KB) buffer in
 RAM, large PUTs (>= 1 MB) promote to streaming so disk write
-overlaps network receive. 1 GB L7 PUT unsigned went 317 → 449
+overlaps network receive. 1 GB L7 PUT unsigned went 317 -> 449
 MB/s through these refactors.
 
 `encode_and_write` pipelines the large-PUT path via `mpsc(8)` +
@@ -132,7 +130,7 @@ rustfs's mpsc pattern + minio's ring-buffer-per-writer design.
   256 MB, 0 disables). Peer replication enforced per kovarex #3.
 - **Read cache**. DashMap, `--read-cache on/off`. Warmed on
   write so small-object GETs after PUT hit RAM. 4 KB L7 GET p50
-  went 1.5 ms → 807 µs at wal+wc+rc canonical stack (1.86x).
+  went 1.5 ms -> 807 us at wal+wc+rc canonical stack (1.86x).
   Cold GET populate uses `Bytes::from_owner` of the existing
   mmap view (no copy).
 
@@ -142,7 +140,7 @@ rustfs's mpsc pattern + minio's ring-buffer-per-writer design.
 to this; the 8-config ablation matrix is opt-in via explicit
 multi-value flags. Small-object regime (<= 64 KB) flows through
 `wc/rc/WAL`; file tier is the > 64 KB path. Canonical 4 KB L7
-GET: 1.1 ms cold / 861 µs hot. Wins small-object PUT vs RustFS
+GET: 1.1 ms cold / 861 us hot. Wins small-object PUT vs RustFS
 1.9x and MinIO 1.5x.
 
 ### 1+0 fast path
@@ -170,7 +168,7 @@ flag. Documented as a design gap that was closed.
   `/raft/peers`, `/raft/primary`, `/raft/bootstrap`, `/raft/join`,
   `/raft/leave`, `/raft/snapshot`.
 
-`docs/status.md` Consensus bumped 0 → 5/10, Clustering 5 → 6/10.
+`docs/status.md` Consensus bumped 0 -> 5/10, Clustering 5 -> 6/10.
 
 ### Observability
 
@@ -182,7 +180,7 @@ profiling.
 
 ### Graceful shutdown
 
-Drains HTTP → flushes cache → drains pool renames → exits.
+Drains HTTP -> flushes cache -> drains pool renames -> exits.
 
 ### S3 surface
 
@@ -190,7 +188,7 @@ Drains HTTP → flushes cache → drains pool renames → exits.
 (If-Match / If-None-Match / If-Modified-Since /
 If-Unmodified-Since) wired through s3s DTOs; versioning response
 headers wired; multipart, presigned URLs, tagging, bucket policy,
-lifecycle live. The `mc` throughput gap was closed (354 → 1476
+lifecycle live. The `mc` throughput gap was closed (354 -> 1476
 MB/s, 4.2x) by reporting exact `remaining_length` so hyper uses
 `Content-Length` not chunked encoding.
 
@@ -210,7 +208,7 @@ These items from the kovarex review have landed; do not regress:
 ## Build + run
 
 ALWAYS use `k3sc cargo-lock` (the project's cargo wrapper);
-the user's global CLAUDE.md forbids bare `cargo`.
+the applicable global instructions forbid bare `cargo`.
 
 ```bash
 # build (from abixio repo root)
@@ -288,7 +286,7 @@ abixio-ui bench --baseline results.json             # diff vs saved
 | `--baseline`     | path                                | none                    |
 
 Pre-run guards: wipe `--tmp-dir` contents + check free space
-(`GetDiskFreeSpaceExW`); abort if < 20× max-size (floor 4 GB).
+(`GetDiskFreeSpaceExW`); abort if < 20x max-size (floor 4 GB).
 
 ### Fairness rules (must hold)
 

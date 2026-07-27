@@ -1,8 +1,6 @@
 ---
-description: Update docs, changelog, commit, and push after completing feature work.
-disable-model-invocation: true
-allowed-tools: Bash, Read, Edit, Grep, Write, Glob
-version: "1.0"
+name: "done"
+description: "Update docs, changelog, commit, and push after completing feature work."
 ---
 ## Steps
 

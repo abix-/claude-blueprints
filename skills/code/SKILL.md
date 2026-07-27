@@ -1,6 +1,6 @@
 ---
-name: code
-description: Universal development standards across every language. Sourced from patterns recurring in abix- Rust, Go, C#, Python, and TS code. Use when writing any code.
+name: "code"
+description: "Universal development standards across every language. Sourced from patterns recurring in abix- Rust, Go, C#, Python, and TS code. Use when writing any code."
 ---
 # Code
 

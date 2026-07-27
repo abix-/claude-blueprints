@@ -1,8 +1,6 @@
 ---
-description: Build and run Endless (pure Bevy)
-disable-model-invocation: true
-allowed-tools: Bash
-version: "1.1"
+name: "endless"
+description: "Build and run Endless (pure Bevy)"
 ---
 `cargo-lock run` stops any running instance, builds, and runs. All in one command. NEVER run a separate build or stop step.
 

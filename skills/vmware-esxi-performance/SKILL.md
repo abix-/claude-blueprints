@@ -1,11 +1,7 @@
 ---
-name: vmware-esxi-performance
-description: VMware ESXi performance troubleshooting for network and storage issues. Use when troubleshooting vmxnet3 TX hangs, NETDEV WATCHDOG errors, ring buffer exhaustion, TSO issues, high storage latency (KAVG/DAVG/GAVG), queue depth tuning, DSNRO configuration, iSCSI performance, PVSCSI optimization, or CPU overcommit symptoms. Covers both guest OS and ESXi host-level diagnostics.
-user-invocable: false
-version: "1.2"
-updated: "2026-01-11"
+name: "vmware-esxi-performance"
+description: "VMware ESXi performance troubleshooting for network and storage issues. Use when troubleshooting vmxnet3 TX hangs, NETDEV WATCHDOG errors, ring buffer exhaustion, TSO issues, high storage latency (KAVG/DAVG/GAVG), queue depth tuning, DSNRO configuration, iSCSI performance, PVSCSI optimization, or CPU overcommit symptoms. Covers both guest OS and ESXi host-level diagnostics."
 ---
-
 # VMware ESXi Performance Troubleshooting
 
 ## Quick Diagnostic Flow
@@ -124,20 +120,20 @@ esxcli network nic stats get -n vmnicX
 
 ```
 VM issues I/O
-    ↓
+    v
 Guest OS disk scheduler
-    ↓
+    v
 Virtual SCSI adapter (PVSCSI/LSI)
-    ↓
-VMkernel I/O scheduler ← KAVG measured here (includes QAVG)
-    ↓
-Device queue (DQLEN)   ← QAVG measured here
-    ↓
+    v
+VMkernel I/O scheduler <- KAVG measured here (includes QAVG)
+    v
+Device queue (DQLEN)   <- QAVG measured here
+    v
 HBA/iSCSI initiator
-    ↓
+    v
 Network/Fabric
-    ↓
-Storage Array          ← DAVG measured here
+    v
+Storage Array          <- DAVG measured here
 ```
 
 **GAVG = KAVG + DAVG** (what the guest actually experiences)
@@ -231,15 +227,15 @@ If you have multiple VMDKs on the same datastore, each VMDK counts as a "competi
 
 Even on dedicated hosts, software iSCSI threads or storage driver processing can get delayed.
 
-**Check:** `esxtop` → press `c` → look at %RDY for VMkernel threads.
+**Check:** `esxtop` -> press `c` -> look at %RDY for VMkernel threads.
 
 ## Diagnosing High QAVG and KAVG (Equal)
 
 Queue depth is saturated. Commands are waiting in line.
 
 **Check in esxtop:**
-- ACTV = DQLEN → queue is full
-- QUED > 0 → commands waiting
+- ACTV = DQLEN -> queue is full
+- QUED > 0 -> commands waiting
 
 **Fixes:**
 1. Increase device queue depth (HBA-dependent)
@@ -287,32 +283,32 @@ esxtop -b -d 2 -n 30 > /tmp/esxtop_capture.csv
 ## Queue Depth Stack
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ Guest VM                                                        │
-│   PVSCSI queue: 64 default, 254 max per device                 │
-│   PVSCSI adapter: 256 default, 1024 max total                  │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ VMkernel                                                        │
-│   ┌─────────────────────┐      ┌──────────────────────┐        │
-│   │ Scheduler Queue     │      │ Device Queue         │        │
-│   │ (DSNRO throttle)    │ ──→  │ (DQLEN)             │        │
-│   │                     │      │                      │        │
-│   │ Per-world limit     │      │ Per-device limit     │        │
-│   │ Default: 32         │      │ HBA-dependent        │        │
-│   └─────────────────────┘      └──────────────────────┘        │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ HBA / iSCSI Initiator                                           │
-│   Queue depth: 32-255 depending on vendor                       │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ Storage Array                                                   │
-│   Port queue depth: 1600-2048 typical                          │
-└─────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------+
+| Guest VM                                                        |
+|   PVSCSI queue: 64 default, 254 max per device                 |
+|   PVSCSI adapter: 256 default, 1024 max total                  |
++-----------------------------------------------------------------+
+                              v
++-----------------------------------------------------------------+
+| VMkernel                                                        |
+|   +---------------------+      +----------------------+        |
+|   | Scheduler Queue     |      | Device Queue         |        |
+|   | (DSNRO throttle)    | --->  | (DQLEN)             |        |
+|   |                     |      |                      |        |
+|   | Per-world limit     |      | Per-device limit     |        |
+|   | Default: 32         |      | HBA-dependent        |        |
+|   +---------------------+      +----------------------+        |
++-----------------------------------------------------------------+
+                              v
++-----------------------------------------------------------------+
+| HBA / iSCSI Initiator                                           |
+|   Queue depth: 32-255 depending on vendor                       |
++-----------------------------------------------------------------+
+                              v
++-----------------------------------------------------------------+
+| Storage Array                                                   |
+|   Port queue depth: 1600-2048 typical                          |
++-----------------------------------------------------------------+
 ```
 
 ## DSNRO (Disk.SchedNumReqOutstanding)
@@ -402,9 +398,9 @@ esxcli system module parameters set -m qlnativefc -p "ql2xmaxqdepth=128"
 
 ```
 Datastore A
-├── VM1 (1 VMDK)  ← World 1
-├── VM2 (1 VMDK)  ← World 2
-└── VM3 (1 VMDK)  ← World 3
++-- VM1 (1 VMDK)  <- World 1
++-- VM2 (1 VMDK)  <- World 2
++-- VM3 (1 VMDK)  <- World 3
 
 DSNRO applies: Each VM limited to 32 outstanding I/Os
 ```
@@ -413,22 +409,22 @@ DSNRO applies: Each VM limited to 32 outstanding I/Os
 
 ```
 Datastore A
-└── VM1
-    ├── disk1.vmdk  ← World 1
-    ├── disk2.vmdk  ← World 2
-    ├── disk3.vmdk  ← World 3
-    └── disk4.vmdk  ← World 4
++-- VM1
+    +-- disk1.vmdk  <- World 1
+    +-- disk2.vmdk  <- World 2
+    +-- disk3.vmdk  <- World 3
+    +-- disk4.vmdk  <- World 4
 
 DSNRO applies: Each VMDK limited to 32 outstanding I/Os
-Total VM I/O capped at 4 × 32 = 128, but per-disk only 32
+Total VM I/O capped at 4 x 32 = 128, but per-disk only 32
 ```
 
 ### Scenario 3: Single VM, Single VMDK
 
 ```
 Datastore A
-└── VM1
-    └── disk1.vmdk  ← Only world
++-- VM1
+    +-- disk1.vmdk  <- Only world
 
 DSNRO does NOT apply: Limited only by device queue depth
 ```
@@ -437,8 +433,8 @@ DSNRO does NOT apply: Limited only by device queue depth
 
 ```
 Datastore A (shared by 6 hosts)
-└── VM1 on Host1
-    └── disk1.vmdk  ← Only active world
++-- VM1 on Host1
+    +-- disk1.vmdk  <- Only active world
 
 DSNRO still applies: ESXi sees "Is Shared Clusterwide: true"
 Defensive throttling even though other hosts are idle
@@ -470,13 +466,13 @@ Always check vendor best practices documentation.
 
 Using Little's Law:
 ```
-Queue Depth = IOPS × Latency (seconds)
+Queue Depth = IOPS x Latency (seconds)
 ```
 
 Example:
 - Workload: 5000 IOPS
 - Array latency: 2ms (0.002s)
-- Required queue: 5000 × 0.002 = 10
+- Required queue: 5000 x 0.002 = 10
 
 But for bursts, multiply by 3-5x headroom: 30-50 queue depth needed.
 
@@ -556,7 +552,7 @@ Then reboot.
 ## Ring Pages Explained
 
 Ring pages control the PVSCSI adapter's command ring buffer:
-- Default: 8 pages × 4KB = 32KB
+- Default: 8 pages x 4KB = 32KB
 - Each I/O entry: 128 bytes
 - Default capacity: 32KB / 128B = 256 entries
 - With 32 pages: 128KB / 128B = 1024 entries
@@ -609,7 +605,7 @@ Maximum 4 PVSCSI controllers per VM, 64 devices per controller.
 
 In vSphere:
 1. Edit VM settings
-2. Add New Device → SCSI Controller
+2. Add New Device -> SCSI Controller
 3. Select PVSCSI type
 4. Attach disks to new controller
 

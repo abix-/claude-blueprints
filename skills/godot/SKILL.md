@@ -1,9 +1,6 @@
 ---
-name: godot
-description: Godot 4.x game development patterns for colony/simulation games. Use when writing GDScript, optimizing NPC systems, implementing state machines, or scaling to thousands of entities.
-user-invocable: false
-version: "1.1"
-updated: "2026-01-20"
+name: "godot"
+description: "Godot 4.x game development patterns for colony/simulation games. Use when writing GDScript, optimizing NPC systems, implementing state machines, or scaling to thousands of entities."
 ---
 # Godot Development
 
@@ -24,10 +21,10 @@ Colony/farm simulation in Godot 4.x with:
 GDScript does NOT support Python f-strings. Use `%` operator:
 
 ```gdscript
-# ❌ WRONG - Python f-strings don't work
+# [x] WRONG - Python f-strings don't work
 print(f"Value is {value:.2f}")
 
-# ✅ CORRECT - Use % operator with array
+# [ok] CORRECT - Use % operator with array
 print("Value is %.2f" % value)
 print("Multiple values: %d, %.2f, %s" % [int_val, float_val, string_val])
 ```
@@ -35,17 +32,17 @@ print("Multiple values: %d, %.2f, %s" % [int_val, float_val, string_val])
 ### Modulo Requires Integers
 
 ```gdscript
-# ❌ WRONG - float % int causes error
+# [x] WRONG - float % int causes error
 if minutes_eating % 10 == 0:
 
-# ✅ CORRECT - convert to int first
+# [ok] CORRECT - convert to int first
 if int(minutes_eating) % 10 == 0:
 ```
 
 ### Type Conversions
 
 ```gdscript
-int()    # Truncates decimals (15.7 → 15)
+int()    # Truncates decimals (15.7 -> 15)
 float()  # Converts to decimal
 str()    # Converts to string
 ```
@@ -251,19 +248,19 @@ time_manager.minutes  # Current minutes (0-59)
 
 ```
 OOP (scattered in memory):
-┌────────────────────────────────────────────────────────────────┐
-│ [Farmer0 data...] [garbage] [Farmer1 data...] [other stuff]   │
-│ [garbage] [Farmer2 data...] [unrelated] [Farmer3 data...]     │
-│ ... CPU cache misses everywhere ...                            │
-└────────────────────────────────────────────────────────────────┘
++----------------------------------------------------------------+
+| [Farmer0 data...] [garbage] [Farmer1 data...] [other stuff]   |
+| [garbage] [Farmer2 data...] [unrelated] [Farmer3 data...]     |
+| ... CPU cache misses everywhere ...                            |
++----------------------------------------------------------------+
 
 SoA (contiguous in memory):
-┌────────────────────────────────────────────────────────────────┐
-│ positions: [pos0][pos1][pos2][pos3][pos4][pos5]... (contiguous)│
-│ food:      [f0  ][f1  ][f2  ][f3  ][f4  ][f5  ]... (contiguous)│
-│ states:    [s0  ][s1  ][s2  ][s3  ][s4  ][s5  ]... (contiguous)│
-│ ... CPU cache loves this ...                                   │
-└────────────────────────────────────────────────────────────────┘
++----------------------------------------------------------------+
+| positions: [pos0][pos1][pos2][pos3][pos4][pos5]... (contiguous)|
+| food:      [f0  ][f1  ][f2  ][f3  ][f4  ][f5  ]... (contiguous)|
+| states:    [s0  ][s1  ][s2  ][s3  ][s4  ][s5  ]... (contiguous)|
+| ... CPU cache loves this ...                                   |
++----------------------------------------------------------------+
 ```
 
 ### Structure of Arrays (SoA) Layout
@@ -414,12 +411,12 @@ func _physics_process(delta: float):
 ### 4. Event-Driven (Not Polling)
 
 ```gdscript
-# ❌ BAD: Check hunger every frame
+# [x] BAD: Check hunger every frame
 func _process(delta):
     if food < hungry_threshold:
         go_eat()
 
-# ✅ GOOD: React only when food changes
+# [ok] GOOD: React only when food changes
 signal food_depleted
 
 func consume_food(amount: float):
@@ -476,7 +473,7 @@ func get_path(from: Vector2, to: Vector2) -> PackedVector2Array:
 ### Hierarchical Pathfinding (Factorio-inspired)
 
 For large maps:
-- **Coarse path**: Region → Region → Region
+- **Coarse path**: Region -> Region -> Region
 - **Fine path**: Only compute within current region
 - **Negative path cache**: Remember unreachable destinations
 - **Unit groups**: NPCs pathfind as groups, not individuals
@@ -623,7 +620,7 @@ func _expensive_operation():
     # ... do work ...
     var elapsed = Time.get_ticks_usec() - start
     if elapsed > 1000:  # > 1ms
-        print("WARNING: Expensive operation took %d μs" % elapsed)
+        print("WARNING: Expensive operation took %d us" % elapsed)
 
 # Per-system timing
 func _process(delta):
@@ -638,23 +635,23 @@ func _process(delta):
 ## Architecture Overview (10K Target)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        GAME MANAGER                              │
-│  - Fixed timestep simulation (20 ticks/sec)                     │
-│  - Rendering interpolates between ticks                         │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-        ┌───────────────────────┼───────────────────────┐
-        ▼                       ▼                       ▼
-┌───────────────┐    ┌───────────────────┐    ┌─────────────────┐
-│  NPC SYSTEM   │    │  WORLD SYSTEM     │    │  RENDER SYSTEM  │
-│  (GDScript/   │    │  (GDScript OK)    │    │  (MultiMesh)    │
-│   C++/GDExt)  │    │                   │    │                 │
-│               │    │                   │    │                 │
-│ - State data  │    │ - Spatial grid    │    │ - Batched draws │
-│ - Bucket exec │    │ - Resource nodes  │    │ - LOD states    │
-│ - Pathfinding │    │ - Buildings       │    │ - Interpolation │
-└───────────────┘    └───────────────────┘    └─────────────────┘
++-----------------------------------------------------------------+
+|                        GAME MANAGER                              |
+|  - Fixed timestep simulation (20 ticks/sec)                     |
+|  - Rendering interpolates between ticks                         |
++-----------------------------------------------------------------+
+                                |
+        +-----------------------+-----------------------+
+        v                       v                       v
++---------------+    +-------------------+    +-----------------+
+|  NPC SYSTEM   |    |  WORLD SYSTEM     |    |  RENDER SYSTEM  |
+|  (GDScript/   |    |  (GDScript OK)    |    |  (MultiMesh)    |
+|   C++/GDExt)  |    |                   |    |                 |
+|               |    |                   |    |                 |
+| - State data  |    | - Spatial grid    |    | - Batched draws |
+| - Bucket exec |    | - Resource nodes  |    | - LOD states    |
+| - Pathfinding |    | - Buildings       |    | - Interpolation |
++---------------+    +-------------------+    +-----------------+
 ```
 
 ### System Separation
@@ -690,20 +687,20 @@ Architecture includes:
 ## Frame Time Budget (16.67ms for 60 FPS)
 
 ```
-Simulation tick (amortized): ████████░░░░░░░░  8ms
-  - NPC updates (500/tick):  ████░░░░░░░░░░░░  4ms
-  - Pathfinding (10 req):    ██░░░░░░░░░░░░░░  2ms
-  - World updates:           █░░░░░░░░░░░░░░░  1ms
-  - Spatial grid maint:      █░░░░░░░░░░░░░░░  1ms
+Simulation tick (amortized): ########........  8ms
+  - NPC updates (500/tick):  ####............  4ms
+  - Pathfinding (10 req):    ##..............  2ms
+  - World updates:           #...............  1ms
+  - Spatial grid maint:      #...............  1ms
 
-Rendering:                   ██████░░░░░░░░░░  6ms
-  - MultiMesh update:        ███░░░░░░░░░░░░░  3ms
-  - Interpolation:           ██░░░░░░░░░░░░░░  2ms
-  - Draw calls:              █░░░░░░░░░░░░░░░  1ms
+Rendering:                   ######..........  6ms
+  - MultiMesh update:        ###.............  3ms
+  - Interpolation:           ##..............  2ms
+  - Draw calls:              #...............  1ms
 
-Headroom:                    ██░░░░░░░░░░░░░░  2.67ms
+Headroom:                    ##..............  2.67ms
 
-TOTAL:                       ████████████████  16.67ms ✓
+TOTAL:                       ################  16.67ms [ok]
 ```
 
 ---
@@ -714,7 +711,7 @@ TOTAL:                       ████████████████  1
 |--------------------|---------------------|
 | Inserter sleep | Disable `_process()` for sleeping/idle farmers |
 | Belt segments | Group crops/items by field, update per-field not per-item |
-| Path caching | Cache farmer routes home↔field |
+| Path caching | Cache farmer routes home<->field |
 | Event-driven wake | Signal when food runs low, don't poll |
 | Bucket updates | Spread NPCs across frames |
 | Determinism | Fixed timestep, seeded RNG for saves/replay |
@@ -738,10 +735,10 @@ GDScript maxes out around 5,000-7,000 NPCs at 60 FPS. For 10K at 60 FPS, port ho
 ### Enum Access
 Access enums via class name, not instance:
 ```gdscript
-# ❌ WRONG
+# [x] WRONG
 npc_manager.jobs[i] != npc_manager.Job.FARMER
 
-# ✅ CORRECT
+# [ok] CORRECT
 npc_manager.jobs[i] != NPCState.Job.FARMER
 ```
 

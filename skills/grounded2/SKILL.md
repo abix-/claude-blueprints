@@ -1,9 +1,6 @@
 ---
-name: grounded2
-description: Modding Grounded 2 (Obsidian survival, UE5 + UE4SS). Authoritative on Grounded 2 game specifics: exes, image-relative offsets, ASurvivalCharacter/UHealthComponent field layouts, three damage paths (combat / fall / env), Table_StatusEffects, deploy folder, the mod inventory. Mod code lives in [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods) (the `grounded2-rpg` crate is the current shipped mod). For ueforge framework doctrine (composition model, k8s pattern, hot reload, discovery), read the `ueforge` skill. Not for playing the game.
-user-invocable: false
-version: "5.0"
-updated: "2026-05-11"
+name: "grounded2"
+description: "Modding Grounded 2 (Obsidian survival, UE5 + UE4SS). Authoritative on Grounded 2 game specifics: exes, image-relative offsets, ASurvivalCharacter/UHealthComponent field layouts, three damage paths (combat / fall / env), Table_StatusEffects, deploy folder, the mod inventory. Mod code lives in [`abix-/Grounded2Mods`](https://github.com/abix-/Grounded2Mods) (the `grounded2-rpg` crate is the current shipped mod). For ueforge framework doctrine (composition model, k8s pattern, hot reload, discovery), read the `ueforge` skill. Not for playing the game."
 ---
 # Grounded 2: modding
 
@@ -181,7 +178,7 @@ every damage skill.
 
 `EStatusEffectValueType` per stat (Grounded 2 specifics):
 - `mul` (vanilla 1.0): `FallDamage`, `DamageReduction`,
-  `AttackDamage`. Contribution = `(1 ± bonus)`.
+  `AttackDamage`. Contribution = `(1 +/- bonus)`.
 - `add` (vanilla 0.0): `LifeSteal`, `CriticalHitChance`,
   `CriticalDamage`, `ReflectDamage`, `MaxHealth`,
   `DamageReductionMultiplier`. Contribution = scaled bonus.

@@ -1,9 +1,7 @@
 ---
-name: endless-cli
-description: endless-cli BRP client for the Endless game. Use when interacting with a running game instance, inspecting entities, placing buildings, checking perf, or running BRP tests.
-version: "1.0"
+name: "endless-cli"
+description: "endless-cli BRP client for the Endless game. Use when interacting with a running game instance, inspecting entities, placing buildings, checking perf, or running BRP tests."
 ---
-
 # endless-cli
 
 Go binary wrapping Bevy Remote Protocol (JSON-RPC on `localhost:15702`).

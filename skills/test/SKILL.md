@@ -1,8 +1,6 @@
 ---
-description: Build, launch with --autostart, verify via endless-cli, write findings doc
-disable-model-invocation: true
-allowed-tools: Bash, Read, Write, Grep, Glob
-version: "1.1"
+name: "test"
+description: "Build, launch with --autostart, verify via endless-cli, write findings doc"
 ---
 Build and verify the Endless game through endless-cli (BRP wrapper, in PATH).
 

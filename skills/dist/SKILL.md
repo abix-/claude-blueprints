@@ -1,8 +1,6 @@
 ---
-description: Build release and package Endless for distribution
-disable-model-invocation: true
-allowed-tools: Bash
-version: "1.0"
+name: "dist"
+description: "Build release and package Endless for distribution"
 ---
 Build a release binary and package it with assets/shaders into a zip.
 

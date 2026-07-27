@@ -1,9 +1,6 @@
 ---
-name: ansible
-description: Ansible standards for playbooks, roles, and inventories. Canonical best-practices (the user has no original Ansible repos to mine; awx, awx-operator, ascender-install are forks with no authored content).
-user-invocable: false
-version: "2.0"
-updated: "2026-05-11"
+name: "ansible"
+description: "Ansible standards for playbooks, roles, and inventories. Canonical best-practices (the user has no original Ansible repos to mine; awx, awx-operator, ascender-install are forks with no authored content)."
 ---
 # Ansible
 
@@ -54,12 +51,12 @@ For YAML formatting, read the `yaml` skill.
 
 ## Variables
 
-- `defaults/main.yml` -- user-overridable defaults. Anything the
+- `defaults/main.yml`. User-overridable defaults. Anything the
   caller might want to change goes here.
-- `vars/main.yml` -- internal constants the caller should not
+- `vars/main.yml`. Internal constants the caller should not
   change. Higher precedence than `defaults`.
-- `group_vars/<group>.yml` -- environment-specific overrides.
-- `host_vars/<host>.yml` -- per-host overrides. Last resort.
+- `group_vars/<group>.yml`. Environment-specific overrides.
+- `host_vars/<host>.yml`. Per-host overrides. Last resort.
 - Never set vars at the playbook level for production. Inventory or
   role; nothing in between.
 - Var names: lowercase snake_case. Role-scoped vars prefixed with the
@@ -108,7 +105,7 @@ For YAML formatting, read the `yaml` skill.
 - `notify:` triggers handlers; one handler per logical action.
 - Modes as **quoted strings** (`"0644"`), not octal numbers. YAML's
   number parsing strips the leading zero.
-- Booleans: `true` / `false`. Never `yes` / `no` / `True` / `False` --
+- Booleans: `true` / `false`. Never `yes` / `no` / `True` / `False`.
   YAML 1.1 ambiguity. ansible-lint will flag the others.
 
 ## Idempotency

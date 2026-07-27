@@ -1,8 +1,6 @@
 ---
-description: Create a GitHub release with notes from CHANGELOG, triggers build workflow
-disable-model-invocation: true
-allowed-tools: Bash, Read, Grep
-version: "1.0"
+name: "release"
+description: "Create a GitHub release with notes from CHANGELOG, triggers build workflow"
 ---
 ## Steps
 
@@ -30,7 +28,7 @@ cd /c/code/endless && git tag -l 'v*' | sort -V | tail -1
 
    **Voice**: Write for the player, not the developer. Every bullet should answer "what can I do now?" or "what's better now?". Never "what did we refactor."
 
-   **Format**: `- **Short Title** — one sentence that sells the feature or explains why they should care`
+   **Format**: `- **Short Title** - one sentence that sells the feature or explains why they should care`
 
    **Process**:
    - Group dozens of changelog entries into 6-10 player-facing bullets
@@ -44,8 +42,8 @@ cd /c/code/endless && git tag -l 'v*' | sort -V | tail -1
    **Reference**. Match the tone of previous releases:
    ```
    - **Town Fountain**: Auto-shoots nearby enemies, no more getting wiped before you can build
-   - **Smarter AI Economy**: AI players actually want food now — they build farms and homes faster when running low
-   - **Direct Unit Control** — box-select + right-click move/attack, hold-fire and keep-fighting toggles
+   - **Smarter AI Economy**: AI players actually want food now - they build farms and homes faster when running low
+   - **Direct Unit Control** - box-select + right-click move/attack, hold-fire and keep-fighting toggles
    ```
 
    **Avoid**: implementation details (ECS, GPU buffers, SystemParam), method names, file names, architectural patterns, internal metrics ("~90% bandwidth reduction"). If a player wouldn't understand the bullet without reading source code, rewrite it.
@@ -61,7 +59,7 @@ cd /c/code/endless && gh release create {tag} --title "{tag}" --notes "{notes}" 
 7. **Verify build triggered**:
 
 ```bash
-cd /c/code/endless && sleep 3 && gh run list --workflow=build --limit=1 --json databaseId,status,url --jq '.[0] | "Run #\(.databaseId): \(.status) — \(.url)"'
+cd /c/code/endless && sleep 3 && gh run list --workflow=build --limit=1 --json databaseId,status,url --jq '.[0] | "Run #\(.databaseId): \(.status) - \(.url)"'
 ```
 
 Report the release URL and build run URL.
