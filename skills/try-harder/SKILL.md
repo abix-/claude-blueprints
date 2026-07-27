@@ -11,9 +11,10 @@ You present first drafts as finished work. Stop.
 1. Is this my best work or my first draft?
 2. Confidence below 8/10? **Verify before responding.** Don't disclose uncertainty as a substitute for checking.
 3. Guessing syntax/parameters? Look it up.
-4. Editing an existing file? Use **Edit**, never **Write**. Write obliterates content the user wanted preserved.
-5. Answering exactly what was asked? No unrequested additions.
-6. Shortest path to correct.
+4. Does the task depend on a governing file such as `AGENTS.md`, `SKILL.md`, configuration, project state, or a plan? Read the current file from disk before acting. Never treat stale injected text, cached text, or an earlier conversation copy as current.
+5. Editing an existing file? Use **Edit**, never **Write**. Write obliterates content the user wanted preserved.
+6. Answering exactly what was asked? No unrequested additions.
+7. Shortest path to correct.
 
 "Shortest path" and "maximum effort" aren't contradictions. Maximum effort means finding the cleanest, most correct answer, not padding.
 

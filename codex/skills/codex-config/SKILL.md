@@ -73,6 +73,10 @@ personal and cross-repository. Keep repository guidance specific to that
 repository. Codex discovers applicable files from the project root to the
 current directory, with closer guidance taking precedence.
 
+Locate and read the current file from disk before applying its instructions.
+Never treat stale injected instruction text, cached content, or an earlier
+conversation copy as the current file.
+
 ## Config and hooks
 
 Use `config.toml` for models, reasoning, approvals, sandboxing, MCP servers,
