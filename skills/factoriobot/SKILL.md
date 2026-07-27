@@ -14,6 +14,12 @@ in this repository, is explicit approval to recover the current state and
 execute the highest-priority documented work. Do not answer with a menu, plan
 only, status only, or a request for routine confirmation.
 
+The controlling goal is to reach the Factorio endgame with 100% automation.
+Every intermediate acceptance condition, authority change, and work priority
+must produce measurable progress toward that goal. Engineering, tests, builds,
+commits, skills, and documentation support gameplay progress. They never
+replace gameplay progress and never count as gameplay milestones.
+
 Continue across coherent authority batches until the current documented
 acceptance objective is proved or a real blocker requires the operator. Do not
 shrink the goal to what fits one response. A context compaction, interrupted
@@ -129,7 +135,7 @@ Objective: <current documented acceptance objective>
 Priority basis: <newest explicit operator direction, current consolidation queue entry, or authority row, plus why it is next>
 Authority score: <number and name>, <current> -> <target>
 Verified progress: <real behavior or authority improvement, with Code-verified or Live-verified status>
-Milestones reached: <gameplay and implementation milestones since start>
+Milestones reached: <actual gameplay progress since start, or none>
 Checks: <focused tests, broader tests, Lua, and build status>
 Tested build: <commit, installed binary version, and relevant dirty-state status>
 Active attempt: <attempt id, speed, elapsed time, latest milestone or partial playbook progress>
@@ -159,9 +165,15 @@ status file.
 
 Verified progress means the factory behavior, authority score, bypass count,
 test gate, build, or acceptance condition changed. File counts, command counts,
-elapsed agent time, token use, and commit counts are not progress. Milestones
-reached must include partial playbook progress when it is the best available
-evidence, while clearly distinguishing partial from complete.
+elapsed agent time, token use, and commit counts are not progress.
+Milestones reached contains only actual gameplay progress.
+Code, tests, builds, commits, skills, and docs are not milestones.
+Report those under Verified progress and Checks. Actual gameplay progress
+includes a completed playbook, a functional building or factory stage,
+completed research, completed intended transport work, the required coal seed,
+the Copper Lab objective, or a passed gameplay efficiency limit. Put partial
+playbook state under Active attempt unless it changed the game state. Write
+`none` when no gameplay milestone was reached.
 
 ### Work priority
 
@@ -185,8 +197,12 @@ If the current consolidation queue and current evidence conflict, update the aut
 ### Progress stall guard
 
 At every status report, compare the current authority score, known bypass count,
-red proofs, passing checks, milestones, and measured efficiency with the prior
-report. No measurable progress for thirty minutes of active work means the
+red proofs, passing checks, gameplay milestones, acceptance conditions, and
+measured efficiency with the prior report. Engineering progress does not reset
+a gameplay stall by itself. If gameplay milestones and acceptance measurements
+do not move for thirty minutes of active work, assess whether the current
+authority batch is still the shortest path to gameplay progress.
+No measurable engineering or gameplay progress for thirty minutes means the
 current tactic has stalled.
 
 When stalled:

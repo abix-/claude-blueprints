@@ -63,6 +63,14 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("prototype filter methods require an array of typed filter tables", text)
         self.assertIn('get_entity_filtered{{filter="type",type="mining-drill"}}', text)
 
+    def test_factoriobot_reports_only_gameplay_milestones(self):
+        text = skill("factoriobot").lower()
+        self.assertIn("milestones reached contains only actual gameplay progress", text)
+        self.assertIn("code, tests, builds, commits, skills, and docs are not milestones", text)
+        self.assertIn("verified progress and checks", text)
+        self.assertIn("reach the factorio endgame with 100% automation", text)
+        self.assertIn("measurable progress toward that goal", text)
+
 
 if __name__ == "__main__":
     unittest.main()
