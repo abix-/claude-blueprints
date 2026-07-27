@@ -253,6 +253,49 @@ Never add changelog sections to individual design docs. Move durable shipped
 history into the repo-wide changelog, keep current design statements and their
 proof state in the owning design doc, and keep unfinished work in `docs/todo.md`.
 
+### Documentation contract
+
+Write one canonical design statement in one owning design doc.
+Never repeat a design statement in another doc.
+Refer to the owning statement by file and heading when another subject depends on it.
+
+Each owning design doc uses this table as its normative content:
+
+```text
+| Design statement | Committed proof | State |
+|---|---|---|
+| <one exact requirement> | `<exact committed test name>` | <proof state> |
+```
+
+Every design statement names its committed proof.
+Every design statement records its current proof state.
+Use only `RED`, `CODE-VERIFIED`, `LIVE-VERIFIED`, or `PROCESS`.
+
+- `RED`: the committed proof currently fails or the required implementation is
+  incomplete.
+- `CODE-VERIFIED`: the exact committed test passes against the implementation.
+- `LIVE-VERIFIED`: the committed test passes and recorded gameplay evidence
+  proves the real behavior.
+- `PROCESS`: software cannot decide the statement. Name the exact committed
+  review check and explain why automation cannot decide it.
+
+Use the exact committed test name. A documentation or citation check does not
+prove factory behavior. The proof must fail when the implementation violates
+the design statement. Prefer measured gameplay evidence, then the real catalog,
+roles, playbooks, scheduler, generated Lua, and implementation behavior. Source
+text proves only a forbidden implementation is absent.
+
+Keep only the rationale needed to understand the owning design statement.
+Remove duplicated design prose, dated implementation history, completed task lists, and status narration from design docs.
+Put dated shipped history only in the one repo-wide `docs/changelog.md`.
+Unfinished implementation and failed proof belong in `docs/todo.md`.
+Current capability and authority summaries stay in their existing owning status and authority docs without restating the full design.
+
+Write and commit the failing proof before implementation.
+Update proof state only from current test or gameplay evidence.
+When a design statement changes, change its committed proof in the same documentation batch before changing the implementation.
+Never mark a statement `CODE-VERIFIED` because code was written, or `LIVE-VERIFIED` because a unit test passed.
+
 ## Closing open issues (LOCKED)
 
 Open issues live in `docs/todo.md` keyed by **stable short titles** (no serial numbers).
