@@ -70,6 +70,10 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("verified progress and checks", text)
         self.assertIn("reach the factorio endgame with 100% automation", text)
         self.assertIn("measurable progress toward that goal", text)
+        self.assertIn("endgame automation progress:", text)
+        self.assertIn("completed and automated", text)
+        self.assertIn("prototype-derived route to the space age endgame", text)
+        self.assertIn("player help does not count as automated", text)
 
 
 if __name__ == "__main__":

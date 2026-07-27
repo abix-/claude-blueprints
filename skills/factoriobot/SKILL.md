@@ -132,6 +132,7 @@ Use this exact shape:
 ```text
 Unattended status report
 Objective: <current documented acceptance objective>
+Endgame automation progress: <completed and automated capabilities>/<total capabilities on the prototype-derived endgame route>, <percent>, <evidence>
 Priority basis: <newest explicit operator direction, current consolidation queue entry, or authority row, plus why it is next>
 Authority score: <number and name>, <current> -> <target>
 Verified progress: <real behavior or authority improvement, with Code-verified or Live-verified status>
@@ -174,6 +175,15 @@ completed research, completed intended transport work, the required coal seed,
 the Copper Lab objective, or a passed gameplay efficiency limit. Put partial
 playbook state under Active attempt unless it changed the game state. Write
 `none` when no gameplay milestone was reached.
+
+Endgame automation progress uses the complete prototype-derived route to the Space Age endgame as its denominator.
+Count a required progression capability only when gameplay evidence proves the
+bot can produce, move, build, research, or operate it unattended and verify its
+completion. Player help does not count as automated. Recompute the denominator
+when live prototype data or the endgame route changes.
+Report the completed and automated count, total count, percentage, and newest evidence.
+Never invent weights, credit code that has not run, or increase the percentage
+from engineering activity alone.
 
 ### Work priority
 
