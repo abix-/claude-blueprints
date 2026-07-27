@@ -248,6 +248,11 @@ fix, test, commit, runner termination, or milestone passed.
 
 **Docs:** repo `README.md` is the index. **one authoritative doc per subject**, each with an `**Authoritative for:**` line. Before framework work (modules, roles, playbooks, runs) -> `docs/framework.md`. Before brain work (RCA, selection, interrupts, lanes) -> `docs/brain.md`. Before body work (per-tick control, motion, reach) -> `docs/body.md`. Before efficiency work (value/cost ranking, tuning, waste) -> `docs/efficiency.md`. Before construction work (blueprints, stages, main bus) -> `docs/construction.md`. Before locked product rules / six loops / strategy -> `docs/design.md`. Before any player-facing words -> `docs/terminology.md`. Before DRY/ownership work -> `docs/authority.md`. Before brain-to-game transport / latency / **UDP vs RCON** -> `docs/transport-latency.md` (locked split + measure before changing pipes). Before fixing a live finding -> **`docs/todo.md`** (open issues: severity + recommended fix). Do not invent a parallel doc.
 
+The repository has one repo-wide `docs/changelog.md` for dated shipped history.
+Never add changelog sections to individual design docs. Move durable shipped
+history into the repo-wide changelog, keep current design statements and their
+proof state in the owning design doc, and keep unfinished work in `docs/todo.md`.
+
 ## Closing open issues (LOCKED)
 
 Open issues live in `docs/todo.md` keyed by **stable short titles** (no serial numbers).
