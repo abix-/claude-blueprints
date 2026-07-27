@@ -1,0 +1,4 @@
+interface:
+  display_name: "Factoriobot"
+  short_description: "Run factoriobot authority work unattended"
+  default_prompt: "Use $factoriobot to recover the current repository state and continue the highest-priority documented authority work unattended."

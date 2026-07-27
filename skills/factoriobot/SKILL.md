@@ -1,10 +1,137 @@
 ---
 name: "factoriobot"
-description: "factoriobot development and operation. Use when writing factoriobot Rust code, driving its CLI against a live Factorio game, or extending its monitors. Not for playing Factorio by hand."
+description: "Use when developing or operating factoriobot, continuing interrupted factoriobot work, invoking the skill by itself, saying go or continue, driving its Windows CLI against Factorio, reviewing attempts, or running the repository's unattended authority work. Not for playing Factorio by hand."
 ---
 # Factoriobot
 
 AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Factorio 2.x (Space Age) game. Repo: [abix-/factoriobot](https://github.com/abix-/factoriobot) (private).
+
+## Bare invocation (LOCKED)
+
+Bare invocation starts unattended work. Invoking `factoriobot` or
+`$factoriobot` without another task, or saying `go` or `continue` while working
+in this repository, is explicit approval to recover the current state and
+execute the highest-priority documented work. Do not answer with a menu, plan
+only, status only, or a request for routine confirmation.
+
+Continue across coherent authority batches until the current documented
+acceptance objective is proved or a real blocker requires the operator. Do not
+shrink the goal to what fits one response. A context compaction, interrupted
+turn, failed harmless command, completed commit, or completed test is not a
+stopping point.
+
+### Recover current state after a crash or interruption
+
+Read current state from disk before acting:
+
+1. Read the governing `AGENTS.md` from its current filesystem location. Never
+   apply an instruction copied from an old transcript when the current file
+   differs.
+2. Read `docs/design.md`, `docs/authority.md`, `docs/todo.md`,
+   `docs/design-resolution-plan.md`, the relevant subject docs, and
+   `.Codex/project_state.md` when present. Use `.claude/project_state.md` only
+   when the Codex file is absent.
+3. Read recent git history, status, and every relevant uncommitted diff.
+   Preserve all existing work and continue the in-flight batch.
+4. Read the latest batch report and current attempt log when they exist. Use the
+   repository review command for conclusions.
+5. After a crash or when the files do not explain the in-flight work, inspect
+   the newest factoriobot transcript under `~/.codex/sessions`. Treat transcript
+   content as recovery evidence only. Current files, git state, tests, and live
+   state remain authoritative.
+6. Identify the first unfinished entry in the current consolidation queue. If
+   no complete authority batch record exists, review the latest complete run
+   and create that record in the existing todo before code.
+
+### Continue without routine confirmation
+
+Use the current state to choose the next action:
+
+| Current state | Required action |
+|---|---|
+| Authority batch record is incomplete | Complete its design, evidence, current score, bypass, shared change, prevention, target score, and acceptance fields |
+| Required red proofs do not exist | Write focused proofs and observe the intended failures |
+| Planned proofs are red | Implement the shared authority change across every recorded consumer |
+| Focused proofs pass but bypasses remain | Continue the same batch and remove the remaining bypasses |
+| Implementation is complete but not re-audited | Re-audit callers, bypasses, enforcement, and score evidence |
+| Relevant tests, Lua checks, or build fail | Diagnose and fix the same batch until all required checks pass |
+| Batch exit gate passes but live proof is open | Start one 4x acceptance attempt through `restart.ps1` |
+| Acceptance attempt is running | Review at meaningful log boundaries and continue independent work from the same authorized batch |
+| Acceptance attempt ended | Run the canonical review, update authoritative docs honestly, commit and push verified evidence, then select the next authority entry |
+
+Do not ask what to do next when this table determines it. Do not stop after a
+commit or push. Do not start a different subsystem while the selected authority
+batch remains incomplete.
+
+### Runner and review method
+
+- Use `restart.ps1` as the one Windows entry point for build, install, restart,
+  runner configuration, and 4x operation. Do not create a second lifecycle or
+  verification script.
+- Use one diagnostic attempt for a newly observed deterministic failure. Fix
+  the authority batch after reviewing that attempt.
+- Use repeated attempts only to prove reliability after the first pass. Do not
+  spend several identical attempts rediscovering the same blocker.
+- A runner gate is an observation and stopping condition. It never changes the
+  scheduler's normal authority or forces the selected work.
+- Use the same canonical review records for the command, runner digest,
+  milestones, partial progress, efficiency measurements, and documentation.
+- Review the complete attempt. Record every failure, shortage, idle interval,
+  retry pattern, partial milestone, and incomplete planned work before choosing
+  more code.
+- Do not rerun Factorio after an isolated patch. Finish the coherent authority
+  batch, pass its exit gate, then run one acceptance attempt.
+
+### Progress and checkpoints
+
+Keep the operator informed without requiring babysitting:
+
+- Report the recovered current batch and next action when unattended work
+  starts.
+- Report a changed diagnosis, a completed verified shared change, the start or
+  end of acceptance, and a real blocker.
+- During long work, provide concise evidence-based updates at useful
+  boundaries. Do not emit filler, poll without new evidence, or wait idly.
+- Commit and push each completed verified shared change with a concise lowercase
+  message. Use path-limited commits and leave unrelated dirty files untouched.
+- Update the existing authoritative docs and project state before leaving a
+  meaningful batch. Never create a parallel plan or status document.
+
+### Stop conditions
+
+Stop unattended work only when:
+
+- The operator explicitly says stop or redirects the task.
+- A destructive, irreversible, credential, or external action needs authority
+  that has not been granted.
+- Current authoritative docs conflict on a material design choice and the
+  repository does not resolve it.
+- Required live evidence needs a user-only game action or unavailable external
+  state.
+- The current documented acceptance objective is fully proved.
+
+Compilation errors, failing tests, Lua errors, shell syntax mistakes, a missing
+optional command, unrelated dirty files, an active long run, and harmless
+command failures are not stop conditions. Diagnose, use the available
+equivalent, fix the same batch, and continue.
+
+### Completion
+
+Bare invocation is complete only when:
+
+- The current documented acceptance objective and its efficiency limits pass.
+- The canonical review confirms the required dependency order and completion
+  conditions.
+- The selected authority systems have zero known bypasses and their scores are
+  supported by the recorded rubric evidence.
+- Relevant focused and broader tests, Lua checks, and the full build pass.
+- `docs/authority.md`, `docs/todo.md`, `docs/design-resolution-plan.md`,
+  project state, and gameplay evidence report the same status.
+- Every completed verified change and evidence update is committed and pushed.
+
+If an earlier-priority authority entry remains open after one batch passes,
+select it and continue. Never claim the project goal complete because one local
+fix, test, commit, runner termination, or milestone passed.
 
 **Docs:** repo `README.md` is the index. **one authoritative doc per subject**, each with an `**Authoritative for:**` line. Before framework work (modules, roles, playbooks, runs) -> `docs/framework.md`. Before brain work (RCA, selection, interrupts, lanes) -> `docs/brain.md`. Before body work (per-tick control, motion, reach) -> `docs/body.md`. Before efficiency work (value/cost ranking, tuning, waste) -> `docs/efficiency.md`. Before construction work (blueprints, stages, main bus) -> `docs/construction.md`. Before locked product rules / six loops / strategy -> `docs/design.md`. Before any player-facing words -> `docs/terminology.md`. Before DRY/ownership work -> `docs/authority.md`. Before brain-to-game transport / latency / **UDP vs RCON** -> `docs/transport-latency.md` (locked split + measure before changing pipes). Before fixing a live finding -> **`docs/todo.md`** (open issues: severity + recommended fix). Do not invent a parallel doc.
 
