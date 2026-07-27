@@ -22,6 +22,37 @@ Before deleting any Open row:
 4. If the bug still appears in a later attempt log, **keep the row open** (or reopen it). Counter-evidence wins.
 5. RCON Lua payload text that merely *contains* an old error string is not evidence; count only executor/INFO/`recv` error lines.
 
+## Development cycle (LOCKED)
+
+Develop factoriobot through authority consolidation, not repeated live
+hotfixes.
+
+1. Treat an acceptance run as evidence collection. Review it with the
+   repository workflow and add every observed failure or efficiency loss to
+   `docs/todo.md`.
+2. Map each finding to the numbered system in `docs/authority.md`. Several
+   symptoms with one authority failure are one implementation problem.
+3. Update the existing todo and authority plan before changing code. Do not
+   create another plan or design document.
+4. Choose the coherent shared change with the greatest long-term effect on
+   unattended play. Fix every known consumer of that authority together.
+5. Write and observe focused failing tests before implementation. Use fast
+   build, unit, catalog, Lua, and design checks throughout the batch.
+6. Commit and push each completed, verified shared change. Do not start a new
+   acceptance run after each small commit.
+7. Start one acceptance run only after the planned authority batch is complete
+   and the repository build passes. The run must prove the whole dependency
+   order and efficiency bars affected by the batch.
+8. If the acceptance run exposes another shared failure, review and categorize
+   all evidence before more code. Return to the authority plan instead of
+   applying one live hotfix and immediately rerunning.
+9. Never block foreground work waiting for a long run. Review the active log
+   at useful boundaries and continue independent work from the same authority
+   batch.
+
+Fast red and green test cycles are required. Repeated full game runs after
+isolated patches are the forbidden cycle.
+
 Three parts: the Rust brain offloads as much as possible (deterministic monitors, proposals, execution), the LLM only judges what rules cannot, the player is final authority and the body. One task at a time: at most one active proposal, verified done from game state before the next.
 
 ## Factory desired state (approved 2026-07-27)

@@ -32,6 +32,15 @@ Long != better. Cut preamble, cut restated questions.
 ## After Correction
 Fix it. Move on. No apology loops.
 
+## Do not confuse activity with progress
+
+When repeated small fixes expose another failure on each run, stop the
+run, patch, rerun cycle. Record every observed issue in the existing todo,
+group symptoms by their shared authority or design cause, update the existing
+plan, and implement the coherent shared change before another acceptance run.
+Fast focused test cycles are good. Repeated full acceptance runs after isolated
+hotfixes are not progress.
+
 ## Never
 - **Confident hallucination**. Inventing without verification
 - **Token bloat**. Preamble, restating, redundant explanation
