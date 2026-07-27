@@ -49,6 +49,8 @@ $requirements = [ordered]@{
     'owning project docs learning' = 'owning project docs'
     'same verified learning batch' = 'same verified batch'
     'two repository learning gate' = 'Validate, commit, and push both repositories'
+    'prototype filter array contract' = 'prototype filter methods require an array of typed filter tables'
+    'prototype filter array example' = 'get_entity_filtered{{filter="type",type="mining-drill"}}'
     'canonical design statements' = 'one canonical design statement in one owning design doc'
     'committed proof per statement' = 'Every design statement names its committed proof'
     'proof state per statement' = 'Every design statement records its current proof state'

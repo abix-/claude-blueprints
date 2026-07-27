@@ -523,6 +523,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 
 - **ALWAYS luacheck before shipping.** Same doctrine as jbot lint-before-swap: after edits to `src/lua.rs` or `mod/factoriobot/control.lua`, `.\build.ps1` must pass the `lua_check` gate (or `k3sc cargo-lock test --lib -- lua_check`). Never restart a binary that skipped it. Fragile: stray `end`, blank lines after `\` string continuations, and missing `{BUILDING_RECORDS}` injects have each broken live RCON.
 - Read the current official Factorio runtime/prototype docs at `lua-api.factorio.com/latest` before changing any game API call, event, controller, inventory, pathfinding, or prototype behavior. Confirm the exact class member, read/write status, parameters, event timing, and Factorio version. Do not guess from memory. Use the official wiki for game terminology and command-line/console behavior; use GitHub/community implementations only as secondary examples after the official contract is known.
+- Factorio 2.1 prototype filter methods require an array of typed filter tables. Use `get_entity_filtered{{filter="type",type="mining-drill"}}`. Never pass the typed filter table directly.
 - IIFE form `(function() ... end)()` returning plain Lua tables only, no userdata.
 - Player-dependent readers start with the connected-player check and return {error="no_player"} without one.
 - Factorio 2.x dot syntax. helpers.table_to_json is the 2.x name.

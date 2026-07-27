@@ -58,6 +58,11 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("same verified batch", lower)
         self.assertIn("validate, commit, and push both repositories", lower)
 
+    def test_factoriobot_uses_factorio_prototype_filter_arrays(self):
+        text = skill("factoriobot")
+        self.assertIn("prototype filter methods require an array of typed filter tables", text)
+        self.assertIn('get_entity_filtered{{filter="type",type="mining-drill"}}', text)
+
 
 if __name__ == "__main__":
     unittest.main()
