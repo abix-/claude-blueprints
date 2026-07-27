@@ -32,26 +32,52 @@ hotfixes.
    `docs/todo.md`.
 2. Map each finding to the numbered system in `docs/authority.md`. Several
    symptoms with one authority failure are one implementation problem.
-3. Update the existing todo and authority plan before changing code. Do not
-   create another plan or design document.
-4. Choose the coherent shared change with the greatest long-term effect on
-   unattended play. Fix every known consumer of that authority together.
-5. Write and observe focused failing tests before implementation. Use fast
+3. Read the governing statements in `docs/design.md` and the relevant subject
+   docs before proposing the change. Quote the exact rule in the todo. A change
+   that cannot be traced to the existing design is scope creep.
+4. Audit the selected authority before changing code. Record its current score,
+   canonical path, every known bypass, enforcement gap, and the score the
+   planned consolidation can honestly reach.
+5. Update the existing todo and authority plan before changing code. Do not
+   create another plan or design document. If the finding has no authority
+   system, add and prioritize that system first.
+6. Choose the coherent shared change with the greatest long-term effect on
+   unattended play. Fix every known consumer of that authority together. The
+   change must remove a competing authority or add anti-bypass enforcement.
+   A local behavior patch that leaves the score unchanged is not eligible.
+7. Write and observe focused failing tests before implementation. The proofs
+   must cover the design rule, every known bypass, and the anti-bypass guard.
+   Use fast
    build, unit, catalog, Lua, and design checks throughout the batch.
-6. Commit and push each completed, verified shared change. Do not start a new
+8. Re-audit after implementation. Increase the score only when the bypass count
+   and enforcement evidence satisfy the score rubric in `docs/authority.md`.
+   Code volume, commit count, and a passing local behavior test do not move a
+   score by themselves.
+9. Commit and push each completed, verified shared change. Do not start a new
    acceptance run after each small commit.
-7. Start one acceptance run only after the planned authority batch is complete
+10. Start one acceptance run only after the planned authority batch is complete
    and the repository build passes. The run must prove the whole dependency
    order and efficiency bars affected by the batch.
-8. If the acceptance run exposes another shared failure, review and categorize
+11. If the acceptance run exposes another shared failure, review and categorize
    all evidence before more code. Return to the authority plan instead of
    applying one live hotfix and immediately rerunning.
-9. Never block foreground work waiting for a long run. Review the active log
+12. Never block foreground work waiting for a long run. Review the active log
    at useful boundaries and continue independent work from the same authority
    batch.
 
 Fast red and green test cycles are required. Repeated full game runs after
 isolated patches are the forbidden cycle.
+
+Every planned fix must answer these questions in `docs/todo.md` before code:
+
+- Which exact design statement requires this?
+- Which numbered authority system owns it?
+- What is the verified current score and bypass evidence?
+- What one canonical path replaces every known competing path?
+- What test or guard prevents the bypass from returning?
+- What verified evidence will increase the score?
+
+If any answer is missing, continue the design and authority audit. Do not code.
 
 Three parts: the Rust brain offloads as much as possible (deterministic monitors, proposals, execution), the LLM only judges what rules cannot, the player is final authority and the body. One task at a time: at most one active proposal, verified done from game state before the next.
 
