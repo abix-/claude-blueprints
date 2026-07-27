@@ -49,6 +49,15 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("same report", lower)
         self.assertIn("append-only", lower)
 
+    def test_factoriobot_closes_the_self_learning_loop(self):
+        text = skill("factoriobot")
+        lower = text.lower()
+        self.assertIn("self-learning loop", lower)
+        self.assertIn("applicable shared skill", lower)
+        self.assertIn("owning project docs", lower)
+        self.assertIn("same verified batch", lower)
+        self.assertIn("validate, commit, and push both repositories", lower)
+
 
 if __name__ == "__main__":
     unittest.main()

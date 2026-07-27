@@ -97,6 +97,22 @@ Keep the operator informed without requiring babysitting:
 - Update the existing authoritative docs and project state before leaving a
   meaningful batch. Never create a parallel plan or status document.
 
+### Self-learning loop
+
+When current tests, build output, canonical review, or gameplay evidence proves
+a reusable lesson, update the owning project docs in the same verified batch.
+Update the applicable shared skill in that same verified batch. Keep project
+design and current state in the project repository. Keep reusable operating
+procedure in the shared skill. Never copy project-specific status or dated
+history into the skill.
+
+Write a permanent failing test for the missing guidance before editing the
+skill. Validate, commit, and push both repositories before calling the learning
+complete. Install the tracked skill through the existing blueprint deployment
+workflow, then verify the installed copy matches the tracked source. Continue
+the selected factoriobot authority batch after the learning update. A skill
+update is part of the work, not a stopping point.
+
 ### Unattended status report
 
 Publish one compact status report immediately after recovery, after each
