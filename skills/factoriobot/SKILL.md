@@ -126,11 +126,20 @@ Use `unknown` when evidence is not available and `none` only when absence is
 verified. Never omit a field. Never call work verified without naming whether
 it is Code-verified or Live-verified.
 
+Before publishing it in chat, append the same report to
+`docs/status-reports.md` under a UTC timestamp heading. This file is the
+append-only chronological evidence log for unattended analysis. Preserve every
+field and its exact value. Never rewrite or delete an earlier report, and never
+backfill an invented timestamp. If the file is dirty during active work, commit
+it with the next completed verified batch or the end-of-window checkpoint
+instead of creating report-only commit noise.
+
 Keep the single current status section in `docs/status.md` aligned with the same
 facts at durable boundaries: recovered start, verified shared change,
 acceptance start, acceptance end, blocker, and completion. Update that section
-in place. Do not append a new status section for every progress message and do
-not create another status file.
+in place. `docs/status.md` is the current summary;
+`docs/status-reports.md` is the chronological report log. Do not create a third
+status file.
 
 Verified progress means the factory behavior, authority score, bypass count,
 test gate, build, or acceptance condition changed. File counts, command counts,

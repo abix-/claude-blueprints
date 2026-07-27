@@ -41,6 +41,14 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("coal bootstrap", text)
         self.assertIn("copper base", text)
 
+    def test_factoriobot_persists_every_unattended_status_report(self):
+        text = skill("factoriobot")
+        lower = text.lower()
+        self.assertIn("docs/status-reports.md", text)
+        self.assertIn("before publishing it in chat", lower)
+        self.assertIn("same report", lower)
+        self.assertIn("append-only", lower)
+
 
 if __name__ == "__main__":
     unittest.main()
