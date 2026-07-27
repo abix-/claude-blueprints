@@ -15,6 +15,17 @@ def skill_files():
 
 
 class SkillCompatibilityTests(unittest.TestCase):
+    def test_known_user_skills_are_repository_authoritative(self):
+        for name in {"authority-audit", "cleanup", "horsey"}:
+            with self.subTest(name=name):
+                self.assertTrue((ROOT / "skills" / name / "SKILL.md").is_file())
+        self.assertTrue(
+            (
+                ROOT
+                / "codex/skills/source-command-ctop/SKILL.md"
+            ).is_file()
+        )
+
     def test_shared_and_codex_skills_have_valid_frontmatter(self):
         for path in skill_files():
             with self.subTest(path=path.relative_to(ROOT)):

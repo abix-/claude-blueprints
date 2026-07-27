@@ -31,12 +31,16 @@ On 2026-07-27:
 - Added tested Windows installation for Claude, Codex, or both.
 - Normalized shared skill frontmatter for Codex compatibility.
 - Corrected stale Claude skill paths and the Claude session hook.
-- Verified 64 shared and Codex-only skills with the official Codex validator.
+- Recovered `authority-audit`, `cleanup`, `horsey`, and Codex `ctop` from the
+  live installation into git authority.
+- Moved 14 stale Claude imports and duplicate generated commands to the
+  recoverable `~/.codex/archived-skills/claude-import-20260727` archive.
+- Installed both live runtimes with zero drift and zero unmanaged Codex skills.
+- Verified 68 shared and Codex-only skills with the official Codex validator.
+- Verified Codex strict configuration and Claude startup.
 
 ## Next steps
 
-- Install the committed runtime files into the live Claude and Codex homes.
-- Run drift checks for both live installations.
 - Return to the Factoriobot desired-state work pool implementation.
 
 ## Open questions
