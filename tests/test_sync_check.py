@@ -153,6 +153,12 @@ class SyncCheckTests(unittest.TestCase):
         self.assertIn("ALWAYS use PowerShell for shell commands on Windows", text)
         self.assertNotIn("ALWAYS use Bash for shell commands", text)
         self.assertIn("~/.agents/skills", text)
+        self.assertIn("NEVER destroy uncommitted work", text)
+        self.assertIn("NEVER `git stash`", text)
+        self.assertIn("Volume is not progress", text)
+        self.assertNotIn("## Failure log", text)
+        self.assertNotIn("running record; the operator adds", text)
+        self.assertNotIn("Violation 2026-", text)
 
     def test_windows_installer_installs_codex_runtime(self):
         with tempfile.TemporaryDirectory() as home:
