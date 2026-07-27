@@ -97,6 +97,119 @@ Keep the operator informed without requiring babysitting:
 - Update the existing authoritative docs and project state before leaving a
   meaningful batch. Never create a parallel plan or status document.
 
+### Unattended status report
+
+Publish one compact status report immediately after recovery, after each
+verified shared change, when acceptance starts or ends, when a milestone is
+reached, when the blocker changes, and at useful boundaries during otherwise
+long work. During multi-hour work, do not leave the visible status unchanged
+for more than ten minutes when new evidence is available.
+
+Use this exact shape:
+
+```text
+Unattended status report
+Objective: <current documented acceptance objective>
+Priority basis: <newest explicit operator direction, current consolidation queue entry, or authority row, plus why it is next>
+Authority score: <number and name>, <current> -> <target>
+Verified progress: <real behavior or authority improvement, with Code-verified or Live-verified status>
+Milestones reached: <gameplay and implementation milestones since start>
+Checks: <focused tests, broader tests, Lua, and build status>
+Tested build: <commit, installed binary version, and relevant dirty-state status>
+Active attempt: <attempt id, speed, elapsed time, latest milestone or partial playbook progress>
+Efficiency: <fuel shortage percent and foreground idle percent when measured>
+Latest blocker: <one current blocker or none>
+Next action: <the action currently being executed next>
+```
+
+Use `unknown` when evidence is not available and `none` only when absence is
+verified. Never omit a field. Never call work verified without naming whether
+it is Code-verified or Live-verified.
+
+Keep the single current status section in `docs/status.md` aligned with the same
+facts at durable boundaries: recovered start, verified shared change,
+acceptance start, acceptance end, blocker, and completion. Update that section
+in place. Do not append a new status section for every progress message and do
+not create another status file.
+
+Verified progress means the factory behavior, authority score, bypass count,
+test gate, build, or acceptance condition changed. File counts, command counts,
+elapsed agent time, token use, and commit counts are not progress. Milestones
+reached must include partial playbook progress when it is the best available
+evidence, while clearly distinguishing partial from complete.
+
+### Work priority
+
+Use this order:
+
+1. Newest explicit operator direction.
+2. Finish the selected in-flight authority batch unless the operator redirects or current evidence proves the batch invalid.
+3. Execute the first unfinished entry in the `docs/authority.md` current consolidation queue.
+4. After the current consolidation queue is complete, choose the lowest numbered open authority row.
+5. If the selected authority row needs a prerequisite, execute the prerequisite as part of the same authority batch, then resume the selected authority row.
+6. Within the selected authority, choose the shared change with the greatest effect on the current acceptance objective and long-term unattended play, using measured run cost and impact.
+
+Score measures maturity and never determines priority by itself.
+
+New findings enter the todo under their owning authority and wait unless they invalidate current evidence, threaten data, build, or game safety, or the operator redirects.
+
+Never choose work by the newest symptom, lowest score alone, easiest fix, shortest test, largest visible failure count, or most recent log line.
+
+If the current consolidation queue and current evidence conflict, update the authority doc and todo first, then report the priority change.
+
+### Progress stall guard
+
+At every status report, compare the current authority score, known bypass count,
+red proofs, passing checks, milestones, and measured efficiency with the prior
+report. No measurable progress for thirty minutes of active work means the
+current tactic has stalled.
+
+When stalled:
+
+1. Stop repeating the same command, patch, diagnostic attempt, or explanation.
+2. Re-read the selected authority record and the newest contradictory evidence.
+3. Identify whether the gap is diagnosis, shared implementation, enforcement,
+   verification, or live acceptance.
+4. Choose a different action inside the same authority batch that can move a
+   recorded measure.
+5. Report the stalled measure, changed tactic, and expected proof.
+
+Do not switch subsystems to manufacture visible activity. Do not count more
+files, commands, commits, tests written, or elapsed time as movement. A second
+unchanged placement failure must escalate through the documented blocker
+lifecycle instead of receiving another identical attempt.
+
+### Attempt provenance
+
+Every live attempt must record the exact commit and installed binary version it
+tests. Record whether relevant source files were dirty at build time. An
+attempt can prove only that installed build.
+
+Source changes made after an attempt starts may continue as independent work,
+but that attempt is not evidence for them. Do not describe later source edits
+as live-verified until a later build and attempt exercise them. If relevant
+dirty source was included in the installed binary, identify it explicitly and
+do not attribute the result to `HEAD` alone.
+
+### End-of-window checkpoint
+
+When the operator provides an unattended time window, keep working until the
+window ends, acceptance completes, or a real blocker occurs. Before the window
+ends:
+
+- Finish the current safe edit, test, review, or command boundary.
+- Leave the repository buildable. If it is not buildable, state the exact
+  compiler or test failure and continue fixing it while time remains.
+- Update the current section in `docs/status.md` and the project state with
+  authority score, bypass count, verified milestones, checks, active attempt,
+  blocker, and exact next action.
+- Commit and push completed verified work. Preserve incomplete work and label
+  it unverified instead of hiding, reverting, or claiming it.
+- Publish one final unattended status report for the window.
+
+Elapsed time never makes the project objective complete. Leave the documented
+goal active when acceptance remains open.
+
 ### Stop conditions
 
 Stop unattended work only when:
