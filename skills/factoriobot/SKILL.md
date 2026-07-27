@@ -24,60 +24,91 @@ Before deleting any Open row:
 
 ## Development cycle (LOCKED)
 
-Develop factoriobot through authority consolidation, not repeated live
-hotfixes.
+Develop factoriobot through authority consolidation. Never alternate one small
+live hotfix with one new acceptance run.
 
-1. Treat an acceptance run as evidence collection. Review it with the
-   repository workflow and add every observed failure or efficiency loss to
-   `docs/todo.md`.
-2. Map each finding to the numbered system in `docs/authority.md`. Several
-   symptoms with one authority failure are one implementation problem.
-3. Read the governing statements in `docs/design.md` and the relevant subject
-   docs before proposing the change. Quote the exact rule in the todo. A change
-   that cannot be traced to the existing design is scope creep.
-4. Audit the selected authority before changing code. Record its current score,
-   canonical path, every known bypass, enforcement gap, and the score the
-   planned consolidation can honestly reach.
-5. Update the existing todo and authority plan before changing code. Do not
-   create another plan or design document. If the finding has no authority
-   system, add and prioritize that system first.
-6. Choose the coherent shared change with the greatest long-term effect on
-   unattended play. Fix every known consumer of that authority together. The
-   change must remove a competing authority or add anti-bypass enforcement.
-   A local behavior patch that leaves the score unchanged is not eligible.
-7. Write and observe focused failing tests before implementation. The proofs
-   must cover the design rule, every known bypass, and the anti-bypass guard.
-   Use fast
-   build, unit, catalog, Lua, and design checks throughout the batch.
-8. Re-audit after implementation. Increase the score only when the bypass count
-   and enforcement evidence satisfy the score rubric in `docs/authority.md`.
-   Code volume, commit count, and a passing local behavior test do not move a
-   score by themselves.
-9. Commit and push each completed, verified shared change. Do not start a new
-   acceptance run after each small commit.
-10. Start one acceptance run only after the planned authority batch is complete
-   and the repository build passes. The run must prove the whole dependency
-   order and efficiency bars affected by the batch.
-11. If the acceptance run exposes another shared failure, review and categorize
-   all evidence before more code. Return to the authority plan instead of
-   applying one live hotfix and immediately rerunning.
-12. Never block foreground work waiting for a long run. Review the active log
-   at useful boundaries and continue independent work from the same authority
-   batch.
+### Turn one run into one authority batch
 
-Fast red and green test cycles are required. Repeated full game runs after
-isolated patches are the forbidden cycle.
+An acceptance run is evidence collection. Review the complete run with the
+repository workflow before editing code. Put every observed failure,
+inefficiency, idle interval, shortage, retry, and incomplete planned work into
+the existing `docs/todo.md`. Do not choose the first visible failure and stop
+reviewing.
 
-Every planned fix must answer these questions in `docs/todo.md` before code:
+Map every finding to the numbered systems in `docs/authority.md`. Findings that
+share one weak authority are one implementation problem. Choose the unfinished
+authority change with the greatest expected effect on long-term unattended
+play, using the priority already recorded in `docs/authority.md`. Do not let
+the most recent log line override that priority.
 
-- Which exact design statement requires this?
-- Which numbered authority system owns it?
-- What is the verified current score and bypass evidence?
-- What one canonical path replaces every known competing path?
-- What test or guard prevents the bypass from returning?
-- What verified evidence will increase the score?
+### Required batch record
 
-If any answer is missing, continue the design and authority audit. Do not code.
+Before code, add one record to the existing `docs/todo.md` containing all of
+these fields:
+
+| Field | Required content |
+|---|---|
+| Design | Exact governing statement and source file |
+| Authority | Numbered system from `docs/authority.md` |
+| Run evidence | Attempt id, exact symptom, and log lines |
+| Current state | Verified score, canonical path, all known bypasses, and missing enforcement |
+| Shared change | One canonical implementation path and every consumer moved to it |
+| Prevention | Failing tests or structural guards that make each bypass return loudly |
+| Target state | Score the completed batch can honestly reach and the rubric evidence required |
+| Acceptance | Exact gameplay order, completion conditions, and efficiency limits to verify |
+
+If any field is unknown, inspect the repository and update the record. Do not
+code until the record is complete. Do not create another plan or design
+document.
+
+### Batch entry gate
+
+The selected change is eligible only when all of these are true:
+
+- It follows an existing statement in `docs/design.md` and the owning subject
+  docs. A change without design authority is scope creep.
+- It removes at least one competing authority or adds enforcement that prevents
+  a bypass. A local behavior patch that leaves the authority score unchanged is
+  not eligible.
+- It covers every known consumer of the selected authority in one coherent
+  change. Do not repair one consumer while known competing consumers remain.
+- Focused tests have failed for the missing design rule, each known bypass, and
+  the enforcement boundary.
+
+### Execute the whole batch
+
+Implement the shared change across all recorded consumers. Use fast red and
+green unit, catalog, Lua, design, and build checks while working. Routine test
+failures remain inside this batch until fixed. Do not start Factorio to check
+each edit.
+
+Re-audit the selected authority after implementation. Record the remaining
+bypasses and enforcement evidence. Increase the score only when the
+`docs/authority.md` rubric is satisfied. Code volume, commit count, and a
+passing example do not move a score.
+
+### Batch exit gate
+
+The authority batch is complete only when all of these are true:
+
+- Every known consumer uses the canonical path.
+- The bypass count and enforcement evidence support the new score.
+- Focused tests, relevant broader tests, Lua checks, and the full repository
+  build pass.
+- `docs/authority.md`, `docs/todo.md`, the existing resolution plan, and
+  project state report the same honest status.
+- The verified shared change is committed and pushed.
+
+Only then start one acceptance run for the whole batch. That run must verify
+the dependency order, completion conditions, and efficiency limits recorded in
+the batch. Review the complete run before selecting more code work.
+
+If the run finds another shared failure, add and categorize all of its evidence
+first. Return to the highest-priority authority record. Never apply one hotfix
+and immediately rerun.
+
+Do not wait idly for a long run. At useful log boundaries, review evidence and
+continue independent work already authorized by the same authority batch.
 
 Three parts: the Rust brain offloads as much as possible (deterministic monitors, proposals, execution), the LLM only judges what rules cannot, the player is final authority and the body. One task at a time: at most one active proposal, verified done from game state before the next.
 
