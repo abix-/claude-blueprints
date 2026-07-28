@@ -174,6 +174,20 @@ or starting Factorio, state internally which of these is true:
 If neither statement is true, do not perform the action. Tests, code, builds,
 commits, documentation, skill changes, and reports are supporting evidence, never progress by themselves.
 
+### Goal-value stop (LOCKED)
+
+The operator's gameplay goal is the only value test for continued work. Once
+the minimum valid support artifact exists, stop working on it. Do not spend
+another action polishing, reordering, renaming, restating, or rechecking it
+unless a required gate fails, the artifact blocks gameplay acceptance, or the
+operator explicitly makes it the goal.
+
+Use at most one edit, one verification, and one correction on the same support
+artifact, then return to gameplay work. If it is still imperfect but valid,
+record the imperfection once and continue the selected gameplay batch. Tests,
+docs, reports, skills, hooks, commits, and formatting never earn more effort
+than the gameplay blocker they remove.
+
 Review the complete run before choosing a change. Categorize all findings under
 their documented authorities, then complete the whole design-aligned authority batch across every known consumer. Re-audit its bypasses and pass its complete
 exit gate before another acceptance run. Never turn one log line into a local

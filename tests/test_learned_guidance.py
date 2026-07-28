@@ -112,6 +112,14 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("governing design statements", text)
         self.assertIn("measured gaps", text)
         self.assertIn("advances a recorded gameplay acceptance measure", text)
+
+    def test_factoriobot_stops_support_work_that_no_longer_advances_the_goal(self):
+        text = skill("factoriobot").lower()
+        self.assertIn("goal-value stop", text)
+        self.assertIn("minimum valid support artifact", text)
+        self.assertIn("operator's gameplay goal", text)
+        self.assertIn("required gate", text)
+        self.assertIn("return to gameplay work", text)
         self.assertIn("removes a documented authority bypass required for that acceptance", text)
         self.assertIn("if neither statement is true, do not perform the action", text)
         self.assertIn("supporting evidence, never progress by themselves", text)
