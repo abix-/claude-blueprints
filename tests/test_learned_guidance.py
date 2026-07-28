@@ -91,6 +91,7 @@ class LearnedGuidanceTests(unittest.TestCase):
             "docs/authority.md",
             "docs/construction.md",
             "docs/brain.md",
+            "docs/body.md",
             "docs/framework.md",
             "docs/efficiency.md",
             "docs/todo.md",
@@ -101,6 +102,22 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("not fully present in the current context", text)
         self.assertIn("reread it completely from disk", text)
         self.assertIn("after compaction", text)
+
+    def test_factoriobot_keeps_every_action_on_the_operators_goal_chain(self):
+        text = skill("factoriobot").lower()
+        self.assertIn("goal-alignment gate", text)
+        self.assertIn("permanent gameplay goal", text)
+        self.assertIn("current gameplay acceptance", text)
+        self.assertIn("selected authority batch", text)
+        self.assertIn("governing design statements", text)
+        self.assertIn("measured gaps", text)
+        self.assertIn("advances a recorded gameplay acceptance measure", text)
+        self.assertIn("removes a documented authority bypass required for that acceptance", text)
+        self.assertIn("if neither statement is true, do not perform the action", text)
+        self.assertIn("supporting evidence, never progress by themselves", text)
+        self.assertIn("review the complete run", text)
+        self.assertIn("complete the whole design-aligned authority batch", text)
+        self.assertIn("before another acceptance run", text)
 
 
 if __name__ == "__main__":
