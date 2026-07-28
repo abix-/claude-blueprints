@@ -32,20 +32,80 @@ After any context compaction, before taking another action:
 
 1. Carried instruction text is recovery evidence only.
 2. Reread the current filesystem `AGENTS.md` and all active matching skills.
-3. Recover the in-flight batch from current files, git state, tests, and live
+3. Reload every authoritative design document completely as required below.
+4. Recover the in-flight batch from current files, git state, tests, and live
    evidence using the workflow below.
-4. Resume the in-flight batch automatically. Do not ask for routine
+5. Resume the in-flight batch automatically. Do not ask for routine
    confirmation and do not apply stale rules from the compacted context.
+
+### Load every authoritative design document before work
+
+At initial invocation and after compaction, interruption, or recovery, read every file completely before selecting or changing work:
+
+- `docs/design.md`
+- `docs/authority.md`
+- `docs/construction.md`
+- `docs/brain.md`
+- `docs/body.md`
+- `docs/framework.md`
+- `docs/efficiency.md`
+- `docs/todo.md`
+- `docs/design-resolution-plan.md`
+
+Do this before diagnosing the next change, choosing a priority, writing a test,
+editing code or documentation, or starting an acceptance attempt. A summary,
+excerpt, grep result, previous transcript, truncated tool result, or earlier
+conversation copy does not count as reading the current file completely. If
+any listed file is not fully present in the current context, reread it completely from disk. If output truncates, continue reading bounded ranges
+until the end of every file. After compaction, assume none of these files is
+fully present until the current turn has loaded each one completely.
+
+### Goal-alignment gate (LOCKED)
+
+Before every action, recover and retain this chain from the current
+authoritative documents:
+
+1. Permanent gameplay goal: reach the Factorio Space Age endgame with 100%
+   automation.
+2. Current gameplay acceptance: the exact dependency order, completed factory
+   work, gameplay milestone, and efficiency limits currently required.
+3. Selected authority batch: the one documented authority change required to
+   reach that acceptance.
+4. Governing design statements: the exact statements and committed proofs that
+   constrain the batch.
+5. Measured gaps: the newest complete-run evidence that remains short of
+   acceptance.
+
+Before running a command, writing a test, editing a file, committing, building,
+or starting Factorio, state internally which of these is true:
+
+- The action advances a recorded gameplay acceptance measure.
+- The action removes a documented authority bypass required for that acceptance.
+
+If neither statement is true, do not perform the action. Tests, code, builds,
+commits, documentation, skill changes, and reports are supporting evidence, never progress by themselves.
+
+Review the complete run before choosing a change. Categorize all findings under
+their documented authorities, then complete the whole design-aligned authority batch across every known consumer. Re-audit its bypasses and pass its complete
+exit gate before another acceptance run. Never turn one log line into a local
+fix, one snapshot into a lifecycle test, or one passing focused test into a
+Code-verified claim.
+
+At every status boundary, compare gameplay milestones, endgame automation
+progress, acceptance conditions, fuel shortage, foreground idle, authority
+bypasses, and red proofs with the previous report. If none moved, say that the
+goal did not move and change the tactic inside the same authority batch. Do not
+use more commands, tests, commits, builds, reports, or elapsed time as evidence
+that the goal moved.
 
 Read current state from disk before acting:
 
 1. Read the governing `AGENTS.md` from its current filesystem location. Never
    apply an instruction copied from an old transcript when the current file
    differs.
-2. Read `docs/design.md`, `docs/authority.md`, `docs/todo.md`,
-   `docs/design-resolution-plan.md`, the relevant subject docs, and
-   `.Codex/project_state.md` when present. Use `.claude/project_state.md` only
-   when the Codex file is absent.
+2. After the complete design-document load above, read `.Codex/project_state.md`
+   when present. Use `.claude/project_state.md` only when the Codex file is
+   absent.
 3. Read recent git history, status, and every relevant uncommitted diff.
    Preserve all existing work and continue the in-flight batch.
 4. Read the latest batch report and current attempt log when they exist. Use the
