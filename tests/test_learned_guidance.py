@@ -75,6 +75,15 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("prototype-derived route to the space age endgame", text)
         self.assertIn("player help does not count as automated", text)
 
+    def test_factoriobot_recovers_current_instructions_after_compaction(self):
+        text = skill("factoriobot").lower()
+        self.assertIn("after any context compaction", text)
+        self.assertIn("carried instruction text is recovery evidence only", text)
+        self.assertIn("current filesystem `agents.md`", text)
+        self.assertIn("active matching skills", text)
+        self.assertIn("before taking another action", text)
+        self.assertIn("resume the in-flight batch automatically", text)
+
 
 if __name__ == "__main__":
     unittest.main()
