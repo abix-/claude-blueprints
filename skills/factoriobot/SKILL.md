@@ -54,8 +54,10 @@ work inside that loop. Do not present support actions as separate progress steps
 gameplay outcome being pursued and the one current engineering action needed
 to reach it. Perform the support work without turning it into a long plan.
 
-Hook enforcement is required for every locked unattended rule. Update the skill, hook, and hook tests in the same change. A locked rule without executable
-hook enforcement is incomplete and cannot be relied on during unattended work.
+Hooks enforce only mechanical facts that can be decided from command input,
+repository state, and recorded evidence. Hooks do not own judgment, priority,
+diagnosis, implementation selection, or a development phase. The skill and
+authoritative project documents guide those decisions.
 
 ### Recover current state after a crash, interruption, or compaction
 
@@ -69,11 +71,27 @@ After any context compaction, before taking another action:
 5. Resume the in-flight batch automatically. Do not ask for routine
    confirmation and do not apply stale rules from the compacted context.
 
-### Phase execution contract
+### Operator control and mechanical hook contract
 
-The tracked project hook owns the unattended progression phase. The current
-phase is authoritative. Obey it without restarting an earlier phase, expanding
-the task, or substituting support work for the required gameplay work.
+The latest operator message always wins. An ordinary operator request suspends
+automatic continuation while that request is handled. Bare `factoriobot`,
+`$factoriobot`, `go`, or `continue` activates unattended continuation. `stop`
+or `pause` stops work immediately. `stop hooks` makes every project hook a
+persistent no-op until the operator says `enable hooks`. Hooks never prevent
+conversation with the operator.
+
+While enabled, hooks enforce only:
+
+- protection against destructive actions;
+- acceptance admission for the exact tested and pushed commit;
+- after an unsuccessful attempt, another acceptance attempt requires a
+  canonical review, recorded root cause, and committed failing proof;
+- repeating the same completion, blocker, or support work does not count as
+  gameplay progress.
+
+Hook errors fail open for support work and fail closed only for destructive
+actions and acceptance admission. Hooks do not decide what to build, block
+production edits, or own a development phase.
 
 Before any repository command or edit:
 
@@ -83,30 +101,11 @@ Before any repository command or edit:
 3. Never guess repository details. Do not invent a filename, command, API,
    function, test location, hook permission, or workflow from memory.
 
-Execute exactly the current phase:
-
-- Diagnose: Find the root cause blocking progress toward the permanent Factorio
-  endgame goal, then record it in the existing `docs/todo.md`.
-- Prove: Resolve an allowed permanent proof location first, write the failing
-  behavioral proof, observe the intended failure, and commit the todo plus
-  proof together.
-- Implement: Read the current canonical implementation boundary, then implement
-  the complete shared design-aligned change that removes the proven root cause.
-  Do not diagnose again or create a local hotfix.
-- Build: Run the focused and required broader checks, then use
-  `restart.ps1 -BuildOnly`.
-- Push: Push the exact tested commit.
-- Play: Use `restart.ps1 -Gate <milestone>` once against the exact tested and
-  pushed commit.
-- Review: Use the canonical repository review workflow on the complete attempt,
-  record honest gameplay evidence, and let that evidence drive the next
-  diagnosis.
-
 If a harmless command fails because a path, name, permission, or syntax was
 guessed, treat that as a process violation. Resolve the exact value from current
-files and continue the same phase. After required skill or documentation
-maintenance, resume the interrupted phase automatically. Support work is never
-a new phase and never replaces the current gameplay batch.
+files and continue the same gameplay batch. After required skill or
+documentation maintenance, resume the interrupted batch automatically. Support
+work never replaces the current gameplay batch.
 
 ### Load every authoritative design document before work
 
@@ -132,8 +131,8 @@ fully present until the current turn has loaded each one completely.
 
 ### Review gate (LOCKED)
 
-The tracked project hook enforces the review gate. Thinking comes before
-selection and implementation.
+The skill requires the review gate. Thinking comes before selection and
+implementation.
 
 1. Review all work since the last gameplay movement. Review recent Git history,
    status, and every relevant uncommitted diff. Review the current project
@@ -180,10 +179,10 @@ change across every producer and consumer, keep analyzing. Do not select or
 implement a batch until it can both increase the authority score and move the
 recorded gameplay measure toward the permanent goal.
 
-The tracked project hook blocks production edits, builds, restarts, and
-acceptance attempts until the review gate passes. Production implementation
-remains blocked until the selected batch has committed failing proofs. Starting
-an acceptance attempt reopens the review gate for the next decision.
+The gameplay movement circuit blocks only another acceptance attempt after an
+unsuccessful attempt until the canonical review, recorded root cause, and
+committed failing proof exist. Review, documentation, tests, implementation,
+and builds remain available so the root cause can be removed.
 
 More commands, commits, tests, or elapsed time never substitute for this review.
 A previous batch record, a recent status report, or remembered context does not
@@ -331,9 +330,10 @@ workflow, then verify the installed copy matches the tracked source. Continue
 the selected factoriobot authority batch after the learning update. A skill
 update is part of the work, not a stopping point.
 
-Every locked unattended rule added or changed by this loop must update its
-existing project hook enforcement and hook tests in the same change. Do not
-ship instruction-only enforcement.
+When a reusable lesson is mechanically decidable at a lifecycle boundary,
+update the project hook and hook tests in the same change. Keep judgment,
+priority, diagnosis, and implementation selection in the skill and
+authoritative project documents.
 
 ### Unattended status report
 
@@ -431,15 +431,12 @@ authority batch is still the shortest path to gameplay progress.
 No measurable engineering or gameplay progress for thirty minutes means the
 current tactic has stalled.
 
-### Gameplay movement gate (LOCKED)
-
-The tracked project hook enforces this gate. The skill explains the required
-recovery after the hook blocks an action.
+### Gameplay movement circuit (LOCKED)
 
 One authority batch receives one implementation plus its replacement acceptance
 attempt. If that attempt produces zero gameplay delta, the circuit opens.
-Technical progress does not reset this gate. Do not make another patch, build,
-restart, or acceptance attempt while the circuit is open.
+Technical progress does not reset this gate. Do not make another acceptance
+attempt while the circuit is open.
 
 Audit every attempt since the last gameplay milestone moved. Group every
 failure under its existing authority, then define one coherent authority batch
@@ -455,10 +452,10 @@ Gameplay delta: <completed capability count before -> after>
 Progress circuit: <OPEN or CLOSED, with reason>
 ```
 
-Never bypass, disable, edit around, or weaken the hook to continue work. An
-open circuit permits canonical review, authoritative audit updates, and failing
-tests. It forbids production implementation and another live attempt until the
-recorded audit defines the milestone-closing batch.
+An open circuit permits canonical review, authoritative audit updates, failing
+tests, implementation, and builds. It forbids another live acceptance attempt
+until the recorded audit defines the milestone-closing batch and the committed
+failing proof demonstrates the root cause.
 
 When the gameplay movement circuit is open:
 

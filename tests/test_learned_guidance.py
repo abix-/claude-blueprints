@@ -148,26 +148,23 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("tests, documentation, status, commits, pushes, and review", text)
         self.assertIn("one acceptance attempt", text)
         self.assertIn("if gameplay does not move", text)
-        self.assertIn("hook enforcement is required for every locked unattended rule", text)
-        self.assertIn("update the skill, hook, and hook tests in the same change", text)
+        self.assertIn("hooks enforce only mechanical facts", text)
+        self.assertIn("hooks do not own judgment", text)
 
-    def test_factoriobot_obeys_the_current_phase_without_guessing_repository_details(self):
+    def test_factoriobot_keeps_hooks_mechanical_and_operator_control_absolute(self):
         text = " ".join(skill("factoriobot").lower().split())
-        self.assertIn("the current phase is authoritative", text)
+        self.assertIn("the latest operator message always wins", text)
+        self.assertIn("ordinary operator request suspends automatic continuation", text)
+        self.assertIn("stop hooks", text)
+        self.assertIn("destructive actions", text)
+        self.assertIn("exact tested and pushed commit", text)
+        self.assertIn("canonical review, recorded root cause, and committed failing proof", text)
+        self.assertIn("repeating the same completion", text)
         self.assertIn("resolve every path from current files with `rg --files`", text)
         self.assertIn("resolve every command, api, function, test location, and hook permission", text)
         self.assertIn("never guess repository details", text)
-        for phase in (
-            "diagnose:",
-            "prove:",
-            "implement:",
-            "build:",
-            "push:",
-            "play:",
-            "review:",
-        ):
-            self.assertIn(phase, text)
-        self.assertIn("resume the interrupted phase automatically", text)
+        self.assertNotIn("the current phase is authoritative", text)
+        self.assertNotIn("tracked project hook blocks production edits", text)
 
 
 if __name__ == "__main__":
