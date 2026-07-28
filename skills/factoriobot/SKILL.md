@@ -26,7 +26,16 @@ shrink the goal to what fits one response. A context compaction, interrupted
 turn, failed harmless command, completed commit, or completed test is not a
 stopping point.
 
-### Recover current state after a crash or interruption
+### Recover current state after a crash, interruption, or compaction
+
+After any context compaction, before taking another action:
+
+1. Carried instruction text is recovery evidence only.
+2. Reread the current filesystem `AGENTS.md` and all active matching skills.
+3. Recover the in-flight batch from current files, git state, tests, and live
+   evidence using the workflow below.
+4. Resume the in-flight batch automatically. Do not ask for routine
+   confirmation and do not apply stale rules from the compacted context.
 
 Read current state from disk before acting:
 
