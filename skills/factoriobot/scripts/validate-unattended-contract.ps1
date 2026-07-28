@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 $skill = Get-Content -Raw -LiteralPath $SkillPath
 $interface = Get-Content -Raw -LiteralPath $InterfacePath
+$normalizedSkill = [regex]::Replace($skill, '\s+', ' ')
 
 $requirements = [ordered]@{
     'bare invocation trigger' = 'Bare invocation starts unattended work'
@@ -62,6 +63,17 @@ $requirements = [ordered]@{
     'durable status' = 'docs/status.md'
     'progress stall guard' = 'Progress stall guard'
     'no measurable progress' = 'No measurable engineering or gameplay progress'
+    'gameplay movement gate' = 'Gameplay movement gate'
+    'one replacement attempt' = 'one implementation plus its replacement acceptance attempt'
+    'zero gameplay delta' = 'zero gameplay delta'
+    'technical work cannot reset gameplay gate' = 'Technical progress does not reset this gate'
+    'forbid another hotfix loop' = 'Do not make another patch, build, restart, or acceptance attempt'
+    'audit attempts since movement' = 'Audit every attempt since the last gameplay milestone moved'
+    'group failures by authority' = 'Group every failure under its existing authority'
+    'one milestone-closing batch' = 'one coherent authority batch that closes the next gameplay milestone'
+    'checkpoint development' = 'Use the nearest verified milestone save for development'
+    'fresh start final acceptance' = 'Use a fresh-start run only for final acceptance'
+    'time without gameplay movement' = 'Time since last gameplay movement:'
     'tested build' = 'Tested build'
     'attempt provenance' = 'Attempt provenance'
     'source changes after attempt' = 'Source changes made after an attempt starts'
@@ -98,7 +110,8 @@ $requirements = [ordered]@{
 }
 
 $missing = foreach ($entry in $requirements.GetEnumerator()) {
-    if (-not $skill.Contains($entry.Value)) {
+    $normalizedRequirement = [regex]::Replace($entry.Value, '\s+', ' ')
+    if (-not $normalizedSkill.Contains($normalizedRequirement)) {
         $entry.Key
     }
 }

@@ -284,15 +284,44 @@ authority batch is still the shortest path to gameplay progress.
 No measurable engineering or gameplay progress for thirty minutes means the
 current tactic has stalled.
 
-When stalled:
+### Gameplay movement gate (LOCKED)
+
+The tracked project hook enforces this gate. The skill explains the required
+recovery after the hook blocks an action.
+
+One authority batch receives one implementation plus its replacement acceptance
+attempt. If that attempt produces zero gameplay delta, the circuit opens.
+Technical progress does not reset this gate. Do not make another patch, build,
+restart, or acceptance attempt while the circuit is open.
+
+Audit every attempt since the last gameplay milestone moved. Group every
+failure under its existing authority, then define one coherent authority batch
+that closes the next gameplay milestone. Write and commit the complete failing
+proof set before implementation. Use the nearest verified milestone save for
+development. Use a fresh-start run only for final acceptance.
+
+Every unattended report adds:
+
+```text
+Time since last gameplay movement: <duration and evidence>
+Gameplay delta: <completed capability count before -> after>
+Progress circuit: <OPEN or CLOSED, with reason>
+```
+
+Never bypass, disable, edit around, or weaken the hook to continue work. An
+open circuit permits canonical review, authoritative audit updates, and failing
+tests. It forbids production implementation and another live attempt until the
+recorded audit defines the milestone-closing batch.
+
+When the gameplay movement circuit is open:
 
 1. Stop repeating the same command, patch, diagnostic attempt, or explanation.
-2. Re-read the selected authority record and the newest contradictory evidence.
-3. Identify whether the gap is diagnosis, shared implementation, enforcement,
-   verification, or live acceptance.
-4. Choose a different action inside the same authority batch that can move a
-   recorded measure.
-5. Report the stalled measure, changed tactic, and expected proof.
+2. Complete the cross-attempt audit from the last gameplay movement.
+3. Group every failure under the existing authority records.
+4. Define one milestone-closing authority batch and commit its complete failing
+   proof set.
+5. Report the stalled gameplay measure, elapsed time, circuit state, and batch
+   exit proof.
 
 Do not switch subsystems to manufacture visible activity. Do not count more
 files, commands, commits, tests written, or elapsed time as movement. A second
