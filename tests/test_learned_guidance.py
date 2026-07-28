@@ -84,6 +84,24 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("before taking another action", text)
         self.assertIn("resume the in-flight batch automatically", text)
 
+    def test_factoriobot_loads_every_authoritative_design_doc_before_work(self):
+        text = skill("factoriobot").lower()
+        for path in (
+            "docs/design.md",
+            "docs/authority.md",
+            "docs/construction.md",
+            "docs/brain.md",
+            "docs/framework.md",
+            "docs/efficiency.md",
+            "docs/todo.md",
+            "docs/design-resolution-plan.md",
+        ):
+            self.assertIn(path, text)
+        self.assertIn("read every file completely before selecting or changing work", text)
+        self.assertIn("not fully present in the current context", text)
+        self.assertIn("reread it completely from disk", text)
+        self.assertIn("after compaction", text)
+
 
 if __name__ == "__main__":
     unittest.main()
