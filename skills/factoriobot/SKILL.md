@@ -26,6 +26,26 @@ shrink the goal to what fits one response. A context compaction, interrupted
 turn, failed harmless command, completed commit, or completed test is not a
 stopping point.
 
+### Gameplay-progress execution loop (LOCKED)
+
+After analysis selects one shared authority change, the next objective is gameplay movement:
+
+1. Implement the complete shared change.
+2. Pass one combined verification gate, update required evidence, and push the
+   tested build.
+3. Run one acceptance attempt.
+4. Measure whether the required gameplay milestone and efficiency limits moved.
+5. If gameplay does not move, analyze the complete attempt and continue the
+   same authority batch at the next shared failure.
+
+Tests, documentation, status, commits, pushes, and review are mandatory support
+work inside that loop. Do not present support actions as separate progress steps, milestones, or objectives. When asked what happens next, name the
+gameplay outcome being pursued and the one current engineering action needed
+to reach it. Perform the support work without turning it into a long plan.
+
+Hook enforcement is required for every locked unattended rule. Update the skill, hook, and hook tests in the same change. A locked rule without executable
+hook enforcement is incomplete and cannot be relied on during unattended work.
+
 ### Recover current state after a crash, interruption, or compaction
 
 After any context compaction, before taking another action:
@@ -246,6 +266,10 @@ complete. Install the tracked skill through the existing blueprint deployment
 workflow, then verify the installed copy matches the tracked source. Continue
 the selected factoriobot authority batch after the learning update. A skill
 update is part of the work, not a stopping point.
+
+Every locked unattended rule added or changed by this loop must update its
+existing project hook enforcement and hook tests in the same change. Do not
+ship instruction-only enforcement.
 
 ### Unattended status report
 

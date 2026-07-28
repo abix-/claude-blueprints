@@ -131,6 +131,18 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("reject it as a hotfix", text)
         self.assertIn("keep analyzing", text)
 
+    def test_factoriobot_turns_support_work_into_one_gameplay_progress_gate(self):
+        text = skill("factoriobot").lower()
+        self.assertIn("gameplay-progress execution loop", text)
+        self.assertIn("one combined verification gate", text)
+        self.assertIn("the next objective is gameplay movement", text)
+        self.assertIn("do not present support actions as separate progress steps", text)
+        self.assertIn("tests, documentation, status, commits, pushes, and review", text)
+        self.assertIn("one acceptance attempt", text)
+        self.assertIn("if gameplay does not move", text)
+        self.assertIn("hook enforcement is required for every locked unattended rule", text)
+        self.assertIn("update the skill, hook, and hook tests in the same change", text)
+
 
 if __name__ == "__main__":
     unittest.main()
