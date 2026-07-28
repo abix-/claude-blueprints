@@ -60,6 +60,41 @@ any listed file is not fully present in the current context, reread it completel
 until the end of every file. After compaction, assume none of these files is
 fully present until the current turn has loaded each one completely.
 
+### Review gate (LOCKED)
+
+The tracked project hook enforces the review gate. Thinking comes before
+selection and implementation.
+
+1. Review all work since the last gameplay movement. Review recent Git history,
+   status, and every relevant uncommitted diff. Review the current project
+   state, status reports, committed batch reports, and changelog entries.
+2. Review every attempt since the last gameplay movement through the canonical
+   repository review workflow. Compare what changed, what repeated, and what
+   remained unchanged.
+3. Review every remaining item in `docs/todo.md`, including overlapping batch
+   records and findings that earlier work did not close.
+4. Review every authoritative design document completely. Identify the exact
+   owning design statements, committed proofs, authority scores, known
+   bypasses, and current consolidation queue.
+5. Compare the reviewed evidence with the permanent gameplay goal, current
+   acceptance conditions, endgame automation progress, authority scores,
+   foreground idle, fuel shortage, and the last real gameplay movement.
+6. Only after that complete review, select one next authority batch. It must
+   close the nearest gameplay milestone through one shared design-aligned
+   change, not repair the newest symptom.
+7. Record the selected batch in `docs/todo.md` and the `docs/authority.md`
+   current consolidation queue before writing implementation code.
+8. Write and commit the complete failing proof set for that selected batch.
+
+The tracked project hook blocks production edits, builds, restarts, and
+acceptance attempts until the review gate passes. Production implementation
+remains blocked until the selected batch has committed failing proofs. Starting
+an acceptance attempt reopens the review gate for the next decision.
+
+More commands, commits, tests, or elapsed time never substitute for this review.
+A previous batch record, a recent status report, or remembered context does not
+prove the current next step. The complete evidence set decides the next step.
+
 ### Goal-alignment gate (LOCKED)
 
 Before every action, recover and retain this chain from the current
