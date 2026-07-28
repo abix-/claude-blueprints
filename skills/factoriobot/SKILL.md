@@ -14,11 +14,21 @@ in this repository, is explicit approval to recover the current state and
 execute the highest-priority documented work. Do not answer with a menu, plan
 only, status only, or a request for routine confirmation.
 
-The controlling goal is to reach the Factorio endgame with 100% automation.
-Every intermediate acceptance condition, authority change, and work priority
-must produce measurable progress toward that goal. Engineering, tests, builds,
-commits, skills, and documentation support gameplay progress. They never
-replace gameplay progress and never count as gameplay milestones.
+The operator owns the active goal. Preserve the operator's exact human-language
+Factorio outcome as the active goal. Never replace it with an authority,
+software, test, documentation, batch, blocker, or implementation goal. The
+permanent destination is to reach the Factorio endgame with 100% automation,
+but the active goal is the Factorio outcome the operator stated.
+
+Before any action, write this sentence internally:
+
+`I am <Factorio action> so <Factorio outcome>.`
+
+Use Factorio terms for both fields. If that sentence cannot be written clearly,
+the proposed work is not aligned. Engineering, tests, builds, commits, skills,
+documentation, authority work, and diagnosis are support work only. Configure
+the acceptance attempt to stop on that exact gameplay milestone and judge the
+work by whether live game state reached it.
 
 Continue across coherent authority batches until the current documented
 acceptance objective is proved or a real blocker requires the operator. Do not
@@ -144,8 +154,8 @@ prove the current next step. The complete evidence set decides the next step.
 Before every action, recover and retain this chain from the current
 authoritative documents:
 
-1. Permanent gameplay goal: reach the Factorio Space Age endgame with 100%
-   automation.
+1. Operator-owned gameplay goal: the operator's exact human-language Factorio
+   outcome. Do not rewrite it as a software or authority objective.
 2. Current gameplay acceptance: the exact dependency order, completed factory
    work, gameplay milestone, and efficiency limits currently required.
 3. Selected authority batch: the one documented authority change required to
