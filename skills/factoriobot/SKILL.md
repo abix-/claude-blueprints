@@ -86,6 +86,30 @@ selection and implementation.
    current consolidation queue before writing implementation code.
 8. Write and commit the complete failing proof set for that selected batch.
 
+### Parameterized framework analysis (LOCKED)
+
+Before selecting the authority batch, explain the reviewed failures as one
+shared authority failure. Trace the complete desired-state path and record:
+
+- the canonical framework boundary that must own the rule once;
+- the parameters that vary for every instance, including the run, layout,
+  entity, resource, count, completion condition, and blocker when applicable;
+- every producer and consumer of that rule, including runtime, playbook,
+  audit, scheduler, executor, probe, review, and test paths;
+- every competing path or bypass that would remain after the proposed change;
+- the authority score before and target, with the exact rubric evidence that
+  can increase it;
+- the gameplay measure before and target, including the nearest gameplay
+  milestone and applicable efficiency limit.
+
+The shared change must put the policy in that canonical framework boundary and
+pass instance differences as data. If a proposed change names one run, layout,
+entity, resource, or attempt without proving the same rule for every instance,
+reject it as a hotfix. If the evidence does not yet support one parameterized
+change across every producer and consumer, keep analyzing. Do not select or
+implement a batch until it can both increase the authority score and move the
+recorded gameplay measure toward the permanent goal.
+
 The tracked project hook blocks production edits, builds, restarts, and
 acceptance attempts until the review gate passes. Production implementation
 remains blocked until the selected batch has committed failing proofs. Starting

@@ -119,6 +119,18 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("complete the whole design-aligned authority batch", text)
         self.assertIn("before another acceptance run", text)
 
+    def test_factoriobot_requires_parameterized_framework_analysis_before_selection(self):
+        text = skill("factoriobot").lower()
+        self.assertIn("parameterized framework analysis", text)
+        self.assertIn("shared authority failure", text)
+        self.assertIn("canonical framework boundary", text)
+        self.assertIn("parameters that vary", text)
+        self.assertIn("every producer and consumer", text)
+        self.assertIn("authority score before and target", text)
+        self.assertIn("gameplay measure before and target", text)
+        self.assertIn("reject it as a hotfix", text)
+        self.assertIn("keep analyzing", text)
+
 
 if __name__ == "__main__":
     unittest.main()
