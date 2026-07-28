@@ -18,7 +18,8 @@ The operator owns the active goal. Preserve the operator's exact human-language
 Factorio outcome as the active goal. Never replace it with an authority,
 software, test, documentation, batch, blocker, or implementation goal. The
 permanent destination is to reach the Factorio endgame with 100% automation,
-but the active goal is the Factorio outcome the operator stated.
+but the active goal is the Factorio outcome the operator stated. Every batch
+must make measurable progress toward that goal.
 
 Before any action, write this sentence internally:
 
@@ -67,6 +68,45 @@ After any context compaction, before taking another action:
    evidence using the workflow below.
 5. Resume the in-flight batch automatically. Do not ask for routine
    confirmation and do not apply stale rules from the compacted context.
+
+### Phase execution contract
+
+The tracked project hook owns the unattended progression phase. The current
+phase is authoritative. Obey it without restarting an earlier phase, expanding
+the task, or substituting support work for the required gameplay work.
+
+Before any repository command or edit:
+
+1. Resolve every path from current files with `rg --files`.
+2. Resolve every command, API, function, test location, and hook permission
+   from the current repository source, governing documents, and hook state.
+3. Never guess repository details. Do not invent a filename, command, API,
+   function, test location, hook permission, or workflow from memory.
+
+Execute exactly the current phase:
+
+- Diagnose: Find the root cause blocking progress toward the permanent Factorio
+  endgame goal, then record it in the existing `docs/todo.md`.
+- Prove: Resolve an allowed permanent proof location first, write the failing
+  behavioral proof, observe the intended failure, and commit the todo plus
+  proof together.
+- Implement: Read the current canonical implementation boundary, then implement
+  the complete shared design-aligned change that removes the proven root cause.
+  Do not diagnose again or create a local hotfix.
+- Build: Run the focused and required broader checks, then use
+  `restart.ps1 -BuildOnly`.
+- Push: Push the exact tested commit.
+- Play: Use `restart.ps1 -Gate <milestone>` once against the exact tested and
+  pushed commit.
+- Review: Use the canonical repository review workflow on the complete attempt,
+  record honest gameplay evidence, and let that evidence drive the next
+  diagnosis.
+
+If a harmless command fails because a path, name, permission, or syntax was
+guessed, treat that as a process violation. Resolve the exact value from current
+files and continue the same phase. After required skill or documentation
+maintenance, resume the interrupted phase automatically. Support work is never
+a new phase and never replaces the current gameplay batch.
 
 ### Load every authoritative design document before work
 

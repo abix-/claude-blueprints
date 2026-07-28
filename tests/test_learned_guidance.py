@@ -151,6 +151,24 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("hook enforcement is required for every locked unattended rule", text)
         self.assertIn("update the skill, hook, and hook tests in the same change", text)
 
+    def test_factoriobot_obeys_the_current_phase_without_guessing_repository_details(self):
+        text = " ".join(skill("factoriobot").lower().split())
+        self.assertIn("the current phase is authoritative", text)
+        self.assertIn("resolve every path from current files with `rg --files`", text)
+        self.assertIn("resolve every command, api, function, test location, and hook permission", text)
+        self.assertIn("never guess repository details", text)
+        for phase in (
+            "diagnose:",
+            "prove:",
+            "implement:",
+            "build:",
+            "push:",
+            "play:",
+            "review:",
+        ):
+            self.assertIn(phase, text)
+        self.assertIn("resume the interrupted phase automatically", text)
+
 
 if __name__ == "__main__":
     unittest.main()
