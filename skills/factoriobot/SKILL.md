@@ -17,9 +17,10 @@ only, status only, or a request for routine confirmation.
 The operator owns the active goal. Preserve the operator's exact human-language
 Factorio outcome as the active goal. Never replace it with an authority,
 software, test, documentation, batch, blocker, or implementation goal. The
-permanent destination is to reach the Factorio endgame with 100% automation,
-but the active goal is the Factorio outcome the operator stated. Every batch
-must make measurable progress toward that goal.
+permanent destination is to complete all Space Age research and sustainably
+produce and consume 1,000,000 science packs per minute with 100% unattended
+automation, but the active goal is the Factorio outcome the operator stated.
+Every batch must make measurable progress toward that goal.
 
 Before any action, write this sentence internally:
 
@@ -374,7 +375,7 @@ Use this exact shape:
 ```text
 Unattended status report
 Objective: <current documented acceptance objective>
-Endgame automation progress: <completed and automated capabilities>/<total capabilities on the prototype-derived endgame route>, <percent>, <evidence>
+Permanent goal progress: <completed and automated conditions>/<all finite live research plus production and consumption of every required science pack at 1,000,000 per minute>, <percent>, <evidence>
 Priority basis: <newest explicit operator direction, current consolidation queue entry, or authority row, plus why it is next>
 Authority score: <number and name>, <current> -> <target>
 Verified progress: <real behavior or authority improvement, with Code-verified or Live-verified status>
@@ -418,11 +419,14 @@ the Copper Lab objective, or a passed gameplay efficiency limit. Put partial
 playbook state under Active attempt unless it changed the game state. Write
 `none` when no gameplay milestone was reached.
 
-Endgame automation progress uses the complete prototype-derived route to the Space Age endgame as its denominator.
-Count a required progression capability only when gameplay evidence proves the
-bot can produce, move, build, research, or operate it unattended and verify its
-completion. Player help does not count as automated. Recompute the denominator
-when live prototype data or the endgame route changes.
+Permanent goal progress uses every finite enabled non-hidden live technology,
+the solar-system-edge checkpoint, and production plus consumption of every
+science pack required by that research at 1,000,000 per minute as its one
+typed denominator. The one-minute Factorio production statistics are the
+sustained-rate observation. Count a condition only when a fresh unattended
+attempt proves it and current live state still satisfies it. Player help does
+not count as automated. Recompute the denominator when live prototype data
+changes.
 Report the completed and automated count, total count, percentage, and newest evidence.
 Never invent weights, credit code that has not run, or increase the percentage
 from engineering activity alone.
@@ -793,7 +797,7 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 - DRY parameter doctrine: roles encode reusable mechanics and playbooks encode focused reusable workflows. Resource, item, recipe, technology, entity, count, endpoint, rate, and threshold are runtime parameters unless they change the Factorio workflow itself. Never copy a playbook merely to change iron to copper, one recipe to another, or one count to another.
 - Playbook `params` are the built-in AWX-survey equivalent: every parameter has help and a typed default, with optional min/max/choices. `runs` are named parameter sets used for scheduler order, panel identity, checkpoints, and completion tracking; they do not own copied task lists. Manual overrides use `factoriobot run PLAYBOOK --param NAME=VALUE`.
 - Playbook selection is live analysis, not a fixed route. Each playbook declares `requires_research` and the six-loop bottlenecks it `addresses`; named runs declare concrete item production targets in items/minute. Only after the focused playbook completes, read Factorio's one-minute production and consumption flows plus power satisfaction, filter ineligible candidates, score the largest deficit, and choose exactly one next run. `order` is only a deterministic tie-breaker. Never switch ordinary growth work mid-playbook.
-- Continuous factory growth toward Space Age endgame is the standing objective. Find the measured bottleneck, remove it with the smallest complete playbook, observe again, then grow resource throughput, smelting, manufacturing, logistics, research, and power. Healthy loops trigger scale-up analysis; they do not justify idling.
+- Continuous factory growth toward completed Space Age research and sustained production and consumption of 1,000,000 science packs per minute is the standing objective. Select the exact limiting science pack or unfinished research condition, trace backward to its first actionable dependency, remove it with the smallest complete playbook, observe again, and repeat. Unrelated stockpiles and surplus production have zero goal value. Healthy loops trigger scale-up analysis; they do not justify idling.
 - Urgent condition-driven work uses Factorio train-style interrupt semantics. The active growth playbook is the main schedule; every completed task and every unsuccessful retry is a pause-aware safe boundary that signals the watch to re-read urgent conditions immediately rather than waiting for either the monitor timer or the operation retry delay. At that boundary, checkpoint it, push the highest-priority eligible interrupt playbook, run until its explicit clear condition, re-read live state, then resume. This wakeup is one framework mechanism, never fuel-specific steps copied into growth playbooks. Defense, critical power, burner-fuel starvation, and missing-building recovery may interrupt; ordinary growth deficits never do. Require hysteresis, cooldowns, a bounded stack, explicit `allow_inside_interrupt`, and self-retrigger prevention.
 - Fuel and power health preempt expansion and output waits. Live one-minute coal production and consumption drive self-sustaining mine scale-out with 25% reserve headroom; any production-below-consumption state must outrank ordinary iron growth. Before relying on burner output, use the shared `fuel.plan` plus `fuel-for-targets` path: recursive target demand -> remaining ore/crafts -> live mining/crafting seconds -> 60 ticks/second times machine energy usage -> divide by live fuel value -> subtract burning/stored energy -> gather/load/verify only the next work interval's shortfall. Never use a fixed coal guess or treat one nonempty fuel slot as enough.
 - Opening defense is a capability gate, not cleanup after scale. Hostile units are checked every second around the player and every remembered active building; the priority-1000 defense interrupt must run while growth is active, another allowed interrupt is active, or the scheduler is idle. It uses a live equipped gun/ammo slot, closes only into range, shoots continuously, strafes, retreats inside the kite threshold, protects the threatened asset coordinates, verifies clear for three seconds, and yields to Emergency stop immediately. Before loaded turrets, permit only the minimum defense capability path: bootstrap iron, two-drill coal, 4x iron, 1x copper, Steam Power, powered lab, prototype-discovered ammo-turret research, and individually loaded opening turrets. Larger coal/copper/stone growth and bus work declare `requires_defense`. Poll nests touching pollution every 30 seconds. Resolve the ammo-turret recipe and its prerequisite-first technology chain from live prototypes; never encode a vanilla technology name.
