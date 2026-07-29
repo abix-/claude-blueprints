@@ -299,6 +299,32 @@ batch remains incomplete.
 - Do not rerun Factorio after an isolated patch. Finish the coherent authority
   batch, pass its exit gate, then run one acceptance attempt.
 
+### Live root-cause analysis
+
+For the current running game, begin root-cause analysis with direct live RCON
+evidence from the installed repository CLI. A previous attempt log cannot
+establish the current game root cause. Logs explain history only.
+
+Trace the complete Factorio path from producer through connections and
+transport to the blocked consumer. For power, inspect generation, each
+electric-network connection, the blueprint attachment, the supplying pole, and
+the consumer. For items, inspect production, every source inventory, transport,
+destination inventory, and consumption. Find the first link whose observed
+state does not satisfy the next link.
+
+Label direct game observations separately from inferences. A planner result,
+completion message, audit classification, missing field, blueprint shape, or
+old log entry is not proof of live physical topology. State the root cause only
+after the live observations identify the first broken Factorio link.
+
+If the permanent live diagnostics cannot observe a required link, add a
+read-only repository diagnostic with a committed test, build it through the
+normal workflow, and use it against the running game. Do not replace missing
+evidence with an ad-hoc probe, historical result, source-code inference, or
+guess. When the operator supplies a contradictory current-game observation,
+discard the unsupported inference and resume the live trace from that observed
+fact.
+
 ### Progress and checkpoints
 
 Keep the operator informed without requiring babysitting:
