@@ -66,11 +66,12 @@ After any context compaction, before taking another action:
 
 1. Carried instruction text is recovery evidence only.
 2. Reread the current filesystem `AGENTS.md` and all active matching skills.
-3. Reload every authoritative design document completely as required below.
-4. Recover the in-flight batch from current files, git state, tests, and live
-   evidence using the workflow below.
-5. Resume the in-flight batch automatically. Do not ask for routine
-   confirmation and do not apply stale rules from the compacted context.
+3. Classify the latest operator message before loading project material.
+4. For a bounded request, read only the current files needed to answer or
+   perform that request, then stop.
+5. For bare unattended continuation, recover the in-flight batch from current
+   files, git state, tests, and live evidence using the workflow below, then
+   resume automatically.
 
 ### Operator control and mechanical hook contract
 
@@ -80,6 +81,21 @@ automatic continuation while that request is handled. Bare `factoriobot`,
 or `pause` stops work immediately. `stop hooks` makes every project hook a
 persistent no-op until the operator says `enable hooks`. Hooks never prevent
 conversation with the operator.
+
+The operator also owns the scope and timing of review:
+
+- A specific question or command is a bounded request. Answer or perform
+  exactly that request using only the minimum current evidence required.
+- Do not run the unattended review gate, reload every design document, inspect
+  unrelated history, update project state, or resume previous work during a
+  bounded request unless the operator explicitly asks for that action.
+- Words such as `review`, `audit`, or `investigate` authorize only the review
+  named by the operator. They do not authorize a repository-wide review unless
+  the operator says `full`, `complete`, `all`, or starts unattended work.
+- Bare `$factoriobot`, `factoriobot`, `go`, or `continue` authorizes the full
+  unattended workflow below.
+- When the bounded request is complete, return control to the operator. Do not
+  automatically resume unattended work.
 
 While enabled, hooks enforce only:
 
@@ -104,13 +120,15 @@ Before any repository command or edit:
 
 If a harmless command fails because a path, name, permission, or syntax was
 guessed, treat that as a process violation. Resolve the exact value from current
-files and continue the same gameplay batch. After required skill or
-documentation maintenance, resume the interrupted batch automatically. Support
-work never replaces the current gameplay batch.
+files and continue the same request. Resume an interrupted gameplay batch only
+when unattended continuation is active. Support work never replaces the current
+gameplay batch.
 
-### Load every authoritative design document before work
+### Load every authoritative design document for unattended work
 
-At initial invocation and after compaction, interruption, or recovery, read every file completely before selecting or changing work:
+On bare unattended invocation, and when recovering unattended work after
+compaction or interruption, read every file completely before selecting or
+changing the next authority batch:
 
 - `docs/design.md`
 - `docs/authority.md`
@@ -122,18 +140,20 @@ At initial invocation and after compaction, interruption, or recovery, read ever
 - `docs/todo.md`
 - `docs/design-resolution-plan.md`
 
-Do this before diagnosing the next change, choosing a priority, writing a test,
-editing code or documentation, or starting an acceptance attempt. A summary,
-excerpt, grep result, previous transcript, truncated tool result, or earlier
-conversation copy does not count as reading the current file completely. If
-any listed file is not fully present in the current context, reread it completely from disk. If output truncates, continue reading bounded ranges
-until the end of every file. After compaction, assume none of these files is
-fully present until the current turn has loaded each one completely.
+This full load belongs only to unattended batch selection or an explicitly
+requested full review. A bounded operator request uses the minimum current
+governing files and evidence needed for that request. For an authorized full
+load, a summary, excerpt, grep result, previous transcript, truncated tool
+result, or earlier conversation copy does not count as reading the current file
+completely. If output truncates, continue reading bounded ranges until the end
+of every file.
 
-### Review gate (LOCKED)
+### Unattended review gate (LOCKED)
 
-The skill requires the review gate. Thinking comes before selection and
-implementation.
+The review gate applies only when bare invocation starts unattended work, when
+unattended work must select a new authority batch, or when the operator
+explicitly requests a full repository review. It never expands a bounded
+operator request.
 
 1. Review all work since the last gameplay movement. Review recent Git history,
    status, and every relevant uncommitted diff. Review the current project
