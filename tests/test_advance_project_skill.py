@@ -32,14 +32,43 @@ class AdvanceProjectSkillTests(unittest.TestCase):
             "authority map",
             "todo or issue",
             "project state",
+            "status record",
             "changelog",
         ):
             self.assertIn(term, self.text)
 
     def test_workflow_requires_red_first_and_product_acceptance(self):
         self.assertIn("failing behavioral proofs before production code", self.text)
-        self.assertIn("Run one acceptance on the exact tested build.", self.text)
+        self.assertIn("exact tested and pushed build", self.text)
         self.assertIn("Do not hotfix and rerun.", self.text)
+
+    def test_operator_outcome_is_the_only_progress_measure(self):
+        self.assertIn("Preserve the operator's exact outcome", self.text)
+        self.assertIn("Only measured product-state movement is progress.", self.text)
+        self.assertIn("Support artifacts are not milestones.", self.text)
+
+    def test_recovery_resumes_current_work_from_disk(self):
+        self.assertIn("After compaction or interruption", self.text)
+        self.assertIn("read them again from disk", self.text)
+        self.assertIn("resume the in-flight batch", self.text)
+
+    def test_batch_records_root_cause_scores_and_acceptance_before_code(self):
+        self.assertIn("Record the root cause and coherent batch before production code", self.text)
+        self.assertIn("current and target score", self.text)
+        self.assertIn("measured product acceptance", self.text)
+
+    def test_live_evidence_and_project_vocabulary_are_authoritative(self):
+        self.assertIn("current live state", self.text)
+        self.assertIn("historical evidence cannot prove current state", self.text)
+        self.assertIn("established project and domain terminology", self.text)
+
+    def test_hooks_only_enforce_mechanical_gates(self):
+        self.assertIn("Hooks may enforce only mechanical gates", self.text)
+        self.assertIn("never block operator conversation", self.text)
+
+    def test_learning_returns_to_the_product_batch(self):
+        self.assertIn("update the owning skill", self.text)
+        self.assertIn("resume the product batch", self.text)
 
 
 if __name__ == "__main__":
