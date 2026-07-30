@@ -208,14 +208,24 @@ forward through every writer and backward from the selected Work through every
 matcher, adapter, and consumer. Inspect the current source for all competing
 paths. A named canonical path does not excuse an uninspected second path.
 
-Commit one table-driven failing proof that exercises the complete path from the
-current limiting Factorio condition through WorkRegistry, WorkGraph,
-ScheduleDecision, and the exact selected Building Work. The matrix must:
+Commit one table-driven failing proof for the generic authority concept, then
+exercise it through the complete path from the current limiting Factorio
+condition through WorkRegistry, WorkGraph, ScheduleDecision, and the selected
+Work. The governing invariant is:
+
+`Every representation of one authority relation resolves the same canonical
+identity. A candidate that differs on any field owned by that identity does not
+match.`
+
+The matrix must:
 
 - derive producers and consumers from the owning registry where possible;
 - include every known matcher and bypass, not only the intended implementation;
-- vary stable identity, Blueprint, layout, surface, entity, resource, count,
-  operation, completion condition, and blocker one dimension at a time;
+- derive the canonical identity fields from the owning schema instead of
+  hard-coding the fields from one observed failure;
+- compare every representation and matcher for the same relation and require
+  identical match sets and the same final selection;
+- vary each canonical identity field one dimension at a time;
 - include collisions where two candidates share one field but differ in every
   other authoritative field;
 - prove the intended Work is selected and every near-match is rejected; and
