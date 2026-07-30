@@ -969,9 +969,43 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 - Development restart: `build.ps1` installs both the release binary and companion mod. `restart.ps1` closes Factorio normally, launches `factoriobot-start.zip` directly with Factorio 2.1's `--host`, and starts a hidden watch if needed. Pass `-Save NAME.zip` for another save. Pass `-Hypothesis "..."` to label a deliberate change in the attempt catalog (`FACTORIOBOT_HYPOTHESIS`). Restart does not re-run luacheck; build owns that gate.
 - For a Steam install, `restart.ps1` must use `Steam.exe -applaunch 427520 --host <save>`; direct Steam-build `factorio.exe --host` triggers Steam's interactive custom-arguments confirmation. Non-Steam builds launch directly.
 
+## Research the API before asserting against it (LOCKED)
+
+Before writing any assertion, call, or fixture against a type or function,
+read its real definition from the current source. Grep the signature, the
+struct fields, and the constructor. Then write.
+
+Skipping this produces a specific, repeated failure: an invented API that looks
+plausible. Measured on 2026-07-30, guessed calls that did not exist included
+`blueprint_catalog::catalog()`, `rcon::default_address()`, `gate::auto_approves`,
+and `lua::ghost_blueprint_with_seed_groups`; guessed shapes that were wrong
+included `TileDir` imported from the wrong module, `param.default()` when the
+field is `param.default`, `BuildingRegistry::as_slice()` when the accessor is
+`building()`, `InterruptDef.when` which does not exist, and a four-argument call
+to `production_fuel_plan`, which takes eight. Every one compiled in the author's
+head and failed on the first run.
+
+The cost is asymmetric. Research is about three tool calls: grep the type, read
+the signature, read the constructor. A guess costs the same three calls plus a
+failed run, a re-read, and a correction. The first proof written under this
+discipline that session passed on the first attempt, after eleven consecutive
+proofs that each needed a correction round.
+
+The same rule applies to what a value contains. Assert against the produced
+artifact, not the source that produces it: a generator emits `local wanted=1`
+with no spaces, `{{gx,gy}}` in Rust is format escaping that reaches the game as
+`{gx,gy}`, and a chat digest renders a finding's kind rather than its summary.
+Reading the generator's source and asserting its literal text proves nothing
+about what the game receives.
+
+When a proof fails because the API differs from the assumption, that failure is
+the discovery. Record what the contract actually is, then assert that. Do not
+adjust the assertion until it passes without understanding why it failed.
+
 ## Windows invocation (LOCKED)
 
-Run every repository PowerShell script with `pwsh -NoProfile -File .estart.ps1`.
+Run every repository PowerShell script with `pwsh -NoProfile -File .
+estart.ps1`.
 
 Never launch `powershell` from Git Bash for these scripts. Git Bash hands
 Windows PowerShell a POSIX-mangled `PSModulePath`, so module discovery fails
