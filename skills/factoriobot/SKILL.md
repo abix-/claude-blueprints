@@ -1056,6 +1056,26 @@ Source text proves only an absence. When a proof cannot fail because of a code
 change, that is a defect in the proof, not a fact to report to the operator:
 convert it to run the real path, keeping its design statement.
 
+A gate must recompute the truth it checks. Comparing two hand-maintained
+records against each other proves only that they agree with each other, and
+they decay together. Measured 2026-07-30: an `ACTIVE_BATCH` ledger held one
+gameplay test name, a RED proof commit, a correction commit, and production
+paths per entry, all typed in by hand, and it gated live acceptance. Five of
+its six test names no longer existed and the sixth passed, yet the gate stayed
+green because it only compared that ledger to the red list, which named the
+same six. Its acceptance function was never called from `restart.ps1`, and the
+Pester test asserting the admission ran was matching the function definition
+rather than a call. The red list survived the same period because its gate
+re-runs the design tests in a child process and diffs the real failing set
+against the list, so it prints the correct contents whenever it is wrong.
+
+Prefer the gate that derives its expected value from the thing it guards. When
+a table must be written by hand, resolve every entry against the real artifact
+first, that the test exists and the commit exists, before any comparison
+between tables. A ledger of commit SHAs duplicates git and cannot be
+recomputed; delete it rather than maintain it, and keep the discipline it
+encoded in this skill where it is read every session.
+
 Before proposing any shared change, confirm the installed skill matches its
 tracked source. A stale installed copy silently removes locked sections.
 
