@@ -44,12 +44,17 @@ This is the ONE development workflow. All other sections are gates,
 requirements, or reference details inside this workflow, not alternate
 workflows.
 
-The RED test queue is the work queue. Resolve every known RED proof before
-selecting new work. Do not start a new feature or authority batch while a known
-RED proof remains unresolved. Group RED proofs by their shared root cause,
-order the groups by impact on the operator's Factorio goal, and make the entire
-selected group GREEN through one shared implementation before moving to the
-next group.
+The RED test queue is the work queue. A known RED test means the implementation
+is incomplete. Work means changing the shared implementation so the selected
+RED group can pass. Running tests, reviewing evidence, updating documents,
+building, and acceptance only measure the implementation. They do not resolve
+a RED test.
+
+Resolve every known RED proof before selecting new work. Do not start a new
+feature or authority batch while a known RED proof remains unresolved. Group
+RED proofs by their shared root cause, order the groups by impact on the
+operator's Factorio goal, and make the entire selected group GREEN through one
+shared implementation before moving to the next group.
 
 A failed gameplay outcome is evidence, not a code fix. Every RED gameplay
 outcome must have a root-cause implementation proof. The proof must exercise
@@ -59,6 +64,14 @@ through mocks that bypass the failing boundary. It must cover every producer
 and consumer that could bypass the correction. Never infer that a later commit
 resolved a RED outcome because it touched nearby code, shares an authority, or
 passes unrelated tests. More gameplay testing cannot repair bad code.
+A GREEN supporting proof does not make a RED outcome test resolved. Before
+acceptance, map every selected RED test to a root-cause proof that directly
+exercises its failure condition and to the corresponding correction in the
+shared runtime path. One proof may cover multiple RED tests only when its
+parameterized cases explicitly cover every failure condition. Do not rerun an
+already-GREEN proof, the full build, or acceptance instead of implementing the
+correction.
+
 Acceptance is forbidden until the root-cause proof failed on the bad
 implementation and passes on the shared correction. The RED proof remains the
 selected work until that exact gate passes. Do not run acceptance, select new

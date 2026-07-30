@@ -203,6 +203,12 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("never weaken, delete, or narrow a passing proof", text)
         self.assertIn("repeat from the next highest-impact proven gap", text)
         self.assertIn("the red test queue is the work queue", text)
+        self.assertIn("a known red test means the implementation is incomplete", text)
+        self.assertIn(
+            "work means changing the shared implementation so the selected red "
+            "group can pass",
+            text,
+        )
         self.assertIn("resolve every known red proof before selecting new work", text)
         self.assertIn("do not start a new feature or authority batch", text)
         self.assertIn("group red proofs by their shared root cause", text)
@@ -222,6 +228,20 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("exercise the complete shared runtime path", text)
         self.assertIn("fail for the diagnosed root cause", text)
         self.assertIn("cannot pass through mocks that bypass the failing boundary", text)
+        self.assertIn(
+            "a green supporting proof does not make a red outcome test resolved",
+            text,
+        )
+        self.assertIn(
+            "map every selected red test to a root-cause proof that directly "
+            "exercises its failure condition",
+            text,
+        )
+        self.assertIn(
+            "do not rerun an already-green proof, the full build, or acceptance "
+            "instead of implementing the correction",
+            text,
+        )
         self.assertIn(
             "the red proof remains the selected work until that exact gate passes",
             text,
