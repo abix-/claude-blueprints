@@ -52,14 +52,17 @@ selected group GREEN through one shared implementation before moving to the
 next group.
 
 A failed gameplay outcome is evidence, not a code fix. Every RED gameplay
-outcome must have a causal implementation proof that exercises the shared code
-path responsible for the outcome. Never infer that a later commit resolved a
-RED outcome because it touched nearby code, shares an authority, or passes
-unrelated tests. More gameplay testing cannot repair bad code. Acceptance is
-forbidden until the causal proof failed on the bad implementation and passes on
-the shared correction. A live outcome proof may remain RED only while awaiting
-that one replacement attempt; it remains the selected work and cannot be
-treated as resolved until the attempt makes it GREEN.
+outcome must have a root-cause implementation proof. The proof must exercise
+the complete shared runtime path, fail for the diagnosed root cause against the
+bad implementation, derive expected results independently, and cannot pass
+through mocks that bypass the failing boundary. It must cover every producer
+and consumer that could bypass the correction. Never infer that a later commit
+resolved a RED outcome because it touched nearby code, shares an authority, or
+passes unrelated tests. More gameplay testing cannot repair bad code.
+Acceptance is forbidden until the root-cause proof failed on the bad
+implementation and passes on the shared correction. The RED proof remains the
+selected work until that exact gate passes. Do not run acceptance, select new
+work, or mark the outcome resolved before it passes.
 
 1. Run the current relevant test set and preserve its results as the baseline.
 2. Review the failing tests and attempt evidence, then diagnose the shared root

@@ -208,17 +208,27 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("group red proofs by their shared root cause", text)
         self.assertIn("make the entire selected group green", text)
         self.assertIn("a failed gameplay outcome is evidence, not a code fix", text)
-        self.assertIn("every red gameplay outcome must have a causal implementation proof", text)
+        self.assertIn(
+            "every red gameplay outcome must have a root-cause implementation proof",
+            text,
+        )
         self.assertIn("never infer that a later commit resolved a red outcome", text)
         self.assertIn("more gameplay testing cannot repair bad code", text)
         self.assertIn(
-            "acceptance is forbidden until the causal proof failed on the bad "
+            "acceptance is forbidden until the root-cause proof failed on the bad "
             "implementation and passes on the shared correction",
             text,
         )
+        self.assertIn("exercise the complete shared runtime path", text)
+        self.assertIn("fail for the diagnosed root cause", text)
+        self.assertIn("cannot pass through mocks that bypass the failing boundary", text)
         self.assertIn(
-            "a live outcome proof may remain red only while awaiting that one "
-            "replacement attempt",
+            "the red proof remains the selected work until that exact gate passes",
+            text,
+        )
+        self.assertIn(
+            "do not run acceptance, select new work, or mark the outcome resolved "
+            "before it passes",
             text,
         )
         self.assertIn(
