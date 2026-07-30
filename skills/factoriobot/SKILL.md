@@ -200,6 +200,39 @@ change across every producer and consumer, keep analyzing. Do not select or
 implement a batch until it can both increase the authority score and move the
 recorded gameplay measure toward the permanent goal.
 
+### Complete authority-path proof (LOCKED)
+
+Do not treat one correct implementation path as proof that an authority is
+resolved. Before implementation, trace the operator's current Factorio outcome
+forward through every writer and backward from the selected Work through every
+matcher, adapter, and consumer. Inspect the current source for all competing
+paths. A named canonical path does not excuse an uninspected second path.
+
+Commit one table-driven failing proof that exercises the complete path from the
+current limiting Factorio condition through WorkRegistry, WorkGraph,
+ScheduleDecision, and the exact selected Building Work. The matrix must:
+
+- derive producers and consumers from the owning registry where possible;
+- include every known matcher and bypass, not only the intended implementation;
+- vary stable identity, Blueprint, layout, surface, entity, resource, count,
+  operation, completion condition, and blocker one dimension at a time;
+- include collisions where two candidates share one field but differ in every
+  other authoritative field;
+- prove the intended Work is selected and every near-match is rejected; and
+- fail at the first boundary that loses operator-owned Factorio meaning.
+
+A component test, source-text check, happy-path fixture, authority score change,
+or green focused suite cannot satisfy this gate. If acceptance selects the
+wrong Factorio action, do not patch that action. Trace the selected record
+backward through every matcher, add the collision to the shared matrix, and fix
+the one canonical boundary used by all callers.
+
+Do not start a secondary authority batch while the current gameplay acceptance
+is open merely because it is easier to code-verify. The next implementation
+must remove the first shared authority failure on the operator's current
+Factorio path. Authority scores measure that correction; they never replace the
+operator's goal.
+
 The gameplay movement circuit blocks only another acceptance attempt after an
 unsuccessful attempt until the canonical review, recorded root cause, and
 committed failing proof exist. Review, documentation, tests, implementation,
