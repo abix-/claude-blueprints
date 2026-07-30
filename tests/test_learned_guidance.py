@@ -178,6 +178,18 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertNotIn("the current phase is authoritative", text)
         self.assertNotIn("tracked project hook blocks production edits", text)
 
+    def test_factoriobot_rejects_attempt_regressions_with_generic_red_proofs(self):
+        text = " ".join(skill("factoriobot").lower().split())
+        self.assertIn("after every attempt", text)
+        self.assertIn("complete attempt history", text)
+        self.assertIn("previously achieved gameplay capability", text)
+        self.assertIn("regression is a failed implementation", text)
+        self.assertIn("generic red proof", text)
+        self.assertIn("shared authority concept", text)
+        self.assertIn("not one attempt, building, resource, or symptom", text)
+        self.assertIn("do not start another acceptance attempt", text)
+        self.assertIn("meet or exceed the historical capability", text)
+
 
 if __name__ == "__main__":
     unittest.main()

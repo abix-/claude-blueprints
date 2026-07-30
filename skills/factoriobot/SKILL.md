@@ -584,6 +584,42 @@ as live-verified until a later build and attempt exercise them. If relevant
 dirty source was included in the installed binary, identify it explicitly and
 do not attribute the result to `HEAD` alone.
 
+### Attempt regression gate (LOCKED)
+
+After every attempt, run the canonical review and compare the result with the
+complete attempt history, not only the immediately previous attempt or current
+broken baseline. Preserve the best verified gameplay capability reached at
+each comparable milestone, including research, functioning buildings, factory
+scale, production, power, fuel, completed work, idle time, shortage time, and
+milestone time.
+
+Loss of any previously achieved gameplay capability is a regression. An
+attempt that improves one measurement while losing another protected
+capability is still regressed. A regression is a failed implementation even
+when its focused tests pass or it fixes the intended symptom.
+
+When a regression appears:
+
+1. Record the lost capability and the first responsible attempt or
+   implementation range in the existing todo and status evidence.
+2. Trace the shared authority concept that permitted the loss through every
+   producer and consumer. Do not patch one observed symptom or blindly revert
+   without identifying that authority failure.
+3. Commit a table-driven generic RED proof for the shared authority concept,
+   not one attempt, building, resource, or symptom. Derive cases from the
+   owning schema or registry where possible, and include the historical
+   regression only as one case.
+4. Correct the shared implementation and prove every affected previously
+   achieved gameplay capability through the combined verification gate.
+5. Do not start another acceptance attempt until the generic RED proof was
+   observed, the shared correction passes, and the tested build is pushed.
+6. Require the replacement attempt to meet or exceed the historical capability
+   at the comparable milestone before calling the regression recovered.
+
+Every post-attempt status report must state whether the attempt regressed,
+which capabilities were lost or recovered, and the historical comparison used.
+Do not move a regression to the changelog until live evidence proves recovery.
+
 ### End-of-window checkpoint
 
 When the operator provides an unattended time window, keep working until the
