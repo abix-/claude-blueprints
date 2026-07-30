@@ -969,6 +969,62 @@ Three parts: the Rust brain offloads as much as possible (deterministic monitors
 - Development restart: `build.ps1` installs both the release binary and companion mod. `restart.ps1` closes Factorio normally, launches `factoriobot-start.zip` directly with Factorio 2.1's `--host`, and starts a hidden watch if needed. Pass `-Save NAME.zip` for another save. Pass `-Hypothesis "..."` to label a deliberate change in the attempt catalog (`FACTORIOBOT_HYPOTHESIS`). Restart does not re-run luacheck; build owns that gate.
 - For a Steam install, `restart.ps1` must use `Steam.exe -applaunch 427520 --host <save>`; direct Steam-build `factorio.exe --host` triggers Steam's interactive custom-arguments confirmation. Non-Steam builds launch directly.
 
+## Windows invocation (LOCKED)
+
+Run every repository PowerShell script with `pwsh -NoProfile -File .estart.ps1`.
+
+Never launch `powershell` from Git Bash for these scripts. Git Bash hands
+Windows PowerShell a POSIX-mangled `PSModulePath`, so module discovery fails
+outright: `Get-FileHash` does not resolve and `Get-Module -ListAvailable Pester`
+returns nothing. Never rewrite `PSModulePath` to work around that. Replacing it
+hides the installed Pester 5 and exposes the built-in Pester 3, whose `-Output`
+parameter is ambiguous, which fails a different way and wastes another cycle.
+`pwsh` resolves both correctly with no environment edits.
+
+## restart.ps1 is build, launch, watch (LOCKED)
+
+`restart.ps1` stops the watch, runs the Lua gate, builds and installs the
+binary and companion mod, launches Factorio on the selected save, and starts
+the watch. Nothing else belongs in that path.
+
+Restarting the game is not acceptance. Never gate the launch on a clean working
+tree, a pushed HEAD, a progress-state field matching HEAD, or a hook proof
+suite. Those refuse to start the game for bookkeeping reasons and strand the
+operator. Acceptance evidence belongs behind an explicit acceptance switch, not
+in the one script used to play.
+
+Codex hooks affect Codex only. `.Codex/hooks.json`, `.Codex/hooks/*`, and
+`.Codex/progress-state.json` must never appear in the shared build, launch, or
+watch path. A Codex hook proof suite or a Codex state write inside
+`Install-Factoriobot` blocks every operator and every other agent.
+
+Keep the Lua gate. A malformed generated Lua payload breaks RCON live, so
+lint-before-swap stays.
+
+## A design proof runs the code (LOCKED)
+
+Every design proof must execute the shipped implementation: the catalog it
+loads, the observation it reconciles, the work it compiles, the priority it
+calculates, the decision it selects.
+
+Two proof shapes are forbidden and are enforced mechanically by
+`no_design_proof_reads_recorded_gameplay_evidence` and
+`no_design_proof_asserts_a_source_text_presence`:
+
+- Reading recorded gameplay evidence (`docs/runs/batches`, batch digests,
+  attempt records). A digest reader passes or fails on which log file was
+  committed last. It cannot fail when the code is wrong and cannot pass when
+  the code is right, and no code change can turn it green.
+- Asserting that a word appears in a source file. It stays green when the
+  behaviour is deleted and the identifier is kept.
+
+Source text proves only an absence. When a proof cannot fail because of a code
+change, that is a defect in the proof, not a fact to report to the operator:
+convert it to run the real path, keeping its design statement.
+
+Before proposing any shared change, confirm the installed skill matches its
+tracked source. A stale installed copy silently removes locked sections.
+
 ## Troubleshooting
 
 - Logs are one per save attempt: `factoriobot-<local-time stamp>.log` in the repo checkout (cwd fallback). Every process start opens a fresh stamped file, and the watch rotates to a new one when the game tick goes backward, the new-save-attempt signal. To troubleshoot the current attempt, read the newest `factoriobot-*.log`; it starts with the build version and the previous file's last line names its successor. Never let one shared log grow forever; a 1.6 GB single log cost a real session.
