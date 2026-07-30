@@ -82,9 +82,14 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("current filesystem `agents.md`", text)
         self.assertIn("active matching skills", text)
         self.assertIn("before taking another action", text)
-        self.assertIn("resume the in-flight batch automatically", text)
+        self.assertIn("read only enough current project state", text)
+        self.assertIn("resume it automatically", text)
+        self.assertIn(
+            "do not reload every design document merely because context compacted",
+            text,
+        )
 
-    def test_factoriobot_loads_every_authoritative_design_doc_before_work(self):
+    def test_factoriobot_loads_every_authoritative_design_doc_only_for_selection(self):
         text = skill("factoriobot").lower()
         for path in (
             "docs/design.md",
@@ -98,10 +103,17 @@ class LearnedGuidanceTests(unittest.TestCase):
             "docs/design-resolution-plan.md",
         ):
             self.assertIn(path, text)
-        self.assertIn("read every file completely before selecting or changing work", text)
-        self.assertIn("not fully present in the current context", text)
-        self.assertIn("reread it completely from disk", text)
-        self.assertIn("after compaction", text)
+        self.assertIn("before selecting or changing to a new authority batch", text)
+        self.assertIn(
+            "recovering a clearly recorded in-flight batch uses only its owning "
+            "documents and current evidence",
+            " ".join(text.split()),
+        )
+        self.assertIn(
+            "bare invocation resumes a clearly recorded in-flight batch without "
+            "repeating this gate",
+            " ".join(text.split()),
+        )
 
     def test_factoriobot_keeps_every_action_on_the_operators_goal_chain(self):
         text = skill("factoriobot").lower()

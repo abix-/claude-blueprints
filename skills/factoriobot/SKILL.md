@@ -69,9 +69,14 @@ After any context compaction, before taking another action:
 3. Classify the latest operator message before loading project material.
 4. For a bounded request, read only the current files needed to answer or
    perform that request, then stop.
-5. For bare unattended continuation, recover the in-flight batch from current
-   files, git state, tests, and live evidence using the workflow below, then
-   resume automatically.
+5. For bare unattended continuation, read only enough current project state,
+   todo, authority, git state, tests, and live evidence to recover the recorded
+   in-flight batch, then resume it automatically.
+6. Do not reload every design document merely because context compacted,
+   execution was interrupted, or the operator said `go`. Read the owning
+   design documents for the recovered batch. Load the complete authoritative
+   set only when selecting a new batch, current records conflict or cannot
+   identify the batch, or the operator explicitly requests a complete review.
 
 ### Operator control and mechanical hook contract
 
@@ -124,11 +129,10 @@ files and continue the same request. Resume an interrupted gameplay batch only
 when unattended continuation is active. Support work never replaces the current
 gameplay batch.
 
-### Load every authoritative design document for unattended work
+### Load every authoritative design document when selecting work
 
-On bare unattended invocation, and when recovering unattended work after
-compaction or interruption, read every file completely before selecting or
-changing the next authority batch:
+Before selecting or changing to a new authority batch, read every file
+completely:
 
 - `docs/design.md`
 - `docs/authority.md`
@@ -140,20 +144,22 @@ changing the next authority batch:
 - `docs/todo.md`
 - `docs/design-resolution-plan.md`
 
-This full load belongs only to unattended batch selection or an explicitly
-requested full review. A bounded operator request uses the minimum current
-governing files and evidence needed for that request. For an authorized full
-load, a summary, excerpt, grep result, previous transcript, truncated tool
-result, or earlier conversation copy does not count as reading the current file
-completely. If output truncates, continue reading bounded ranges until the end
-of every file.
+This full load belongs only to new batch selection, unresolved or conflicting
+recovery state, or an explicitly requested full review. Recovering a clearly
+recorded in-flight batch uses only its owning documents and current evidence.
+A bounded operator request uses the minimum current governing files and
+evidence needed for that request. For an authorized full load, a summary,
+excerpt, grep result, previous transcript, truncated tool result, or earlier
+conversation copy does not count as reading the current file completely. If
+output truncates, continue reading bounded ranges until the end of every file.
 
 ### Unattended review gate (LOCKED)
 
-The review gate applies only when bare invocation starts unattended work, when
-unattended work must select a new authority batch, or when the operator
-explicitly requests a full repository review. It never expands a bounded
-operator request.
+The review gate applies only when unattended work must select a new authority
+batch, recovery cannot identify one recorded in-flight batch, or the operator
+explicitly requests a full repository review. Bare invocation resumes a clearly
+recorded in-flight batch without repeating this gate. It never expands a
+bounded operator request.
 
 1. Review all work since the last gameplay movement. Review recent Git history,
    status, and every relevant uncommitted diff. Review the current project
@@ -309,9 +315,10 @@ Read current state from disk before acting:
 1. Read the governing `AGENTS.md` from its current filesystem location. Never
    apply an instruction copied from an old transcript when the current file
    differs.
-2. After the complete design-document load above, read `.Codex/project_state.md`
-   when present. Use `.claude/project_state.md` only when the Codex file is
-   absent.
+2. Read `.Codex/project_state.md` when present. Use
+   `.claude/project_state.md` only when the Codex file is absent. Read the
+   complete design-document set above only when its stated selection gate
+   applies.
 3. Read recent git history, status, and every relevant uncommitted diff.
    Preserve all existing work and continue the in-flight batch.
 4. Read the latest batch report and current attempt log when they exist. Use the
