@@ -45,11 +45,21 @@ requirements, or reference details inside this workflow, not alternate
 workflows.
 
 The RED test queue is the work queue. Resolve every known RED proof before
-selecting new work. Do not start a new feature, authority batch, or acceptance
-attempt while a known RED proof remains unresolved. Group RED proofs by their
-shared root cause, order the groups by impact on the operator's Factorio goal,
-and make the entire selected group GREEN through one shared implementation
-before moving to the next group.
+selecting new work. Do not start a new feature or authority batch while a known
+RED proof remains unresolved. Group RED proofs by their shared root cause,
+order the groups by impact on the operator's Factorio goal, and make the entire
+selected group GREEN through one shared implementation before moving to the
+next group.
+
+A failed gameplay outcome is evidence, not a code fix. Every RED gameplay
+outcome must have a causal implementation proof that exercises the shared code
+path responsible for the outcome. Never infer that a later commit resolved a
+RED outcome because it touched nearby code, shares an authority, or passes
+unrelated tests. More gameplay testing cannot repair bad code. Acceptance is
+forbidden until the causal proof failed on the bad implementation and passes on
+the shared correction. A live outcome proof may remain RED only while awaiting
+that one replacement attempt; it remains the selected work and cannot be
+treated as resolved until the attempt makes it GREEN.
 
 1. Run the current relevant test set and preserve its results as the baseline.
 2. Review the failing tests and attempt evidence, then diagnose the shared root
