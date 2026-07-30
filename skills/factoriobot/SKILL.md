@@ -78,26 +78,36 @@ selected work until that exact gate passes. Do not run acceptance, select new
 work, or mark the outcome resolved before it passes.
 
 1. Run the current relevant test set and preserve its results as the baseline.
-2. Review the failing tests and attempt evidence, then diagnose the shared root
-   cause under the owning design and authority. Record newly discovered work
-   in the existing todo before implementation.
-3. Write and commit a generic, DRY, parameterized RED proof for the concept
-   that permitted the failure. Derive cases from the owning schema, registry,
-   or catalog and derive expected results independently from the implementation.
-   Cover every known producer and consumer. Observe the intended failure.
-4. Fix the shared implementation once. Do not add a case-specific branch,
-   weaken the requirement, or repair only the observed example.
-5. Rerun the complete affected test set, broader repository gates, and build.
-6. Pass one combined verification gate, update required evidence, and push the
-   tested build.
-7. Run one acceptance attempt, review it, and compare the new results with the
-   recorded baseline and complete attempt history.
-8. Accept the change only when the data proves the intended progression and no
-   protected test or previously achieved gameplay capability regressed.
-9. If gameplay does not move, diagnose the next shared root cause, add its
-   generic RED proof to the queue, and continue the same authority batch.
-10. Repeat from the next highest-impact proven gap toward the operator's
-    Factorio goal.
+   When the RED list is not empty, read the exact failing test names, failure
+   output, measured Factorio conditions, and existing todo ownership. Do not
+   merely list, explain, or rerun the failures.
+2. Group related RED tests by shared runtime root cause and select the group
+   with the greatest impact on the operator's Factorio goal.
+3. Trace every selected failure from its measured Factorio condition through
+   the complete runtime path. Identify the first shared boundary that permits
+   the group, record it in the existing todo, and map every selected RED test
+   to that boundary.
+4. Write and commit one generic, DRY, parameterized RED proof at that boundary.
+   Derive cases and expected results independently from the implementation,
+   cover every producer and consumer, and observe the intended failure.
+5. Edit the shared implementation immediately after the root-cause proof is
+   RED. Do not add a case-specific branch, weaken the requirement, or repair
+   only the observed example.
+6. Rerun the focused proof and affected code-level tests. If any remain RED,
+   return to step 3 and continue correcting the same shared boundary.
+7. After the correction passes, run the complete affected test set, broader
+   repository gates, and full build. Update the required evidence, commit, and
+   push the tested build.
+8. When an original RED test requires live gameplay evidence, run one
+   acceptance attempt only after every mapped root-cause proof passes.
+   Regenerate the canonical attempt evidence and rerun the original RED tests.
+9. Compare the new results with the recorded baseline and complete attempt
+   history. Accept the change only when the selected original RED tests are
+   GREEN, the intended gameplay progression moved, and no protected capability
+   regressed. Otherwise return to step 2 without changing authority batches.
+10. Continue without returning control until the selected original RED tests
+    are GREEN or a real stop condition is reached. Then repeat from step 1 for
+    the next highest-impact proven gap toward the operator's Factorio goal.
 
 The next objective is gameplay movement. Tests are permanent progression data.
 Never weaken, delete, or narrow a passing proof to admit a new implementation.
