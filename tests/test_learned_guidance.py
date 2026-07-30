@@ -52,7 +52,7 @@ class LearnedGuidanceTests(unittest.TestCase):
     def test_factoriobot_closes_the_self_learning_loop(self):
         text = skill("factoriobot")
         lower = text.lower()
-        self.assertIn("self-learning loop", lower)
+        self.assertIn("self-learning requirement", lower)
         self.assertIn("applicable shared skill", lower)
         self.assertIn("owning project docs", lower)
         self.assertIn("same verified batch", lower)
@@ -153,7 +153,7 @@ class LearnedGuidanceTests(unittest.TestCase):
 
     def test_factoriobot_turns_support_work_into_one_gameplay_progress_gate(self):
         text = skill("factoriobot").lower()
-        self.assertIn("gameplay-progress execution loop", text)
+        self.assertIn("repository development workflow", text)
         self.assertIn("one combined verification gate", text)
         self.assertIn("the next objective is gameplay movement", text)
         self.assertIn("do not present support actions as separate progress steps", text)
@@ -189,6 +189,34 @@ class LearnedGuidanceTests(unittest.TestCase):
         self.assertIn("not one attempt, building, resource, or symptom", text)
         self.assertIn("do not start another acceptance attempt", text)
         self.assertIn("meet or exceed the historical capability", text)
+
+    def test_factoriobot_uses_one_data_driven_development_loop(self):
+        text = " ".join(skill("factoriobot").lower().split())
+        self.assertIn("repository development workflow", text)
+        self.assertIn("run the current relevant test set", text)
+        self.assertIn("diagnose the shared root cause", text)
+        self.assertIn("generic, dry, parameterized red proof", text)
+        self.assertIn("fix the shared implementation", text)
+        self.assertIn("rerun the complete affected test set", text)
+        self.assertIn("compare the new results with the recorded baseline", text)
+        self.assertIn("tests are permanent progression data", text)
+        self.assertIn("never weaken, delete, or narrow a passing proof", text)
+        self.assertIn("repeat from the next highest-impact proven gap", text)
+        self.assertIn("the red test queue is the work queue", text)
+        self.assertIn("resolve every known red proof before selecting new work", text)
+        self.assertIn("do not start a new feature, authority batch, or acceptance attempt", text)
+        self.assertIn("group red proofs by their shared root cause", text)
+        self.assertIn("make the entire selected group green", text)
+        self.assertIn(
+            "all other sections are gates, requirements, or reference details "
+            "inside this workflow, not alternate workflows",
+            text,
+        )
+        self.assertEqual(text.count("repository development workflow"), 1)
+        self.assertNotIn("gameplay-progress execution loop", text)
+        self.assertNotIn("repository development loop", text)
+        self.assertNotIn("development cycle", text)
+        self.assertNotIn("self-learning loop", text)
 
 
 if __name__ == "__main__":

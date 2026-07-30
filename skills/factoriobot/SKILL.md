@@ -38,20 +38,50 @@ shrink the goal to what fits one response. A context compaction, interrupted
 turn, failed harmless command, completed commit, or completed test is not a
 stopping point.
 
-### Gameplay-progress execution loop (LOCKED)
+### Repository development workflow (LOCKED)
 
-After analysis selects one shared authority change, the next objective is gameplay movement:
+This is the ONE development workflow. All other sections are gates,
+requirements, or reference details inside this workflow, not alternate
+workflows.
 
-1. Implement the complete shared change.
-2. Pass one combined verification gate, update required evidence, and push the
+The RED test queue is the work queue. Resolve every known RED proof before
+selecting new work. Do not start a new feature, authority batch, or acceptance
+attempt while a known RED proof remains unresolved. Group RED proofs by their
+shared root cause, order the groups by impact on the operator's Factorio goal,
+and make the entire selected group GREEN through one shared implementation
+before moving to the next group.
+
+1. Run the current relevant test set and preserve its results as the baseline.
+2. Review the failing tests and attempt evidence, then diagnose the shared root
+   cause under the owning design and authority. Record newly discovered work
+   in the existing todo before implementation.
+3. Write and commit a generic, DRY, parameterized RED proof for the concept
+   that permitted the failure. Derive cases from the owning schema, registry,
+   or catalog and derive expected results independently from the implementation.
+   Cover every known producer and consumer. Observe the intended failure.
+4. Fix the shared implementation once. Do not add a case-specific branch,
+   weaken the requirement, or repair only the observed example.
+5. Rerun the complete affected test set, broader repository gates, and build.
+6. Pass one combined verification gate, update required evidence, and push the
    tested build.
-3. Run one acceptance attempt.
-4. Measure whether the required gameplay milestone and efficiency limits moved.
-5. If gameplay does not move, analyze the complete attempt and continue the
-   same authority batch at the next shared failure.
+7. Run one acceptance attempt, review it, and compare the new results with the
+   recorded baseline and complete attempt history.
+8. Accept the change only when the data proves the intended progression and no
+   protected test or previously achieved gameplay capability regressed.
+9. If gameplay does not move, diagnose the next shared root cause, add its
+   generic RED proof to the queue, and continue the same authority batch.
+10. Repeat from the next highest-impact proven gap toward the operator's
+    Factorio goal.
+
+The next objective is gameplay movement. Tests are permanent progression data.
+Never weaken, delete, or narrow a passing proof to admit a new implementation.
+Add new cases to the shared parameterized matrix so every discovered failure
+expands permanent coverage of the concept. Specific historical failures may be
+fixtures, but they never define the rule.
 
 Tests, documentation, status, commits, pushes, and review are mandatory support
-work inside that loop. Do not present support actions as separate progress steps, milestones, or objectives. When asked what happens next, name the
+work inside this workflow. Do not present support actions as separate progress steps,
+milestones, or objectives. When asked what happens next, name the
 gameplay outcome being pursued and the one current engineering action needed
 to reach it. Perform the support work without turning it into a long plan.
 
@@ -411,7 +441,7 @@ Keep the operator informed without requiring babysitting:
 - Update the existing authoritative docs and project state before leaving a
   meaningful batch. Never create a parallel plan or status document.
 
-### Self-learning loop
+### Self-learning requirement
 
 When current tests, build output, canonical review, or gameplay evidence proves
 a reusable lesson, update the owning project docs in the same verified batch.
@@ -739,7 +769,7 @@ Before deleting any Open row:
 4. If the bug still appears in a later attempt log, **keep the row open** (or reopen it). Counter-evidence wins.
 5. RCON Lua payload text that merely *contains* an old error string is not evidence; count only executor/INFO/`recv` error lines.
 
-## Development cycle (LOCKED)
+## Authority batch requirements (LOCKED)
 
 Develop factoriobot through authority consolidation. Never alternate one small
 live hotfix with one new acceptance run.
