@@ -50,11 +50,26 @@ RED group can pass. Running tests, reviewing evidence, updating documents,
 building, and acceptance only measure the implementation. They do not resolve
 a RED test.
 
+The selected RED group is defined by the related gameplay failures that were
+RED when the batch started, not by the first implementation defect found while
+tracing them. Finding or correcting one defect never shrinks that group. A new
+symptom on the same authority path joins the group. The batch remains open
+until every selected gameplay failure has every known root-cause correction in
+the shared implementation and the original tests are GREEN.
+
 Resolve every known RED proof before selecting new work. Do not start a new
 feature or authority batch while a known RED proof remains unresolved. Group
 RED proofs by their shared root cause, order the groups by impact on the
 operator's Factorio goal, and make the entire selected group GREEN through one
 shared implementation before moving to the next group.
+
+A green root-cause proof is one completed correction inside the batch. It is
+not a completed batch, gameplay progress, a status milestone, a documentation
+boundary, an implementation commit boundary, or permission to run acceptance.
+Immediately trace the next still-RED gameplay failure in the selected group.
+Do not label a narrow correction as the DRY resolution while any related
+selected RED test remains unexplained or lacks its shared implementation
+correction.
 
 A failed gameplay outcome is evidence, not a code fix. Every RED gameplay
 outcome must have a root-cause implementation proof. The proof must exercise
@@ -81,12 +96,14 @@ work, or mark the outcome resolved before it passes.
    When the RED list is not empty, read the exact failing test names, failure
    output, measured Factorio conditions, and existing todo ownership. Do not
    merely list, explain, or rerun the failures.
-2. Group related RED tests by shared runtime root cause and select the group
-   with the greatest impact on the operator's Factorio goal.
+2. Group related RED tests by the complete authority path that can permit their
+   measured gameplay failures and select the group with the greatest impact on
+   the operator's Factorio goal. Record every test in the selected group. A
+   newly discovered sub-defect cannot replace or narrow this list.
 3. Trace every selected failure from its measured Factorio condition through
-   the complete runtime path. Identify the first shared boundary that permits
-   the group, record it in the existing todo, and map every selected RED test
-   to that boundary.
+   the complete runtime path. Identify every shared boundary that permits the
+   group, record them together in the existing todo, and map every selected RED
+   test to its boundary. Do not stop tracing after finding the first defect.
 4. Write and commit one generic, DRY, parameterized RED proof at that boundary.
    Derive cases and expected results independently from the implementation,
    cover every producer and consumer, and observe the intended failure.
@@ -94,10 +111,13 @@ work, or mark the outcome resolved before it passes.
    RED. Do not add a case-specific branch, weaken the requirement, or repair
    only the observed example.
 6. Rerun the focused proof and affected code-level tests. If any remain RED,
-   return to step 3 and continue correcting the same shared boundary.
+   return to step 3 and continue correcting the same shared boundary. When the
+   focused proof becomes GREEN but any selected gameplay test still lacks a
+   mapped correction, return to step 3 for that test inside the same batch.
 7. After the correction passes, run the complete affected test set, broader
-   repository gates, and full build. Update the required evidence, commit, and
-   push the tested build.
+   repository gates, and full build only when every selected gameplay test has
+   its mapped shared correction. Update the required evidence, commit, and push
+   the complete tested batch.
 8. When an original RED test requires live gameplay evidence, run one
    acceptance attempt only after every mapped root-cause proof passes.
    Regenerate the canonical attempt evidence and rerun the original RED tests.
