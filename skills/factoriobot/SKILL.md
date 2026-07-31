@@ -596,9 +596,12 @@ todo.
   newest `factoriobot-*.log`; it starts with the build version and the
   previous file's last line names its successor. Never let one shared log grow
   forever; a 1.6 GB single log cost a real session.
-- `FACTORIOBOT_LOG` pins one fixed file with no rotation (escape hatch only);
-  `RUST_LOG` sets the level. Default is debug, so every rcon exchange lands in
-  the log.
+- There is NO log override env var (removed 2026-07-31: a leftover empty
+  `FACTORIOBOT_LOG` value silently redirected the watch log to an unopenable
+  empty path and two attempts ran with no log). The stamped repo log is the
+  one location, with the temp dir as a loud fallback recorded in the attempt
+  row. `RUST_LOG` sets the level. Default is debug, so every exchange lands
+  in the log.
 - Diagnosis order: **`factoriobot diagnose [log]` first** (peak findings:
   abort storm, poll spam, body idle, action-id churn, background thrash,
   interrupt cost; exit 1 on warn+). Then the panel **Health:** line /
