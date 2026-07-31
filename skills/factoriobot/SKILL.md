@@ -238,9 +238,10 @@ record a surviving imperfection once and move on.
 Rerun the focused proof and affected code-level tests once; while any selected
 gameplay test lacks its mapped correction, return to tracing inside the same
 batch. When every mapped correction exists: run the complete affected set,
-broader gates, and full build once. `build.ps1` owns the luacheck gate; after
-any edit to `src/lua.rs` or `mod/factoriobot/control.lua` it must pass before
-restart; never restart a binary that skipped it. Re-audit the authority:
+broader gates, and full build once. `restart.ps1` owns the luacheck gate
+(there is no build.ps1; it was removed): after any edit to `src/lua.rs` or
+`mod/factoriobot/control.lua` the gate must pass before restart; never
+restart a binary that skipped it. Re-audit the authority:
 remaining bypasses, enforcement evidence, score only per the rubric. Commit
 and push each completed verified change path-limited with a concise lowercase
 message, leaving unrelated dirty files untouched. Update the owning docs in
@@ -550,14 +551,16 @@ todo.
 
 ## Commands
 
-- Build and test: `.\build.ps1` (preferred) or
-  `k3sc cargo-lock check | test | build --release`, never bare cargo.
-  `build.ps1` **refuses to ship** unless the luacheck gate passes
-  (`cargo test --lib -- lua_check`): generated RCON IIFEs in `src/lua.rs` plus
-  `mod/factoriobot/control.lua`. Same luacheck binary as jbot
-  (`%USERPROFILE%\Downloads\Programs\luacheck.exe` or `$env:LUACHECK`). After
-  a release build, copy the exe from the shared target dir to the user's bin
-  dir on PATH. A running watch locks the exe; stop it before rebuilding.
+- There is NO build.ps1 (removed; stale references cost a real session
+  2026-07-31). `restart.ps1` is the ONE lifecycle script: it stops the watch,
+  runs the luacheck gate (`lua_check` tests: generated RCON IIFEs in
+  `src/lua.rs` plus `mod/factoriobot/control.lua`, same luacheck binary as
+  jbot: `%USERPROFILE%\Downloads\Programs\luacheck.exe` or `$env:LUACHECK`),
+  builds release, installs the binary to the user's bin dir and the companion
+  mod, then hosts the save and starts the watch. `-BuildOnly` stops after
+  install without launching the game or watch. NEVER hand-copy the exe: a
+  running watch locks it and `restart.ps1` owns stopping the watch.
+- Tests only: `k3sc cargo-lock check | test`, never bare cargo.
 - Live tests, game must be hosted: `k3sc cargo-lock test -- --ignored`
 - CLI: `factoriobot ping | status | problems | next | diagnose | runs
   list|compare | watch`. Default address 127.0.0.1:27015. `problems` is the
@@ -571,13 +574,14 @@ todo.
 - Game setup: in Factorio's config.ini [other] section, uncomment
   local-rcon-socket and local-rcon-password, then host via Multiplayer, Host
   New Game. RCON listens only while hosting, including solo.
-- Development restart: `build.ps1` installs both the release binary and
-  companion mod. `restart.ps1` closes Factorio normally, launches
-  `factoriobot-start.zip` directly with Factorio 2.1's `--host`, and starts a
-  hidden watch if needed. Pass `-Save NAME.zip` for another save. Pass
-  `-Hypothesis "..."` to label a deliberate change in the attempt catalog
-  (`FACTORIOBOT_HYPOTHESIS`). Restart does not re-run luacheck; build owns
-  that gate.
+- Development restart: `restart.ps1` (default save `factoriobot-start.zip`,
+  hidden watch). Pass `-Save NAME.zip` for another save, `-Checkpoint` or
+  `-Milestone` for autosave resume points, `-Hypothesis "..."` to label a
+  deliberate change in the attempt catalog (`FACTORIOBOT_HYPOTHESIS`),
+  `-SkipBuild` to restart without rebuilding (the only mode that skips the
+  luacheck gate), `-NoWatch` to host without the watch, and runner parameters
+  (`-Gate`, `-AttemptBudget`, `-NoProgressMinutes`, `-PracticeSpeed`) for
+  attempt batches.
 - For a Steam install, `restart.ps1` must use
   `Steam.exe -applaunch 427520 --host <save>`; direct Steam-build
   `factorio.exe --host` triggers Steam's interactive custom-arguments
@@ -811,8 +815,9 @@ todo.
 ## Lua reader rules
 
 - **ALWAYS luacheck before shipping.** Same doctrine as jbot lint-before-swap:
-  after edits to `src/lua.rs` or `mod/factoriobot/control.lua`, `.\build.ps1`
-  must pass the `lua_check` gate. Never restart a binary that skipped it.
+  after edits to `src/lua.rs` or `mod/factoriobot/control.lua`, the
+  `lua_check` gate must pass; `restart.ps1` runs it unless `-SkipBuild`.
+  Never restart a binary that skipped it.
   Fragile: stray `end`, blank lines after `\` string continuations, and
   missing `{BUILDING_RECORDS}` injects have each broken live RCON.
 - Read the current official Factorio runtime/prototype docs at
