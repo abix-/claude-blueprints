@@ -17,8 +17,8 @@ claude-blueprints/
   scripts/            # Supporting scripts referenced by skills
   wezterm/            # WezTerm config
   archive/            # Unfinished or retired work (see archive/*/STATUS.md)
-  install.ps1         # Windows installer for either or both runtimes
-  sync-check.py       # Installation and drift authority
+  sync.ps1            # Install and compare: the one sync tool (see sync.md)
+  sync.md             # What sync.ps1 does, in full
 ```
 
 ## Quick Setup
@@ -26,10 +26,12 @@ claude-blueprints/
 ```powershell
 git clone https://github.com/abix-/claude-blueprints.git
 Set-Location .\claude-blueprints
-.\install.ps1 -Runtime all
+.\sync.ps1 -Action install
 ```
 
-Use `-Runtime claude` or `-Runtime codex` to install only one runtime. Shared
+Use `-Runtime claude` or `-Runtime codex` for one runtime, and `-Include` to
+narrow to `skills`, `hooks`, `settings` or `instructions`. A bare `.\sync.ps1`
+checks everything and changes nothing. Shared
 skills install into each runtime's supported skill location. Edit this
 repository, commit, push, then run the matching load skill to apply locally.
 

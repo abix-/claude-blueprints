@@ -17,6 +17,33 @@ version: "2.6"
   .claude-plugin/        # plugin marketplace config
 ```
 
+## Sync
+
+`sync.ps1` in claude-blueprints is the one tool that installs this repository
+over the live runtime directories and reports what differs. `Get-Help
+.\sync.ps1 -Full` prints the whole contract; `sync.md` has the long form.
+
+```powershell
+.\sync.ps1                                   # check everything, both runtimes
+.\sync.ps1 -Action install                   # write the repo over the live files
+.\sync.ps1 -Action install -Runtime claude   # Claude only
+.\sync.ps1 -Include settings,hooks           # only those kinds
+.\sync.ps1 -Action resolve                   # decide each difference by hand
+```
+
+Three actions. `check` compares and changes nothing, exiting non-zero if
+anything differs. `install` copies the repository over the live files, skipping
+identical ones. `resolve` walks each difference, shows the diff, and asks per
+file, and it is the only way a hand edit gets promoted back into git.
+
+Every parameter defaults to everything, so a bare run checks all kinds for both
+runtimes. `-Include` narrows to `skills`, `hooks`, `settings` or `instructions`.
+
+It compares by content, never by timestamp. Timestamps only decide the wording,
+`REPO-NEWER` against `LOCAL-NEWER`, once the bytes already differ. Nothing on
+disk is ever deleted, and a skill that exists only on disk is reported and left
+alone.
+
 ### skills/ vs docs/
 
 - `skills/`. Instructions that tell Claude *how to do something*: workflows, standards, troubleshooting steps, actions
