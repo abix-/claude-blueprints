@@ -124,6 +124,31 @@ together they are the whole set:
 | 1 | Something differs, or a copy failed |
 | 2 | Refused to run: a name conflict or a duplicate destination |
 
+## Features, and how sure we are
+
+Scored out of 10 on evidence, not intent. 10 means a test drove it and the
+result was seen. Anything lower says why.
+
+| Feature | Score | Evidence |
+|---|---:|---|
+| Skills, shared and per-runtime | 10 | Same 149 files and statuses as the tool it replaces, on the same profile |
+| Config files: instructions, settings, hooks | 10 | Run against the real profile named exactly the four that were out of sync |
+| Both runtimes in one run | 9 | Both reported together and matched the old tool; no Codex profile has been installed for real |
+| `check` | 10 | Empty profile reports all MISSING and exits 1; a clean profile is all OK and exits 0 |
+| `install` | 10 | Copied 77 files, and the check straight afterwards was clean |
+| `resolve` | 3 | Written and reviewed, never run. It reads from the console and the test shell has no input |
+| Compares by content | 10 | Same bytes reads OK regardless of timestamps |
+| Says which side is newer | 10 | `LOCAL-NEWER`, `REPO-NEWER` and `DIFF` were each produced on purpose |
+| Reports what only exists locally | 9 | A hand-made file reported `LOCAL-ONLY` and was left alone; limited to skills after it listed credential filenames |
+| `-Include` by kind | 9 | All four kinds checked one at a time, they do not overlap and together they equal the default; combinations untested |
+| Refuses a skill name conflict | 10 | Built the conflict, got one clear line and exit 2 |
+| Refuses a duplicate destination | 5 | Same code path as above, by inspection only. No natural way to build the case |
+| Exit codes | 9 | 0, 1 and 2 all observed. Copy failure exiting 1 is untested |
+| `-HomePath` for a dry run | 10 | Every test above ran against a scratch profile |
+| Built-in help | 10 | `Get-Help .\sync.ps1 -Full` renders name, syntax, description, every parameter and the examples |
+| Never deletes | 8 | No delete call exists in the script. Proven by absence rather than by a test |
+| Coloured status output | 7 | In the code and readable, never checked on a terminal that renders colour |
+
 ## Deliberately not included
 
 **No delete.** Nothing on disk is ever removed, including `LOCAL-ONLY` files.
