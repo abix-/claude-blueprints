@@ -85,7 +85,7 @@ top, dated, and old entries are never shortened or rotated out.
 - Use `k3sc cargo-lock` for ALL cargo commands. Never use bare `cargo`. Manifest path is auto-detected from current directory
 
 ## Agents
-- NEVER use the Task tool. ALWAYS do all work manually with direct tool calls (Read, Edit, Grep, Glob, PowerShell). If you think an agent would help, ask first. The answer will be no
+- NEVER use the Task tool. ALWAYS do all work manually with direct tool calls (Read, Edit, Grep, Glob, Bash). If you think an agent would help, ask first. The answer will be no
 - ALWAYS use Glob/Grep/Read directly for searches. NEVER use agents for searching
 
 ## Memory discipline
