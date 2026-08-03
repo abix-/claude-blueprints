@@ -11,6 +11,8 @@ name remains unchanged so existing clones and automation keep working.
 claude-blueprints/
   skills/             # Skills shared by Claude and Codex
   claude/             # Claude-only instructions, settings, hooks, and skills
+    CLAUDE.md         # The rules
+    failures.md       # Every failure the operator paid for, append-only
   codex/              # Codex-only instructions and skills
   scripts/            # Supporting scripts referenced by skills
   wezterm/            # WezTerm config
@@ -183,6 +185,7 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | Hook | Description |
 |------|-------------|
 | [Hook-SessionStart-Skills](claude/hooks/Hook-SessionStart-Skills.ps1) | Injects Claude skills at session start |
+| [Hook-PreToolUse-Blocked](claude/hooks/Hook-PreToolUse-Blocked.py) | Refuses subagents and destructive git before they run |
 
 ## Scripts
 
