@@ -54,8 +54,10 @@ Per file, one of:
 | `LOCAL-NEWER` | Differs, and the copy on disk was edited more recently |
 | `DIFF` | Differs, and both were edited at the same moment |
 
-`LOCAL-ONLY` is reported and never touched. A file you created by hand is not
-the script's to delete.
+`LOCAL-ONLY` is reported for skills only and never touched. A file you created
+by hand is not the script's to delete. The config directories are the runtime's
+own, holding caches, daemon state and credentials, so nothing there is reported
+at all.
 
 ### Actions
 
@@ -92,11 +94,27 @@ Both are reported with the names involved, and nothing is copied.
 
 ### Parameters
 
+Every parameter defaults to doing everything, so bare `.\sync.ps1` checks all
+kinds of file for both runtimes.
+
 | Parameter | Default | Meaning |
 |---|---|---|
 | `-Action` | `check` | `check`, `install` or `resolve` |
 | `-Runtime` | `all` | `claude`, `codex` or `all` |
+| `-Include` | `all` | One or more of `skills`, `hooks`, `settings`, `instructions` |
 | `-HomePath` | `$env:USERPROFILE` | Install somewhere other than the real profile, for a dry run against a scratch directory |
+
+`-Include` decides by where a file lands, so the four kinds never overlap and
+together they are the whole set:
+
+| Kind | What it covers |
+|---|---|
+| `skills` | Anything under a `skills` folder, shared or runtime-specific |
+| `hooks` | Anything under `hooks` |
+| `settings` | `settings.json` and any other settings file |
+| `instructions` | Everything else: `CLAUDE.md`, `failures.md`, `AGENTS.md` |
+
+`Get-Help .\sync.ps1 -Full` prints all of this from the script itself.
 
 ### Exit codes
 

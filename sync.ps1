@@ -25,7 +25,17 @@
     resolve  Walk each differing file, show the diff, ask what to do with it.
 
 .PARAMETER Runtime
-    claude, codex, or all.
+    claude, codex, or all. Defaults to all.
+
+.PARAMETER Include
+    Which kinds of file to act on. Any of:
+
+        skills        the skill folders, shared and runtime-specific
+        hooks         everything under hooks/
+        settings      settings.json and any other settings file
+        instructions  CLAUDE.md, failures.md, AGENTS.md and the like
+
+    Defaults to all of them.
 
 .PARAMETER HomePath
     Install somewhere other than the real profile, for a dry run.
@@ -49,6 +59,9 @@ param(
 
     [ValidateSet('claude', 'codex', 'all')]
     [string]$Runtime = 'all',
+
+    [ValidateSet('all', 'skills', 'hooks', 'settings', 'instructions')]
+    [string[]]$Include = @('all'),
 
     [string]$HomePath = $env:USERPROFILE
 )
@@ -92,7 +105,7 @@ function Add-Tree {
         $relative = $file.FullName.Substring($SourceRoot.Length).TrimStart('\', '/')
         $destination = Join-Path $DestinationRoot $relative
         if ($Manifest.ContainsKey($destination)) {
-            Write-Error "duplicate destination: $destination from $($Manifest[$destination]) and $($file.FullName)"
+            [Console]::Error.WriteLine("REFUSED: duplicate destination $destination, from $($Manifest[$destination]) and $($file.FullName)")
             exit $EXIT_REFUSED
         }
         $Manifest[$destination] = $file.FullName
@@ -115,7 +128,7 @@ function Build-Manifest {
     $own = @(Get-SkillNames -Root $runtimeSkills)
     $clash = @($shared | Where-Object { $own -contains $_ })
     if ($clash.Count -gt 0) {
-        Write-Error "runtime skill conflicts with shared skill: $($clash -join ', ')"
+        [Console]::Error.WriteLine("REFUSED: runtime skill conflicts with shared skill: $($clash -join ', ')")
         exit $EXIT_REFUSED
     }
 
@@ -140,7 +153,7 @@ function Build-Manifest {
             if ($relative -like 'skills\*' -or $relative -like 'skills/*') { continue }
             $destination = Join-Path $configDestination $relative
             if ($manifest.ContainsKey($destination)) {
-                Write-Error "duplicate destination: $destination from $($manifest[$destination]) and $($file.FullName)"
+                [Console]::Error.WriteLine("REFUSED: duplicate destination $destination, from $($manifest[$destination]) and $($file.FullName)")
                 exit $EXIT_REFUSED
             }
             $manifest[$destination] = $file.FullName
@@ -148,6 +161,27 @@ function Build-Manifest {
     }
 
     return $manifest
+}
+
+function Get-Kind {
+    <#
+        Which kind of file this is, decided by where it lands. Used only by
+        -Include, so a run can be narrowed to skills, hooks, settings or
+        instructions.
+    #>
+    param([string]$Relative)
+
+    if ($Relative -match '(^|[\\/])skills[\\/]') { return 'skills' }
+    if ($Relative -match '(^|[\\/])hooks[\\/]') { return 'hooks' }
+    if ($Relative -match 'settings.*\.json$') { return 'settings' }
+    return 'instructions'
+}
+
+function Test-Included {
+    param([string]$Kind)
+
+    if ($Include -contains 'all') { return $true }
+    return $Include -contains $Kind
 }
 
 function Test-SameContent {
@@ -185,18 +219,33 @@ function Get-Rows {
     $manifest = Build-Manifest -RuntimeName $RuntimeName
     $rows = foreach ($destination in ($manifest.Keys | Sort-Object)) {
         $source = $manifest[$destination]
+        $relative = $destination.Substring($HomePath.Length).TrimStart('\', '/')
+        $kind = Get-Kind -Relative $relative
+        if (-not (Test-Included -Kind $kind)) { continue }
         [pscustomobject]@{
             Runtime     = $RuntimeName
+            Kind        = $kind
             Status      = Get-Status -Source $source -Destination $destination
             Source      = $source
             Destination = $destination
-            Relative    = $destination.Substring($HomePath.Length).TrimStart('\', '/')
+            Relative    = $relative
         }
     }
 
-    # A file on disk that the repository does not know about is reported and
+    # A skill on disk that the repository does not know about is reported and
     # never touched. It is somebody's work until they say otherwise.
+    #
+    # Only skills. The config directories are the runtime's own: caches, daemon
+    # state and credentials live there, none of it ours to report on, and the
+    # names alone are noise.
+    $skillRoot = if ($RuntimeName -eq 'claude') {
+        Join-Path $HomePath '.claude\skills'
+    }
+    else {
+        Join-Path $HomePath '.agents\skills'
+    }
     $roots = $manifest.Keys |
+        Where-Object { $_.StartsWith($skillRoot, [System.StringComparison]::OrdinalIgnoreCase) } |
         ForEach-Object { Split-Path -Path $_ -Parent } |
         Sort-Object -Unique
     $known = @{}
