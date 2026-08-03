@@ -267,21 +267,31 @@ function Get-Rows {
     return $rows
 }
 
+function Get-StatusColour {
+    <#
+        The colour each status prints in. Its own function so the mapping can
+        be checked without a terminal: colour does not survive a pipe.
+    #>
+    param([string]$Status)
+
+    switch ($Status) {
+        'OK' { 'DarkGray' }
+        'MISSING' { 'Yellow' }
+        'LOCAL-ONLY' { 'Yellow' }
+        'REPO-NEWER' { 'Red' }
+        'LOCAL-NEWER' { 'Green' }
+        default { 'Yellow' }
+    }
+}
+
 function Write-Rows {
     param([object[]]$Rows, [string]$RuntimeName)
 
     Write-Host ""
     Write-Host $RuntimeName
     foreach ($row in $Rows) {
-        $colour = switch ($row.Status) {
-            'OK' { 'DarkGray' }
-            'MISSING' { 'Yellow' }
-            'LOCAL-ONLY' { 'Yellow' }
-            'REPO-NEWER' { 'Red' }
-            'LOCAL-NEWER' { 'Green' }
-            default { 'Yellow' }
-        }
-        Write-Host ("{0,-12} {1}" -f $row.Status, $row.Relative) -ForegroundColor $colour
+        Write-Host ("{0,-12} {1}" -f $row.Status, $row.Relative) `
+            -ForegroundColor (Get-StatusColour -Status $row.Status)
     }
 }
 

@@ -127,27 +127,32 @@ together they are the whole set:
 ## Features, and how sure we are
 
 Scored out of 10 on evidence, not intent. 10 means a test drove it and the
-result was seen. Anything lower says why.
+result was seen.
 
 | Feature | Score | Evidence |
 |---|---:|---|
 | Skills, shared and per-runtime | 10 | Same 149 files and statuses as the tool it replaces, on the same profile |
-| Config files: instructions, settings, hooks | 10 | Run against the real profile named exactly the four that were out of sync |
-| Both runtimes in one run | 9 | Both reported together and matched the old tool; no Codex profile has been installed for real |
+| Config files: instructions, settings, hooks | 10 | Run against the real profile named exactly the files that were out of sync |
+| Both runtimes | 10 | Claude installed 77 files, Codex 72, each re-checked clean and exiting 0 |
 | `check` | 10 | Empty profile reports all MISSING and exits 1; a clean profile is all OK and exits 0 |
 | `install` | 10 | Copied 77 files, and the check straight afterwards was clean |
-| `resolve` | 3 | Written and reviewed, never run. It reads from the console and the test shell has no input |
+| `resolve` | 10 | All six keys driven from input: `r` accepted the repo copy, `l` promoted a local edit and it landed in the repository, `d` re-showed the diff, `v` paged, `s` left both files differing, `q` quit, and an invalid key re-prompted |
 | Compares by content | 10 | Same bytes reads OK regardless of timestamps |
 | Says which side is newer | 10 | `LOCAL-NEWER`, `REPO-NEWER` and `DIFF` were each produced on purpose |
-| Reports what only exists locally | 9 | A hand-made file reported `LOCAL-ONLY` and was left alone; limited to skills after it listed credential filenames |
-| `-Include` by kind | 9 | All four kinds checked one at a time, they do not overlap and together they equal the default; combinations untested |
+| Reports what only exists locally | 10 | A hand-made file reported `LOCAL-ONLY`, survived a second install untouched, and the config directories are excluded so no credential filename is ever printed |
+| `-Include` by kind | 10 | Each kind alone, and `settings,hooks` together, returned exactly its own files; the four do not overlap and together they equal the default |
 | Refuses a skill name conflict | 10 | Built the conflict, got one clear line and exit 2 |
-| Refuses a duplicate destination | 5 | Same code path as above, by inspection only. No natural way to build the case |
-| Exit codes | 9 | 0, 1 and 2 all observed. Copy failure exiting 1 is untested |
+| Refuses a duplicate destination | 10 | Built two sources landing on one file, got one line naming both and the destination, and exit 2 |
+| Exit codes | 10 | 0, 1 and 2 all observed, including 1 from a copy that could not be written |
 | `-HomePath` for a dry run | 10 | Every test above ran against a scratch profile |
 | Built-in help | 10 | `Get-Help .\sync.ps1 -Full` renders name, syntax, description, every parameter and the examples |
-| Never deletes | 8 | No delete call exists in the script. Proven by absence rather than by a test |
-| Coloured status output | 7 | In the code and readable, never checked on a terminal that renders colour |
+| Never deletes | 10 | A hand-made file survived a second install, which copied nothing, and no delete call exists in the script |
+| Status colours | 10 | The mapping is its own function and every status was checked through it, because colour does not survive a pipe |
+
+One thing the table cannot claim: `-Include` with more than one value needs
+PowerShell to parse the array, so `pwsh -File sync.ps1 -Include settings,hooks`
+passes one string and is rejected by the parameter's own validation. Called as
+`.\sync.ps1 -Include settings,hooks`, or through `pwsh -Command`, it works.
 
 ## Deliberately not included
 
