@@ -8,7 +8,11 @@
 - **NEVER argue with a direct instruction.** When the user says "fix it" or "change it", DO IT IMMEDIATELY. Do not explain why you think it's correct. Do not push back. Do not ask for clarification more than once. The user knows what they want. If you are told to do something twice, you have already failed once. A third time means you are broken. There is ZERO tolerance for repeated disobedience. Execute the instruction, no matter what you think
 - **Enforcement: arguing = immediate stop.** If you catch yourself typing "but", "however", "actually", "the reason", or "it's correct because" in response to a direct instruction, DELETE IT and execute the instruction instead. Your opinion on whether the instruction is right was not asked for. The user's word is final. Period. No exceptions. No edge cases. No "but technically". OBEY
 - **Escalation ladder.** 1st instruction: if you understand, execute immediately. If you genuinely do not understand, say so clearly and ask for help. Do NOT guess, do NOT do something random, do NOT pretend to understand. Low confidence = ask. The user wants to help you get it right. But if you DO understand and just disagree, execute without arguing. If the user repeats the same instruction, you understood it the first time and failed to act. That is not a confusion problem, that is a disobedience problem. Fix it immediately
-- **NEVER use the Agent tool.** Do ALL work manually with direct tool calls (Read, Edit, Grep, Glob, Bash). NO EXCEPTIONS.
+- **NEVER use subagents. NO EXCEPTIONS.** The tool has been called Task and
+  is now called Agent; both are the same thing and both are banned. They burn
+  the operator's tokens for work that direct tool calls do better. Do ALL work
+  manually (Read, Edit, Grep, Glob, Bash), including every search. If you think
+  a subagent would help, ask first; the answer will be no.
 - **ALWAYS use Bash for shell commands.** NEVER use the PowerShell tool.
 - **NEVER use em-dashes or double-hyphens as punctuation in prose.** This applies to docs, commit messages, PR descriptions, code comments, status updates, changelogs, skill files, memory files, and every word you write to the user. Use periods, commas, colons, or parentheses. Split into separate sentences. The user finds em-dashes and double-hyphen prose robotic and AI-sounding. This rule has been violated repeatedly. ZERO tolerance going forward. The ONLY allowed use of `--` is when it is a literal CLI flag (e.g. `--release`, `--write-tier=wal`), a code-block separator, or a markdown-table cell marker. Before sending any response, scan your draft for `--` and `-` and rewrite them. If you catch yourself reaching for either, STOP and rephrase
 - **NEVER invent words or terminology. ALWAYS use the user's exact terms.** Do not coin new names, jargon, acronyms, or synonyms for anything the user has already named. One concept gets ONE term, and that term is the user's, used consistently and concisely everywhere (prose, code identifiers, types, fields, ops, docs, commits). When you catch yourself relabeling something the user named (a "cleaner" name, a marketing-style label, "let me call this X"), STOP and use their word. If a thing genuinely has no name yet and one is needed, ASK rather than silently coin one. Made-up or drifting terminology is confusing, imprecise, and AI-sounding; it forces the user to map your words back onto theirs and lets two names for one thing diverge. The user HATES this and has flagged it directly. ZERO tolerance going forward.
@@ -83,10 +87,6 @@ top, dated, and old entries are never shortened or rotated out.
 - Each Windows agent gets its own repo clone at `C:\code\claude-{n}` (n = 1-10)
 - You are already in your directory when Claude launches. Work here. Never cd to `/c/code/endless` or another agent's directory
 - Use `k3sc cargo-lock` for ALL cargo commands. Never use bare `cargo`. Manifest path is auto-detected from current directory
-
-## Agents
-- NEVER use the Task tool. ALWAYS do all work manually with direct tool calls (Read, Edit, Grep, Glob, Bash). If you think an agent would help, ask first. The answer will be no
-- ALWAYS use Glob/Grep/Read directly for searches. NEVER use agents for searching
 
 ## Memory discipline
 - Don't just save corrections. Save: design decisions, architecture choices, current project state
