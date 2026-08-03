@@ -62,7 +62,7 @@ class SkillCompatibilityTests(unittest.TestCase):
         paths = []
         for root in roots:
             paths.extend(path for path in root.rglob("*") if path.is_file())
-        paths.extend([ROOT / "install.ps1", ROOT / "sync-check.py"])
+        paths.extend([ROOT / "sync.ps1", ROOT / "sync.md"])
 
         for path in sorted(paths):
             with self.subTest(path=path.relative_to(ROOT)):

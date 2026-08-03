@@ -14,8 +14,8 @@ continuity.
 - `claude/` contains only Claude runtime files.
 - `codex/` contains only Codex runtime files.
 - Installed files are generated copies, never authority.
-- Windows setup uses `install.ps1`.
-- `sync-check.py` owns installation and drift checks for both runtimes.
+- `sync.ps1` is the one sync tool: check, install and resolve, for both
+  runtimes. See `sync.md`.
 - Codex work stays in the foreground and uses PowerShell on Windows.
 
 ## Last session

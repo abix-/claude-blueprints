@@ -14,8 +14,7 @@ must not be edited as their source.
 ```bash
 repo="C:/code/claude-blueprints"
 git -C "$repo" pull
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$repo/install.ps1" -Runtime "claude"
-python "$repo/sync-check.py" check --runtime claude
+pwsh -NoProfile -File "$repo/sync.ps1" -Action install -Runtime claude
 ```
 
 Stop if the pull would overwrite uncommitted repository work. The installer

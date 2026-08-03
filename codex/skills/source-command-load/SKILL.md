@@ -15,8 +15,7 @@ Run in PowerShell:
 ```powershell
 $repo = "C:\code\claude-blueprints"
 git -C $repo pull
-& (Join-Path $repo "install.ps1") -Runtime "codex"
-python (Join-Path $repo "sync-check.py") check --runtime codex
+& (Join-Path $repo "sync.ps1") -Action install -Runtime codex
 ```
 
 Stop if the pull would overwrite uncommitted repository work. The installer
