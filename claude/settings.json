@@ -44,7 +44,17 @@
         ]
       }
     ],
-    "PreToolUse": [],
+    "PreToolUse": [
+      {
+        "matcher": "Task|Agent|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$USERPROFILE/.claude/hooks/Hook-PreToolUse-Blocked.py\""
+          }
+        ]
+      }
+    ],
     "PostToolUse": []
   },
   "enabledPlugins": {
