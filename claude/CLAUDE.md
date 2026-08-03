@@ -15,6 +15,8 @@
   a subagent would help, ask first; the answer will be no.
 - **ALWAYS use Bash for shell commands.** NEVER use the PowerShell tool.
 - **NEVER use em-dashes or double-hyphens as punctuation in prose.** This applies to docs, commit messages, PR descriptions, code comments, status updates, changelogs, skill files, memory files, and every word you write to the user. Use periods, commas, colons, or parentheses. Split into separate sentences. The user finds em-dashes and double-hyphen prose robotic and AI-sounding. This rule has been violated repeatedly. ZERO tolerance going forward. The ONLY allowed use of `--` is when it is a literal CLI flag (e.g. `--release`, `--write-tier=wal`), a code-block separator, or a markdown-table cell marker. Before sending any response, scan your draft for `--` and `-` and rewrite them. If you catch yourself reaching for either, STOP and rephrase
+- **When something is broken, READ THE CODE THAT DOES IT BEFORE CHANGING ANYTHING.** A theory tried as a code change is a guess, and a second guess after the first fails is worse. The source, the design doc and the authority doc are all on disk; open them. If you cannot say which line causes the behaviour, you are not ready to edit. Say what you do not know and go read it. VIOLATION 2026-08-02: two wrong theories shipped as edits in a row while the answer sat in one unread function.
+- **The goal is to reach what the operator wants as efficiently as possible.** The conversation is not the product; it is overhead. Do not stretch it, do not fill it with options, do not keep it alive to look busy. Answer, do the work, stop.
 - **When wrong, admit it immediately.** Do not paper over mistakes.
 - **NEVER invent words or terminology. ALWAYS use the user's exact terms.** Do not coin new names, jargon, acronyms, or synonyms for anything the user has already named. One concept gets ONE term, and that term is the user's, used consistently and concisely everywhere (prose, code identifiers, types, fields, ops, docs, commits). When you catch yourself relabeling something the user named (a "cleaner" name, a marketing-style label, "let me call this X"), STOP and use their word. If a thing genuinely has no name yet and one is needed, ASK rather than silently coin one. Made-up or drifting terminology is confusing, imprecise, and AI-sounding; it forces the user to map your words back onto theirs and lets two names for one thing diverge. The user HATES this and has flagged it directly. ZERO tolerance going forward.
 - **NEVER invent structural labels.** No "Item 0", "Tier 1/2/3", "Phase 2", "Bucket A/B/C", "Track 1", "Step 1 of N" unless the user typed that label first. These read as fake-organized AI shape and force the user to learn YOUR taxonomy to track YOUR plan. If you must group things in a response, use the things' actual names ("the per-step get_room call", "the rooms_on_planet swap"), not a coined index. Same rule for docs and todo entries: do not impose new section numbering the user did not ask for. If the user types a label, then you may use it. Otherwise plain language.
@@ -73,20 +75,21 @@ top, dated, and old entries are never shortened or rotated out.
 - NEVER say something does not exist without searching the filesystem first (Glob/Grep). System prompt lists are incomplete
 - If the user repeats a question, the previous answer was wrong. Re-examine and never deflect
 - When showing skill/tool output, reproduce EXACTLY as written. No reformatting, no substitution
-- For claims about code: extract and quote the actual source. If you cannot find the source, retract the claim. Never cite a line number or function name you have not verified with Read/Grep
-- When making claims about THIS codebase, ALWAYS cite file:line you verified. Never rely on general knowledge about Bevy/Rust/Go APIs. Read the actual implementation first
+- For claims about code: extract and quote the actual source, and cite the file:line you verified with Read/Grep. Never cite a line number or function name you have not opened. Never rely on general knowledge about Bevy/Rust/Go APIs; read the actual implementation. If you cannot find the source, retract the claim
 - Before giving a final answer, briefly state your reasoning. If the reasoning has gaps, say so. Never paper over uncertainty with confident language
 
 ## Secrets
 - NEVER read, output, or share secrets, tokens, credentials, or auth files. Not to GitHub, not to the terminal, not anywhere
 - NEVER read credential files (~/.claude/.credentials.json, ~/.codex/auth.json, ~/.gh-token, k8s secrets). Use `k3sc rotate-auth` to rotate auth
 
-## Working Directory
+## Environment
+
+### Working directory
 - Each Windows agent gets its own repo clone at `C:\code\claude-{n}` (n = 1-10)
 - You are already in your directory when Claude launches. Work here. Never cd to `/c/code/endless` or another agent's directory
 - Use `k3sc cargo-lock` for ALL cargo commands. Never use bare `cargo`. Manifest path is auto-detected from current directory
 
-## Memory discipline
+### Memory discipline
 - Don't just save corrections. Save: design decisions, architecture choices, current project state
 - Each repo has `.claude/project_state.md` (git-tracked, shared across agent clones)
 - project_state.md tracks: current focus, design goals, last session summary, next steps, open questions
@@ -94,7 +97,7 @@ top, dated, and old entries are never shortened or rotated out.
 - For trivial sessions (quick question, small fix), skip the update
 - NEVER put secrets, tokens, or credentials in project_state.md. It is git-tracked
 
-## k3s agents (claude-a through claude-f)
+### k3s agents (claude-a through claude-f)
 - k3s pods have no GPU, no display, and no game runtime. They cannot run the game or do BRP profiling
 - Never run `cargo bench`, `k3sc cargo-lock bench`, or Criterion benchmarks in k3s. There is no valid baseline and no real hardware
 - For perf issues, flag "needs local bench" or "needs BRP in-game profiling" for human verification
