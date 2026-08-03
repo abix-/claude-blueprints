@@ -80,7 +80,10 @@ specifics live in the repo's docs/eufy-solocam-s220.md, not here.
   starting ~80s, quiet first 80s.
 - One motion segment is one movement. Track simultaneous movement
   separately so plant sway and an animal never become one blended
-  box. Drop only provable anchored repeating sway and short-lived
+  box. One visit is one event: a quiet spell shorter than the
+  configurable event gap (operator set 20s) keeps the same event
+  open instead of closing it and opening a second row for the same
+  squirrel. The gap is config, never a constant. Drop only provable anchored repeating sway and short-lived
   specks before classification. Ambiguous motion reaches the model.
 - Classification receives one frame budget per event, divided among
   its motion segments. Each sample is the sharpest nearby frame
@@ -108,6 +111,18 @@ specifics live in the repo's docs/eufy-solocam-s220.md, not here.
   even with the charging flag on (measured 2026-07-12, 86%->1%).
   The panel only gains while the camera sleeps; watch windows
   (HH:MM-HH:MM local, windows.json) are the battery lever.
+- **The camera lives in the real world; measure it, do not schedule
+  around it.** Report remaining life in HOURS, not days. Detect the
+  power state (on battery, AC charging, solar charging) and only
+  spend battery streaming when it is actually on battery. Stop live
+  streaming when remaining charge drops below a configurable
+  threshold (default 2%), warn in the UI, and offer the actions the
+  operator can take. A fixed "emergency pause" for N hours is not a
+  battery rule and was never asked for: it was invented once, hid a
+  camera that was plugged in and charging, and had to be removed.
+  Every battery number is measured empirically per situation and
+  recorded, because a guessed one makes the whole watch window
+  wrong.
 - **Duration, not peak size, separates animals from moths and light
   flicker.** Ledger-verified 2026-07-11: every real creature held
   motion 11s+ (humans 52-72s, squirrels 32s, bird 11s); every moth /
@@ -257,6 +272,24 @@ a fresh status.json and becomes a VIEWER attached to the service
 per-process). Rebuilds: sc stop -> build -> sc start (stop also
 frees the exe lock). Tray-icon minimize for the viewer is
 operator-requested and still pending.
+
+**Launching is the operator's path, and it must be boring.** Windows
+starts the service; the operator starts the VIEWER. "run eufy",
+"start the viewer", and the desktop or startup shortcut all mean the
+viewer attached to the running service, never a second capture and
+never `sc start`. One click produces exactly ONE window: a shortcut
+that opens a console plus a window, or two viewer windows, is fixed
+at the root (the launcher and the single-instance check), never by
+closing the extra one by hand. A shortcut that silently does nothing
+is the same bug class as a missing DLL: find why the process exited,
+do not re-click.
+
+**Log the cost of running.** The service and the viewer write CPU and
+memory samples into the persistent on-disk log alongside events, so a
+day of pegged CPU or a battery collapse is visible after the fact.
+The in-app log ring is a view of that file, not the only copy: if the
+answer to "why was this slow yesterday" is not on disk, the
+instrumentation is the defect.
 
 Gotchas paid for once: Iced 0.14 .theme() with a closure fails
 "implementation of Fn is not general enough" (pass a fn item).

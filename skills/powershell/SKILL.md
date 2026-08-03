@@ -27,6 +27,11 @@ PowerShell is roughly **700K bytes**, not the 757K GitHub reports.
   AD modules. Aluminium runs on 5.1.
 - Test on both if the module ships to others. Avoid `$IsWindows` /
   `$PSVersionTable.PSVersion.Major -ge 7` branching unless required.
+- **Invoke repo scripts as `pwsh -NoProfile -File <script>`.** Never launch
+  `powershell` from Git Bash: the POSIX-mangled `PSModulePath` breaks module
+  discovery, and rewriting it exposes Windows PowerShell 5.1's bundled Pester 3
+  against Pester 5 test files. Both measured. `-NoProfile` keeps a personal
+  profile out of an automated run.
 
 ## Function shape
 
@@ -334,6 +339,29 @@ Describe "Get-DatastoreDetails" {
   UTF-8 without BOM. Pick one per file; never mix.
 - Avoid aliases in scripts (`gci`, `?`, `%`). Spell out the cmdlet.
   Aliases are fine in the REPL.
+
+## Lifecycle scripts
+
+A lifecycle script is the one entry point for a repeated job: restart the
+app, install the repo over the live files, deploy, release. Rules that were
+each paid for once:
+
+- **One script per job, and it is the only path.** Two scripts that both
+  build, or a script plus a hand-copied binary, drift within a day. Delete
+  the loser and say so in the script's help.
+- **One language.** A PowerShell script that shells out to Python to do its
+  own work is two things to maintain and two ways to fail. Do the work in
+  PowerShell, or make the whole thing Python and drop the wrapper.
+- **It does its job and nothing else.** Never gate the job on unrelated
+  bookkeeping: a clean tree, a pushed HEAD, an unrelated test suite, or
+  another tool's guardrail proofs. A restart script that refused to launch
+  because another runtime's hook proof failed cost a session, and the fix was
+  deleting the gate. Evidence gathering belongs behind an explicit switch.
+- **State the steps in the help block, in order.** `Get-Help -Full` is how
+  the operator checks what it will do before running it.
+- **Every step asserts.** Check `$LASTEXITCODE` (or `-ErrorAction Stop`) after
+  each external command and fail loudly at the first bad step; a script that
+  keeps going after a failed build installs a stale binary.
 
 ## Avoid
 

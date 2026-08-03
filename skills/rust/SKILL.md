@@ -449,6 +449,21 @@ Same surface as compile-time registries (`def(key)`,
   "X changed and nothing else did", a `client::diff` helper
   beats per-field asserts. ueforge ships this; abixio's
   benchmark baseline-compare uses it too.
+- **`cargo test` stops at the first failing target, so name the
+  targets that actually ran.** Targets run in order (lib unit tests,
+  then each `tests/*.rs`, then bins), and a red `--lib` means the
+  integration and binary targets never executed at all. Run the
+  target you mean explicitly (`--lib`, `--test <name>`,
+  `--bin <name>`) and state which targets ran and which did not.
+  "Tests pass" with no target names has already covered a suite that
+  never executed once for a whole evening.
+- **Diagnose a slow suite by measurement, not theory.** One
+  single-threaded run with per-test timing names the guilty tests;
+  guessing which test is slow costs more than measuring it. Suspect
+  first the tests that build or link a second artifact, spawn a
+  process, or wait on a shared lock. A suite the author will not sit
+  through gets skipped, which is how a green gate stops meaning
+  anything.
 - **Criterion benches in `benches/`** with `harness = false`:
   ```toml
   [[bench]]

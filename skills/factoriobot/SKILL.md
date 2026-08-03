@@ -4,7 +4,7 @@ description: "Use when developing or operating factoriobot, continuing interrupt
 ---
 # Factoriobot
 
-AI-assisted Factorio partner. Rust binary + RCON against the player's hosted Factorio 2.x (Space Age) game. Repo: [abix-/factoriobot](https://github.com/abix-/factoriobot) (private).
+AI-assisted Factorio partner. Rust binary talking to the player's hosted Factorio 2.x (Space Age) game over one bidirectional UDP mailbox. Repo: [abix-/factoriobot](https://github.com/abix-/factoriobot) (private).
 
 There is ONE workflow. Everything under "The one workflow" is that workflow in
 execution order; everything after it is domain reference the workflow consults.
@@ -29,6 +29,15 @@ authority work, and diagnosis are support work, never progress by themselves.
 Every action must either advance a recorded gameplay acceptance measure or
 remove a documented authority bypass required for it; otherwise do not perform
 it.
+
+**Every word to the operator is plain English in Factorio's own terms.** The
+game's wiki and `docs/terminology.md` already name everything; use those words
+in answers, reports, review output, panel text, todo entries, and commits. Never
+coin a word for something that has one (walk, cure, wedge, pitch, leaf action,
+kit merge, quedge, resolver, and cell were each invented, caught, and deleted),
+and never explain flow by naming a variable, struct, or module: say what it is
+in English and point at `file:line` if the operator needs the code. Invented
+words are deleted on sight, so writing one costs the work twice.
 
 ### 1. Classify the operator's message
 
@@ -239,9 +248,9 @@ Rerun the focused proof and affected code-level tests once; while any selected
 gameplay test lacks its mapped correction, return to tracing inside the same
 batch. When every mapped correction exists: run the complete affected set,
 broader gates, and full build once. `restart.ps1` owns the luacheck gate
-(there is no build.ps1; it was removed): after any edit to `src/lua.rs` or
-`mod/factoriobot/control.lua` the gate must pass before restart; never
-restart a binary that skipped it. Re-audit the authority:
+(there is no build.ps1; it was removed): after any edit to
+`mod/factoriobot/control.lua` or to Lua that Rust composes, the gate must pass
+before restart; never restart a binary that skipped it. Re-audit the authority:
 remaining bypasses, enforcement evidence, score only per the rubric. Commit
 and push each completed verified change path-limited with a concise lowercase
 message, leaving unrelated dirty files untouched. Update the owning docs in
@@ -429,9 +438,22 @@ todo.
 
 - One Rust binary, two roles: CLI subcommands now (ping, status), long-running
   watch mode later.
-- Every read is one RCON round trip: a Lua IIFE string wrapped as
-  `/silent-command rcon.print(helpers.table_to_json(<iife>))`, JSON back,
-  serde into typed structs in src/state.rs.
+- **One bidirectional UDP mailbox (operator-locked 2026-07-31):** "we dont
+  need rcon for anything. we can do it all with udp". Both sides read and
+  write the same mailbox, every message carries an id and a status, and
+  reading the mailbox is enough to see what was asked and what happened. There
+  is no second transport and no fallback in the target design. Honest current
+  state: `src/mailbox.rs` plus `src/transport_udp.rs` are the framework, and a
+  few unmigrated readers still fall back to an RCON command until their kind
+  moves; every such fallback is a migration debt recorded in the todo, never a
+  design option. Lua string building in the mod is finished: Rust composes the
+  message, the mod is the bridge to the game engine and nothing more.
+- **Eyes and hands (operator-locked 2026-07-31):** the brain thinks and
+  decides, the body moves in the world. In the mod that means eyes, which only
+  see the game, and hands, which only play the game. The mod never does work
+  the brain should do: no deciding, no ranking, no bookkeeping. Every eye feeds
+  the one `FactoryObservation` the brain reads, so the brain has a single
+  picture of the factory rather than per-eye answers.
 - The current agent is the judgment layer and drives the CLI through its
   configured Windows shell. No MCP, no Python client.
 - Framework: six loops (resource gathering, resource transit, manufacturing,
@@ -449,13 +471,36 @@ todo.
   game-time to each milestone. Personal bests are the scoreboard
   (`docs/personal-bests.md`). When fixing efficiency issues, follow the tuning
   doctrine in `docs/efficiency.md`: eliminate waste, do not add wait; never
-  trade body progress for quieter logs unless wall-clock also improves.
+  trade body progress for quieter logs unless wall-clock also improves. All
+  time is accounted for: every gap longer than one second where the body does
+  nothing is a finding with a named cause, and a review that reports
+  unallocated time has not finished the job.
 - Writes are player-legal actions gated by proposals (approve, reject, auto
   per category in chat). The lazy player principle: the bot does everything a
   UI click could do; the player is an approval and design gate plus the
   physical residue.
 - Hard no-cheating line. Post-v1 hands place blueprints exactly as a player
   would.
+- **The blueprint library places every building (operator-locked):** "ALL
+  building placement should be from blueprints. period." The bot chooses which
+  blueprint to use and where, and composes small blueprints into stages; it
+  never designs geometry while the game runs. No single-item blueprint, and no
+  separate 2-wide and 4-wide copy of one shape: one tileable blueprint with an
+  overlapping entity (a shared power pole is the easy case) covers both. Later
+  stages add to the earlier stage rather than destroying it.
+- **The blueprint files in git are the source of truth (operator-locked
+  2026-08-02):** we author blueprints in the repo, tests prove they are valid,
+  the bot uses them. Geometry authored at runtime, or a shape that exists only
+  as a Rust function returning coordinates, is the failure this rule closes. A
+  dynamic blueprint that shows up in the in-game library and not in the repo's
+  organized folders is drift: find it and migrate it.
+- **Blueprint law tests read the wiki, they do not guess:** every blueprint is
+  proved against the documented game rules by committed generic tests, at least
+  inserter reach and orientation (plain inserters unless the operator asked for
+  long-handed; they are faster), belt corners and side loading, drill output
+  edges and belt sides, electric coverage of every machine in the blueprint,
+  and tileable overlap. The wiki documents all of it; a geometry argument
+  without a wiki citation is a guess and was rejected repeatedly.
 - Any modded game must work: game knowledge from prototype data at runtime,
   never hardcoded vanilla lists.
 - The bot-built starter base is a one-sided main bus running west to east. Raw
@@ -509,8 +554,9 @@ todo.
   placeable entity types rather than vanilla names, and join rotated live
   fluid-box connections rather than hardcoding tile offsets. Boiler fueling
   stays in the generic refueling interrupt.
-- RCON is localhost only. Password via FACTORIOBOT_RCON_PASSWORD env or
-  --password, never committed.
+- While any RCON fallback survives it is localhost only, with the password via
+  FACTORIOBOT_RCON_PASSWORD env or --password, never committed. Migrating the
+  last fallback deletes this rule with it.
 - No arbitrary-execution command in the shipped CLI surface.
 
 ## Factory desired state (approved 2026-07-27)
@@ -541,10 +587,11 @@ todo.
 ## Repo layout
 
 - src/main.rs clap CLI, src/lib.rs module exports
-- src/rcon.rs connect + execute_lua_json (lifted from factorio-sensei, MIT,
-  see THIRDPARTY.md)
-- src/lua.rs IIFE reader builders, src/state.rs Deserialize structs,
-  src/error.rs
+- src/mailbox.rs the one mailbox (queued messages with id and status),
+  src/transport_udp.rs the wire, src/state.rs Deserialize structs, src/error.rs.
+  There is no src/rcon.rs and no src/lua.rs: the 6,400-line Lua string builder
+  was deleted with the mailbox migration, so resolve every transport path from
+  current source.
 - tests/live.rs live tests behind #[ignore]
 - docs/: see repo `README.md`; one authoritative doc per subject.
 - .claude/project_state.md current focus and next steps
@@ -553,12 +600,15 @@ todo.
 
 - There is NO build.ps1 (removed; stale references cost a real session
   2026-07-31). `restart.ps1` is the ONE lifecycle script: it stops the watch,
-  runs the luacheck gate (`lua_check` tests: generated RCON IIFEs in
-  `src/lua.rs` plus `mod/factoriobot/control.lua`, same luacheck binary as
-  jbot: `%USERPROFILE%\Downloads\Programs\luacheck.exe` or `$env:LUACHECK`),
+  runs the luacheck gate (the `lua_check::` tests in the library test binary:
+  every Lua chunk Rust composes plus `mod/factoriobot/control.lua`, same
+  luacheck binary as jbot: `%USERPROFILE%\Downloads\Programs\luacheck.exe` or
+  `$env:LUACHECK`),
   builds release, installs the binary to the user's bin dir and the companion
-  mod, then hosts the save and starts the watch. `-BuildOnly` stops after
-  install without launching the game or watch. NEVER hand-copy the exe: a
+  mod, then hosts the save and starts the watch. The launch always passes
+  `--enable-lua-udp=<port>` (25002 unless `FACTORIOBOT_UDP_GAME_PORT` says
+  otherwise); without that switch the mailbox has no wire and the bot sees no
+  game. `-BuildOnly` stops after install without launching the game or watch. NEVER hand-copy the exe: a
   running watch locks it and `restart.ps1` owns stopping the watch.
 - Tests only: `k3sc cargo-lock check | test`, never bare cargo.
 - Live tests, game must be hosted: `k3sc cargo-lock test -- --ignored`
@@ -612,7 +662,8 @@ todo.
 - The scheduler hides failures behind holds: an apparent stall is usually a
   held desired-state run or an interrupt waiting on its condition. The attempt
   log names the exact waiting task and its instruction.
-- The RCON client has a 5-second operation timeout. A Lua reader that runs
+- On an unmigrated RCON fallback reader: the client has a 5-second operation
+  timeout. A Lua reader that runs
   longer abandons its in-flight response and leaves the shared connection
   reading every previous command's reply (live-observed as a permanent
   one-packet "Response ID mismatch" skew). The framework rebuilds the
@@ -818,8 +869,8 @@ todo.
 ## Lua reader rules
 
 - **ALWAYS luacheck before shipping.** Same doctrine as jbot lint-before-swap:
-  after edits to `src/lua.rs` or `mod/factoriobot/control.lua`, the
-  `lua_check` gate must pass; `restart.ps1` runs it unless `-SkipBuild`.
+  after edits to `mod/factoriobot/control.lua` or to Lua that Rust composes,
+  the `lua_check` gate must pass; `restart.ps1` runs it unless `-SkipBuild`.
   Never restart a binary that skipped it.
   Fragile: stray `end`, blank lines after `\` string continuations, and
   missing `{BUILDING_RECORDS}` injects have each broken live RCON.
@@ -893,6 +944,35 @@ todo.
 - The quickbar mirrors the factory from live data only: page 1 is materials,
   page 2 is placed buildings, first-appearance order, empty slots only, never
   overwrite the player's own filters.
+- **One root cause analysis, available on demand (operator-locked):** root
+  cause analysis is a huge part of making the factory work, and the bot and the
+  player both need it at any moment, not as a separate step that runs once.
+  There is ONE implementation, used by the bot when it decides, by
+  `factoriobot review`, and by the player whenever they ask. It starts from the
+  goal, walks back through the recipes and the six loops to the first link whose
+  state does not satisfy the next, and it reads what the factory already holds:
+  plates sitting in a furnace are factory materials the bot must use to build
+  more factory before it mines anything by hand. A stopped machine is one factor,
+  never the answer: collect every candidate cause, rank them by value toward the
+  goal, and name the one worth the next few seconds.
+- **What a job is worth comes from the game, not from a constant
+  (operator-locked):** value is measured in science packs per minute for the
+  research that is active right now, because each research consumes different
+  packs. Query the live prototype and recipe data, compute the numbers once per
+  game configuration, and recompute when the configuration changes (mods and
+  game versions move the recipes). Endless research counts when it raises
+  growth. Magic magnitudes standing in for value (ordinary work 1, growth 1
+  followed by 18 zeros, emergency 1 followed by 20 zeros) are the measured
+  failure: they only reorder ordinary work and they hide the real ranking.
+  Record cost only when the job actually succeeded and changed something; a run
+  that found nothing to do is not a cheap success.
+- **No invented bookkeeping (operator-locked):** the factory is observed and
+  then acted on. Nothing else may sit between the two. Specifically forbidden,
+  each one deleted after it cost a session: a note per machine saying why it is
+  stuck and gating retries, a stand-in job in the work list (the
+  `__limiting-factorio-condition` placeholder) instead of a real job for real
+  work, and a second way to choose the next job. When something needs doing,
+  add a real job, rank it with every other job, and run the most valuable one.
 - **Reactive, not time based (operator-locked 2026-07-30, no exemptions):**
   elapsed time is measured for cost and never consulted to decide when work
   may proceed, defer, or become eligible again. A held run is re-evaluated

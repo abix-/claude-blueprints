@@ -2,7 +2,7 @@
 name: claude-config
 description: Managing Claude configuration - skills, docs, plugins, CLAUDE.md, and hooks. Read first when modifying any Claude config.
 user-invocable: false
-version: "2.6"
+version: "2.7"
 ---
 # Claude Config
 
@@ -357,6 +357,24 @@ Claude's auto-memory per project. Persists across conversations for one user. Cl
 | `PostToolUse` | After tool executes | Sanitize output |
 | `Stop` | Session ends | Cleanup |
 
+### Hooks belong to one runtime
+
+Claude and Codex read different config trees. A hook written for one runtime
+must never fire for the other, and never for a third tool:
+
+- Keep Claude hooks under the Claude tree (`claude/hooks`, `claude/settings.json`)
+  and Codex hooks under the Codex tree. `sync.ps1 -Runtime <name>` installs one
+  side; a hook that lands in both trees will fire twice.
+- Never wire a runtime's hook proofs into a shared repo script. A restart
+  script that ran Codex hook guardrail proofs blocked the game launch for the
+  other runtime and had to have the gate deleted.
+- A hook enforces only mechanically decidable facts (destructive action
+  protection, a required file exists, an exact commit is pushed). Judgment,
+  priority, and phase belong in a skill, not a hook.
+- Test the hook by running its command directly with a sample JSON payload on
+  stdin before trusting it in a session; a broken hook fails on every tool
+  call and reads as the model misbehaving.
+
 ### Plugin hooks
 
 Plugin hooks live in `hooks/hooks.json` at the plugin root. They ship with the plugin and run when the plugin is enabled. Use `${CLAUDE_PLUGIN_ROOT}` for paths.
@@ -505,6 +523,42 @@ To dump raw JSON and see all available fields, temporarily replace the script:
 input=$(cat)
 echo "$input" | jq '.' 2>/dev/null || echo "$input"
 ```
+
+## Permissions
+
+Every permission prompt is an interruption the operator pays for. Read-only
+commands should never prompt.
+
+- Allowlist patterns live in `permissions.allow` in the project
+  `.claude/settings.json` (or the user settings for machine-wide tools).
+  Format: `Bash(rg *)`, `Bash(git status)`, `Bash(k3sc cargo-lock *)`,
+  `mcp__server__tool`.
+- Mine the transcripts for what actually prompted (see Session transcripts
+  below), then add the read-only ones by frequency. Guessing the list adds
+  patterns nobody hits.
+- Prefer the approved tool over a shell equivalent: Read, Grep, and Glob do not
+  prompt, while `cat`, `rg`, and `Get-ChildItem` may. Reaching for a shell
+  one-liner when a dedicated tool exists is what produces most prompts.
+- Keep write and destructive commands OUT of the allowlist. The prompt is the
+  point there.
+
+## Session transcripts
+
+`~/.claude/projects/<flattened-cwd>/<session-id>.jsonl`, one JSON object per
+line, plus a same-named directory holding that session's persisted tool
+results. A working directory flattens by replacing every separator and colon
+with a dash, so a repo at `<drive>:\code\<repo>` becomes `C--code-<repo>`.
+
+- This is how a crashed or compacted session is recovered, and how past
+  decisions are found ("what did we agree on last week").
+- Operator messages are `{"type":"user"}` lines whose `message.content` is a
+  string, or a list containing a `text` block. Skip lines whose content holds
+  `tool_result`, and skip injected text: `<system-reminder>` blocks, skill
+  bodies ("Base directory for this skill:"), `<task-notification>`, Stop hook
+  feedback, and context-continuation summaries. Filtering those cut a 30-day
+  sweep from 2.3M characters to 190K.
+- Transcripts are local and may contain anything the operator pasted. Never
+  copy them into a public repo, a skill, or an artifact.
 
 ## Notes
 
