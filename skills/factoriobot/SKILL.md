@@ -737,22 +737,23 @@ todo.
   loops trigger scale-up analysis; they do not justify idling.
 - Urgent condition-driven work uses Factorio train-style interrupt semantics.
   The active growth playbook is the main schedule; every completed task and
-  every unsuccessful retry is a pause-aware safe boundary that signals the
-  watch to re-read urgent conditions immediately rather than waiting for a
-  monitor timer. At that boundary, checkpoint, push the highest-priority
-  eligible interrupt playbook, run until its explicit clear condition, re-read
-  live state, then resume. This wakeup is one framework mechanism, never
-  fuel-specific steps copied into growth playbooks. Defense, critical power,
-  burner-fuel starvation, and missing-building recovery may interrupt;
-  ordinary growth deficits never do. Require hysteresis, a bounded stack,
+  every unsuccessful retry is a pause-aware safe boundary that makes the bot
+  re-read urgent conditions immediately. Active defense is the only global
+  interrupt. Fuel, input, power, and missing-building Work stay in the one
+  production priority. Physical factory growth always outranks unrelated
+  upkeep, while exact upkeep required by selected growth inherits that
+  growth's priority through the existing dependency graph. This is one
+  framework mechanism, never service steps copied into growth playbooks.
+  Require hysteresis, a bounded stack,
   explicit `allow_inside_interrupt`, and reactive self-retrigger prevention: a
   completed interrupt re-admits when the shared observation changes or its
   condition latches anew, never on a clock (operator-locked 2026-07-30,
   reactive not time based).
-- Fuel and power health preempt expansion and output waits. Live one-minute
+- Fuel and power health remain visible while the factory grows. Live one-minute
   coal production and consumption drive self-sustaining mine scale-out with
-  25% reserve headroom; any production-below-consumption state must outrank
-  ordinary iron growth. Before relying on burner output, use the shared
+  25% reserve headroom; demand-driven fuel-mine scale-out is physical factory
+  growth, while refueling existing unrelated consumers is upkeep. Before
+  relying on burner output, use the shared
   `fuel.plan` plus `fuel-for-targets` path: recursive target demand ->
   remaining ore/crafts -> live mining/crafting seconds -> 60 ticks/second
   times machine energy usage -> divide by live fuel value -> subtract
@@ -827,16 +828,18 @@ todo.
   flow, redirect consumers, then deconstruct or abandon the old factory based
   on recovery/transit cost. Space is cheap; preserving an obsolete layout is
   not a goal.
-- Fuel acquisition and refueling are separate interrupts.
-  `maintain-player-fuel-reserve` is priority 90 and triggers below 10 carried
+- Fuel acquisition and refueling are separate upkeep playbooks in the one
+  production priority. `maintain-player-fuel-reserve` triggers below 10 carried
   prototype-derived fuel. It collects safe-to-take mining-drill output toward
   100, but a real bootstrap hand-gather fallback stops at 10: one complete
-  refueling delivery, never 100 hand-mined fuel. `refuel-starved-burners` is
-  priority 100, requires a complete 10-item delivery on hand, may preempt
-  acquisition, and only transfers fuel. When carried fuel cannot cover every
-  starved burner, the shared producer sorts mining drills whose live
-  `mining_target` produces that fuel first, then every other individual
-  machine by stable `unit_number`; allocation happens only after this sort.
+  refueling delivery, never 100 hand-mined fuel. `refuel-starved-burners`
+  requires a complete 10-item delivery on hand and only transfers fuel. Neither
+  fuel playbook is globally mandatory. Exact fuel required by selected growth
+  inherits growth priority through the dependency graph. When carried fuel
+  cannot cover every starved burner, the shared producer sorts mining drills
+  whose live `mining_target` produces that fuel first, then every other
+  individual machine by stable `unit_number`; allocation happens only after
+  this sort.
   `inventory.transfer` counts stored plus currently-burning fuel and completes
   immediately after an exact load; the producer exposes only machines fully
   coverable by current player fuel. Growth playbooks never copy acquisition or
@@ -914,8 +917,8 @@ todo.
   bot-built entity. Whether it placed the entity or found it already built, it
   must bind the exact declared building record by live `unit_number` and
   verify companion registration before returning success; event tracking is
-  redundant observation only. The shared one-building role immediately
-  commissions any new burner to 10 compatible prototype-derived fuel through
+  redundant observation only. Burner commissioning uses the same measured
+  next-work-interval fuel calculation as every other consumer through
   `acquire-fuel` (never the craft path; raw fuel has no recipe). Each closed
   coal loop receives exactly ONE coal total (operator-locked): the first drill
   of a pair is fueled at placement, and a starting-fuel loading count of one
