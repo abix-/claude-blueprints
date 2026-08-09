@@ -406,14 +406,13 @@ def cmd_verify(args):
 
 
 def cmd_done(args):
-    def do():
-        state = require_state()
-        ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-        dest = ARCHIVE_DIR / state["id"]
-        ACTIVE_DIR.rename(dest)
-        print(f"debate archived: {dest}")
-
-    with_lock(do)
+    import shutil
+    state = require_state()
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    dest = ARCHIVE_DIR / state["id"]
+    shutil.copytree(ACTIVE_DIR, dest)
+    shutil.rmtree(ACTIVE_DIR)
+    print(f"debate archived: {dest}")
 
 
 def cmd_watch(args):
