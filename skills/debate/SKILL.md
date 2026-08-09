@@ -9,43 +9,40 @@ A human set the goal. You take turns proposing and reviewing solutions
 until you agree on an approach, then one of you implements while the
 other reviews.
 
-There are two terminals, two Claude sessions:
+There are two terminals, two Claude sessions. The script identifies
+you automatically by your CLAUDE_CODE_SESSION_ID. No env vars to set.
 
 - **the human's agent** (terminal 1): the human talks to you directly.
   you are both their hands in the codebase AND a debate participant.
   the human tells you when to check your turn, when to propose, when
-  to review. you do what they say. you also create the debate and
-  handle `debate new`, `debate say`, `debate force` on their behalf.
+  to review. you do what they say. you also handle `debate say` and
+  `debate force` on their behalf.
 - **the other agent** (terminal 2): running in a separate terminal
-  with no human. you were given one instruction at startup: participate
-  in the debate. you check your turn, act when it is your turn, then
-  STOP and WAIT until told to check again.
-
-Which role you are depends on whether the human is talking to you
-directly or whether you were launched with a standing instruction.
+  with no human. you were given one instruction at startup: /debate.
+  you check your turn, act when it is your turn, then STOP and WAIT
+  until told to check again.
 
 There is no separate human terminal. The human works through their
 agent in terminal 1.
 
-## setup
+## when /debate is invoked
 
-The `debate` CLI is at `~/code/claude-blueprints/scripts/debate.py`.
-Your identity is set by the `DEBATE_AGENT` environment variable.
-If it is not set, ask the human which agent you are (agent-a or agent-b)
-and run: `export DEBATE_AGENT=agent-a`
-
-## your loop
+Do these steps automatically:
 
 1. Run `python ~/code/claude-blueprints/scripts/debate.py status`
-2. Run `python ~/code/claude-blueprints/scripts/debate.py read --last 10`
-3. If it is not your turn, tell the user and STOP. Do not poll or loop.
-4. If it is your turn, read the goal and the conversation history.
+   to see if a debate exists and what phase it is in.
+2. If not yet joined, run:
+   `python ~/code/claude-blueprints/scripts/debate.py join`
+3. Run `python ~/code/claude-blueprints/scripts/debate.py read --last 10`
+   to see recent messages.
+4. If it is your turn, act (see below). If not, say so and STOP.
+
+## acting on your turn
 
 ### if you are the proposer
 
-Think through the problem. Consider the goal, any prior feedback from
-the other agent, and any human messages. Read the relevant code in the
-repo before proposing. Then submit your proposal:
+Read the goal. Read the relevant code in the repo. Consider any prior
+feedback from the other agent and any human messages. Then:
 
 ```
 python ~/code/claude-blueprints/scripts/debate.py propose "your proposal here"
@@ -56,10 +53,10 @@ Not vague direction. Name files, functions, and approaches.
 
 ### if you are the reviewer
 
-Read the proposal carefully. Read the relevant code yourself (do not
-trust the proposer's description alone). Consider whether it actually
-solves the goal, whether there are edge cases, whether there is a
-simpler approach. Then respond:
+Read the proposal. Read the relevant code yourself (do not trust the
+proposer's description alone). Consider whether it actually solves the
+goal, whether there are edge cases, whether there is a simpler approach.
+Then:
 
 ```
 python ~/code/claude-blueprints/scripts/debate.py review agree "why you agree"
@@ -73,27 +70,28 @@ it is good, say agree and move on.
 
 ### if you are implementing
 
-After consensus, the human will advance to IMPLEMENT. Write the code,
-then record what you did:
-
+Write the code, then record what you did:
 ```
 python ~/code/claude-blueprints/scripts/debate.py implement "summary of changes"
 ```
 
 ### if you are verifying
 
-Read the implementation diff. Check that it matches what was agreed.
-Run tests if they exist. Then:
-
+Read the implementation diff. Check it matches what was agreed. Run
+tests if they exist. Then:
 ```
 python ~/code/claude-blueprints/scripts/debate.py verify accept "looks good"
 python ~/code/claude-blueprints/scripts/debate.py verify reject "problem with X"
 ```
 
+## after acting: STOP
+
+After your action (propose, review, implement, verify), STOP and WAIT.
+Do not take two turns in a row. Do not poll. Tell the user what you
+did and that it is now the other agent's turn.
+
 ## rules
 
-- after your action (propose, review, implement, verify), STOP and WAIT
-- do not take two turns in a row
 - do not argue with human messages. incorporate them
 - do not propose the same thing that was already rejected without changes
 - keep proposals and reviews concise. a few paragraphs, not an essay

@@ -90,16 +90,22 @@ def require_state():
     return state
 
 
-def require_agent(state):
-    """Figure out who the caller is from DEBATE_AGENT env var."""
-    agent = os.environ.get("DEBATE_AGENT")
-    if not agent:
-        print("DEBATE_AGENT not set. export DEBATE_AGENT=agent-a (or agent-b, or human)")
+def get_session_id():
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if not sid:
+        print("CLAUDE_CODE_SESSION_ID not set. run this from inside a Claude Code session.")
         sys.exit(1)
-    if agent not in state["participants"]:
-        print(f"{agent} is not a participant. joined: {list(state['participants'].keys())}")
-        sys.exit(1)
-    return agent
+    return sid
+
+
+def get_agent(args, state):
+    """Resolve agent identity from CLAUDE_CODE_SESSION_ID."""
+    sid = get_session_id()
+    for k, v in state["participants"].items():
+        if v.get("session_id") == sid:
+            return k
+    print("this session has not joined the debate. run: debate join")
+    sys.exit(1)
 
 
 def swap_roles(state):
@@ -163,7 +169,15 @@ def cmd_new(args):
         append_message({"from": "human", "phase": "GOAL", "body": goal})
         print(f"debate started: {debate_id}")
         print(f"goal: {goal}")
-        print("waiting for agents to join. run: debate join <name>")
+        print()
+        print("=== terminal 1 (your claude) ===")
+        print(f"  claude")
+        print(f"  then say: /debate")
+        print()
+        print("=== terminal 2 (other claude) ===")
+        print(f"  claude")
+        print(f"  then say: /debate")
+        print()
 
     with_lock(do)
 
@@ -171,14 +185,25 @@ def cmd_new(args):
 def cmd_join(args):
     def do():
         state = require_state()
-        name = args.name
+        session_id = get_session_id()
         agent_type = args.type or "claude-code"
 
-        if name in state["participants"]:
-            print(f"{name} already joined")
-            return
+        for k, v in state["participants"].items():
+            if v.get("session_id") == session_id:
+                print(f"already joined as {k}")
+                return
 
-        state["participants"][name] = {"name": name, "type": agent_type}
+        agents = [k for k, v in state["participants"].items() if v["type"] != "human"]
+        name = args.name
+        if not name:
+            name = f"agent-{chr(ord('a') + len(agents))}"
+
+        if name in state["participants"]:
+            print(f"{name} already taken")
+            sys.exit(1)
+
+        entry = {"name": name, "type": agent_type, "session_id": session_id}
+        state["participants"][name] = entry
         append_message({"from": "system", "phase": state["phase"],
                         "body": f"{name} joined as {agent_type}"})
 
@@ -224,7 +249,7 @@ def cmd_read(args):
 def cmd_propose(args):
     def do():
         state = require_state()
-        agent = require_agent(state)
+        agent = get_agent(args, state)
         body = " ".join(args.message)
 
         if state["phase"] != "PROPOSE":
@@ -249,7 +274,7 @@ def cmd_propose(args):
 def cmd_review(args):
     def do():
         state = require_state()
-        agent = require_agent(state)
+        agent = get_agent(args, state)
         verdict = args.verdict
         body = " ".join(args.message)
 
@@ -333,7 +358,7 @@ def cmd_force(args):
 def cmd_implement(args):
     def do():
         state = require_state()
-        agent = require_agent(state)
+        agent = get_agent(args, state)
         body = " ".join(args.message)
 
         if state["phase"] not in ("CONSENSUS", "IMPLEMENT"):
@@ -352,7 +377,7 @@ def cmd_implement(args):
 def cmd_verify(args):
     def do():
         state = require_state()
-        agent = require_agent(state)
+        agent = get_agent(args, state)
         verdict = args.verdict
         body = " ".join(args.message)
 
@@ -420,7 +445,7 @@ def main():
     p.add_argument("goal", nargs="+", help="the goal")
 
     p = sub.add_parser("join", help="join the debate")
-    p.add_argument("name", help="agent name (e.g. agent-a)")
+    p.add_argument("name", nargs="?", default=None, help="agent name (auto-assigned if omitted)")
     p.add_argument("--type", default="claude-code", help="agent type (claude-code, codex)")
 
     sub.add_parser("status", help="show debate status")
@@ -429,9 +454,11 @@ def main():
     p.add_argument("--last", type=int, default=None, help="show last N messages")
 
     p = sub.add_parser("propose", help="submit a proposal")
+
     p.add_argument("message", nargs="+")
 
     p = sub.add_parser("review", help="review a proposal")
+
     p.add_argument("verdict", choices=["agree", "disagree", "revise"])
     p.add_argument("message", nargs="+")
 
@@ -442,9 +469,11 @@ def main():
     p.add_argument("phase", help="target phase")
 
     p = sub.add_parser("implement", help="record implementation")
+
     p.add_argument("message", nargs="+")
 
     p = sub.add_parser("verify", help="verify implementation")
+
     p.add_argument("verdict", choices=["accept", "reject"])
     p.add_argument("message", nargs="+")
 
