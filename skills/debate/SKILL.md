@@ -5,8 +5,7 @@ description: "Start or participate in a structured multi-agent debate. Invoke wi
 # debate
 
 Structured debate between two Claude Code sessions. One human, two
-agents, file-based protocol. The script is at
-`C:/code/claude-blueprints/scripts/debate.py`.
+agents, file-based protocol. The `debate` command is on PATH.
 
 Your session is identified automatically by CLAUDE_CODE_SESSION_ID.
 
@@ -14,8 +13,8 @@ Your session is identified automatically by CLAUDE_CODE_SESSION_ID.
 
 You are the human's agent in terminal 1. Do all of this automatically:
 
-1. Run `python C:/code/claude-blueprints/scripts/debate.py new <goal>`
-2. Run `python C:/code/claude-blueprints/scripts/debate.py join`
+1. Run `debate new <goal>`
+2. Run `debate join`
 3. Print the terminal 2 instructions to the user so they can start
    the other Claude. Tell them:
    "open another Claude Code terminal in this repo and say: /debate"
@@ -30,9 +29,9 @@ code in the repo, then act on your turn (propose or review).
 You are joining an existing debate (likely terminal 2). Do all of this
 automatically:
 
-1. Run `python C:/code/claude-blueprints/scripts/debate.py join`
-2. Run `python C:/code/claude-blueprints/scripts/debate.py status`
-3. Run `python C:/code/claude-blueprints/scripts/debate.py read --last 10`
+1. Run `debate join`
+2. Run `debate status`
+3. Run `debate read --last 10`
 4. If it is your turn, read the relevant code in the repo, then act.
    If not, say whose turn it is and STOP.
 
@@ -42,7 +41,7 @@ automatically:
 
 Read the goal. Read the relevant code. Consider prior feedback. Then:
 ```
-python C:/code/claude-blueprints/scripts/debate.py propose "your proposal"
+debate propose "your proposal"
 ```
 Be concrete: name files, functions, approaches. Not vague direction.
 
@@ -50,9 +49,9 @@ Be concrete: name files, functions, approaches. Not vague direction.
 
 Read the proposal. Read the relevant code yourself. Then:
 ```
-python C:/code/claude-blueprints/scripts/debate.py review agree "why"
-python C:/code/claude-blueprints/scripts/debate.py review disagree "what is wrong and what would be better"
-python C:/code/claude-blueprints/scripts/debate.py review revise "mostly good but change X"
+debate review agree "why"
+debate review disagree "what is wrong and what would be better"
+debate review revise "mostly good but change X"
 ```
 Be honest. Do not agree just to be agreeable. Do not disagree just
 to seem thorough.
@@ -61,15 +60,15 @@ to seem thorough.
 
 Write the code, then:
 ```
-python C:/code/claude-blueprints/scripts/debate.py implement "summary"
+debate implement "summary"
 ```
 
 ### verifier
 
 Read the diff. Run tests if they exist. Then:
 ```
-python C:/code/claude-blueprints/scripts/debate.py verify accept "looks good"
-python C:/code/claude-blueprints/scripts/debate.py verify reject "problem"
+debate verify accept "looks good"
+debate verify reject "problem"
 ```
 
 ## after acting: STOP
@@ -81,10 +80,10 @@ agent's turn.
 ## human commands (run on behalf of the human when asked)
 
 ```
-python C:/code/claude-blueprints/scripts/debate.py say "message"
-python C:/code/claude-blueprints/scripts/debate.py force <phase>
-python C:/code/claude-blueprints/scripts/debate.py read
-python C:/code/claude-blueprints/scripts/debate.py done
+debate say "message"
+debate force <phase>
+debate read
+debate done
 ```
 
 ## rules
