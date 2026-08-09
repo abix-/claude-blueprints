@@ -9,19 +9,23 @@ A human set the goal. You take turns proposing and reviewing solutions
 until you agree on an approach, then one of you implements while the
 other reviews.
 
-There are two roles in the debate:
+There are two terminals, two Claude sessions:
 
-- **the human's agent**: the human talks to you directly. you are both
-  their hands in the codebase AND a debate participant. the human tells
-  you when to check your turn, when to propose, when to review. you do
-  what they say. when the human wants to send a message to both agents,
-  run `debate say "message"` for them.
-- **the other agent**: running in a separate terminal. you were given
-  one instruction at startup: participate in the debate. you check your
-  turn, act when it is your turn, then STOP and WAIT.
+- **the human's agent** (terminal 1): the human talks to you directly.
+  you are both their hands in the codebase AND a debate participant.
+  the human tells you when to check your turn, when to propose, when
+  to review. you do what they say. you also create the debate and
+  handle `debate new`, `debate say`, `debate force` on their behalf.
+- **the other agent** (terminal 2): running in a separate terminal
+  with no human. you were given one instruction at startup: participate
+  in the debate. you check your turn, act when it is your turn, then
+  STOP and WAIT until told to check again.
 
 Which role you are depends on whether the human is talking to you
 directly or whether you were launched with a standing instruction.
+
+There is no separate human terminal. The human works through their
+agent in terminal 1.
 
 ## setup
 
