@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
+  },
   "permissions": {
     "allow": [
       "Read",
@@ -8,12 +11,33 @@
       "Grep",
       "Bash(endless-cli *)",
       "Bash(curl*localhost:15702*)",
+      "Bash(curl*localhost:17175*)",
+      "Bash(curl*127.0.0.1:17175*)",
       "Bash(*llm-player*python*actions.py*)",
       "Bash(gh *)",
       "Bash(cd /c/code/*cargo *)",
       "Bash(cd /c/code/*git *)",
       "Bash(cd /c/code/*wc *)",
       "Bash(ls *)",
+      "Bash(pwsh -NoProfile -File *)",
+      "Bash(cargo *)",
+      "Bash(git *)",
+      "Bash(k3sc *)",
+      "Bash(dotnet *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(mkdir *)",
+      "Bash(tasklist)",
+      "Bash(tasklist *)",
+      "Bash(tail *)",
+      "Bash(head *)",
+      "Bash(cat *)",
+      "Bash(grep *)",
+      "Bash(wc *)",
+      "Bash(python *)",
+      "Bash(DEBATE_AGENT=*)",
+      "Bash(export DEBATE_AGENT=*)",
+      "Bash(cd *&&*)",
       "WebFetch",
       "WebSearch"
     ],
@@ -32,6 +56,7 @@
       ]
     }
   },
+  "model": "claude-opus-4-6",
   "hooks": {
     "SessionStart": [
       {
@@ -65,9 +90,6 @@
     "verbs": [
       ""
     ]
-  },
-  "env": {
-    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
   },
   "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
