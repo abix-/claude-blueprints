@@ -116,6 +116,50 @@ def swap_roles(state):
     state["round"] += 1
 
 
+def resolve_body(msg):
+    """Return the full body text, reading from file if the message uses one."""
+    body_file = msg.get("body_file")
+    if body_file:
+        path = Path(body_file)
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+        return f"(file missing: {body_file})"
+    return msg.get("body", "")
+
+
+def get_body(args):
+    """Get proposal/review body from --file or from message args."""
+    if hasattr(args, "file") and args.file:
+        path = Path(args.file)
+        if not path.exists():
+            print(f"file not found: {args.file}")
+            sys.exit(1)
+        return path.read_text(encoding="utf-8").strip()
+    if not args.message:
+        print("provide a message or use --file to read from a file")
+        sys.exit(1)
+    return " ".join(args.message)
+
+
+def save_body_file(body, label):
+    """Save a long body to a file under the debate directory. Returns the path."""
+    BODIES_DIR = ACTIVE_DIR / "bodies"
+    BODIES_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    filename = f"{label}-{ts}.md"
+    path = BODIES_DIR / filename
+    path.write_text(body + "\n", encoding="utf-8")
+    return str(path)
+
+
+def build_message_fields(body, label):
+    """Return dict fields for the message. Uses a file for long bodies."""
+    if len(body) > 500:
+        body_file = save_body_file(body, label)
+        return {"body": body[:200] + "...", "body_file": body_file}
+    return {"body": body}
+
+
 def format_message(msg):
     ts = msg.get("ts", "")
     if ts:
@@ -124,7 +168,7 @@ def format_message(msg):
     phase = msg.get("phase", "")
     rnd = msg.get("round", "")
     verdict = msg.get("verdict", "")
-    body = msg.get("body", "")
+    body = resolve_body(msg)
 
     header = f"[{ts}] {sender}"
     if phase:
@@ -250,7 +294,7 @@ def cmd_propose(args):
     def do():
         state = require_state()
         agent = get_agent(args, state)
-        body = " ".join(args.message)
+        body = get_body(args)
 
         if state["phase"] != "PROPOSE":
             print(f"cannot propose in phase {state['phase']}")
@@ -262,7 +306,9 @@ def cmd_propose(args):
             print(f"you are the reviewer this round, not the proposer")
             sys.exit(1)
 
-        append_message({"from": agent, "phase": "PROPOSE", "round": state["round"], "body": body})
+        msg = {"from": agent, "phase": "PROPOSE", "round": state["round"]}
+        msg.update(build_message_fields(body, f"propose-{agent}-r{state['round']}"))
+        append_message(msg)
         state["phase"] = "REVIEW"
         state["turn"] = state["reviewer"]
         save_state(state)
@@ -276,7 +322,7 @@ def cmd_review(args):
         state = require_state()
         agent = get_agent(args, state)
         verdict = args.verdict
-        body = " ".join(args.message)
+        body = get_body(args)
 
         if state["phase"] != "REVIEW":
             print(f"cannot review in phase {state['phase']}")
@@ -288,8 +334,10 @@ def cmd_review(args):
             print(f"you are the proposer this round, not the reviewer")
             sys.exit(1)
 
-        append_message({"from": agent, "phase": "REVIEW", "round": state["round"],
-                        "verdict": verdict, "body": body})
+        msg = {"from": agent, "phase": "REVIEW", "round": state["round"],
+               "verdict": verdict}
+        msg.update(build_message_fields(body, f"review-{agent}-r{state['round']}"))
+        append_message(msg)
 
         if verdict == "agree":
             state["phase"] = "CONSENSUS"
@@ -311,8 +359,10 @@ def cmd_review(args):
 def cmd_say(args):
     def do():
         state = require_state()
-        body = " ".join(args.message)
-        append_message({"from": "human", "phase": state["phase"], "body": body})
+        body = get_body(args)
+        msg = {"from": "human", "phase": state["phase"]}
+        msg.update(build_message_fields(body, "say-human"))
+        append_message(msg)
         print("message sent")
 
     with_lock(do)
@@ -326,22 +376,36 @@ def cmd_force(args):
             print(f"unknown phase: {phase}. valid: {', '.join(PHASES)}")
             sys.exit(1)
 
+        agents = [k for k in state["participants"] if state["participants"][k]["type"] != "human"]
+        forced_agent = args.agent
+
+        if forced_agent and forced_agent not in agents:
+            print(f"unknown agent: {forced_agent}. joined: {', '.join(agents)}")
+            sys.exit(1)
+
         old = state["phase"]
         state["phase"] = phase
 
         if phase == "PROPOSE":
-            if state["proposer"] is None:
-                agents = [k for k in state["participants"] if state["participants"][k]["type"] != "human"]
-                if len(agents) >= 2:
-                    state["proposer"] = agents[0]
-                    state["reviewer"] = agents[1]
+            if forced_agent:
+                state["proposer"] = forced_agent
+                state["reviewer"] = [a for a in agents if a != forced_agent][0] if len(agents) >= 2 else None
+            elif state["proposer"] is None and len(agents) >= 2:
+                state["proposer"] = agents[0]
+                state["reviewer"] = agents[1]
             state["turn"] = state["proposer"]
             state["round"] += 1
 
         elif phase == "IMPLEMENT":
-            state["turn"] = state["proposer"]
+            state["turn"] = forced_agent or state["proposer"]
 
         elif phase == "VERIFY":
+            state["turn"] = forced_agent or state["reviewer"]
+
+        elif phase == "REVIEW":
+            if forced_agent:
+                state["reviewer"] = forced_agent
+                state["proposer"] = [a for a in agents if a != forced_agent][0] if len(agents) >= 2 else None
             state["turn"] = state["reviewer"]
 
         elif phase == "DONE":
@@ -349,8 +413,8 @@ def cmd_force(args):
 
         save_state(state)
         append_message({"from": "human", "phase": phase,
-                        "body": f"human forced phase: {old} -> {phase}"})
-        print(f"phase changed: {old} -> {phase}")
+                        "body": f"human forced phase: {old} -> {phase}" + (f", turn: {forced_agent}" if forced_agent else "")})
+        print(f"phase changed: {old} -> {phase}" + (f", turn: {forced_agent}" if forced_agent else f", turn: {state['turn']}"))
 
     with_lock(do)
 
@@ -359,7 +423,7 @@ def cmd_implement(args):
     def do():
         state = require_state()
         agent = get_agent(args, state)
-        body = " ".join(args.message)
+        body = get_body(args)
 
         if state["phase"] not in ("CONSENSUS", "IMPLEMENT"):
             print(f"cannot implement in phase {state['phase']}")
@@ -368,7 +432,9 @@ def cmd_implement(args):
         state["phase"] = "IMPLEMENT"
         state["turn"] = agent
         save_state(state)
-        append_message({"from": agent, "phase": "IMPLEMENT", "round": state["round"], "body": body})
+        msg = {"from": agent, "phase": "IMPLEMENT", "round": state["round"]}
+        msg.update(build_message_fields(body, f"implement-{agent}-r{state['round']}"))
+        append_message(msg)
         print("implementation recorded.")
 
     with_lock(do)
@@ -379,14 +445,16 @@ def cmd_verify(args):
         state = require_state()
         agent = get_agent(args, state)
         verdict = args.verdict
-        body = " ".join(args.message)
+        body = get_body(args)
 
         if state["phase"] != "IMPLEMENT":
             print(f"cannot verify in phase {state['phase']}")
             sys.exit(1)
 
-        append_message({"from": agent, "phase": "VERIFY", "round": state["round"],
-                        "verdict": verdict, "body": body})
+        msg = {"from": agent, "phase": "VERIFY", "round": state["round"],
+               "verdict": verdict}
+        msg.update(build_message_fields(body, f"verify-{agent}-r{state['round']}"))
+        append_message(msg)
 
         if verdict == "accept":
             state["phase"] = "DONE"
@@ -453,28 +521,30 @@ def main():
     p.add_argument("--last", type=int, default=None, help="show last N messages")
 
     p = sub.add_parser("propose", help="submit a proposal")
-
-    p.add_argument("message", nargs="+")
+    p.add_argument("--file", default=None, help="read body from this file instead of args")
+    p.add_argument("message", nargs="*", default=[])
 
     p = sub.add_parser("review", help="review a proposal")
-
     p.add_argument("verdict", choices=["agree", "disagree", "revise"])
-    p.add_argument("message", nargs="+")
+    p.add_argument("--file", default=None, help="read body from this file instead of args")
+    p.add_argument("message", nargs="*", default=[])
 
     p = sub.add_parser("say", help="human sends a message")
-    p.add_argument("message", nargs="+")
+    p.add_argument("--file", default=None, help="read body from this file instead of args")
+    p.add_argument("message", nargs="*", default=[])
 
     p = sub.add_parser("force", help="human forces a phase change")
     p.add_argument("phase", help="target phase")
+    p.add_argument("agent", nargs="?", default=None, help="assign turn to this agent (e.g. agent-a)")
 
     p = sub.add_parser("implement", help="record implementation")
-
-    p.add_argument("message", nargs="+")
+    p.add_argument("--file", default=None, help="read body from this file instead of args")
+    p.add_argument("message", nargs="*", default=[])
 
     p = sub.add_parser("verify", help="verify implementation")
-
     p.add_argument("verdict", choices=["accept", "reject"])
-    p.add_argument("message", nargs="+")
+    p.add_argument("--file", default=None, help="read body from this file instead of args")
+    p.add_argument("message", nargs="*", default=[])
 
     sub.add_parser("done", help="archive the debate")
     sub.add_parser("watch", help="watch the debate live")
