@@ -302,9 +302,11 @@ def cmd_propose(args):
         if state["turn"] != agent:
             print(f"not your turn. current turn: {state['turn']}")
             sys.exit(1)
-        if state["proposer"] != agent:
-            print(f"you are the reviewer this round, not the proposer")
-            sys.exit(1)
+        agents = [k for k in state["participants"] if state["participants"][k]["type"] != "human"]
+        other = [a for a in agents if a != agent]
+        state["proposer"] = agent
+        if other:
+            state["reviewer"] = other[0]
 
         msg = {"from": agent, "phase": "PROPOSE", "round": state["round"]}
         msg.update(build_message_fields(body, f"propose-{agent}-r{state['round']}"))
@@ -330,9 +332,11 @@ def cmd_review(args):
         if state["turn"] != agent:
             print(f"not your turn. current turn: {state['turn']}")
             sys.exit(1)
-        if state["reviewer"] != agent:
-            print(f"you are the proposer this round, not the reviewer")
-            sys.exit(1)
+        agents = [k for k in state["participants"] if state["participants"][k]["type"] != "human"]
+        other = [a for a in agents if a != agent]
+        state["reviewer"] = agent
+        if other:
+            state["proposer"] = other[0]
 
         msg = {"from": agent, "phase": "REVIEW", "round": state["round"],
                "verdict": verdict}
