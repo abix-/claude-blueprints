@@ -1,1 +1,1 @@
-@python "%~dp0debate.py" %*
+@pwsh -NoProfile -File "%~dp0debate.ps1" %*

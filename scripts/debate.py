@@ -18,7 +18,7 @@ MESSAGES_FILE = ACTIVE_DIR / "messages.jsonl"
 GOAL_FILE = ACTIVE_DIR / "goal.md"
 LOCK_FILE = ACTIVE_DIR / ".lock"
 
-PHASES = ["GOAL", "PROPOSE", "REVIEW", "CONSENSUS", "IMPLEMENT", "VERIFY", "DONE"]
+PHASES = ["GOAL", "PROPOSE", "DISCUSS", "CONSENSUS", "IMPLEMENT", "VERIFY", "DONE"]
 
 
 def now_iso():
@@ -108,14 +108,6 @@ def get_agent(args, state):
     sys.exit(1)
 
 
-def swap_roles(state):
-    old_proposer = state["proposer"]
-    old_reviewer = state["reviewer"]
-    state["proposer"] = old_reviewer
-    state["reviewer"] = old_proposer
-    state["round"] += 1
-
-
 def resolve_body(msg):
     """Return the full body text, reading from file if the message uses one."""
     body_file = msg.get("body_file")
@@ -197,9 +189,7 @@ def cmd_new(args):
             "id": debate_id,
             "phase": "GOAL",
             "round": 0,
-            "turn": None,
-            "proposer": None,
-            "reviewer": None,
+            "last_action_by": None,
             "participants": {
                 "human": {"name": "human", "type": "human"}
             },
@@ -251,15 +241,11 @@ def cmd_join(args):
         append_message({"from": "system", "phase": state["phase"],
                         "body": f"{name} joined as {agent_type}"})
 
-        agents = [k for k, v in state["participants"].items() if v["type"] != "human"]
-        if len(agents) == 2 and state["phase"] == "GOAL":
+        if state["phase"] == "GOAL":
             state["phase"] = "PROPOSE"
             state["round"] = 1
-            state["proposer"] = agents[0]
-            state["reviewer"] = agents[1]
-            state["turn"] = agents[0]
             append_message({"from": "system", "phase": "PROPOSE",
-                            "body": f"two agents joined. {agents[0]} proposes first. round 1."})
+                            "body": f"round 1. any agent may propose."})
 
         save_state(state)
         print(f"joined as {name} ({agent_type})")
@@ -272,9 +258,7 @@ def cmd_status(args):
     print(f"debate:   {state['id']}")
     print(f"phase:    {state['phase']}")
     print(f"round:    {state['round']}")
-    print(f"turn:     {state['turn'] or '(none)'}")
-    print(f"proposer: {state['proposer'] or '(none)'}")
-    print(f"reviewer: {state['reviewer'] or '(none)'}")
+    print(f"last:     {state.get('last_action_by') or '(none)'}")
     print(f"agents:   {', '.join(k for k in state['participants'] if state['participants'][k]['type'] != 'human')}")
 
     goal = GOAL_FILE.read_text().strip() if GOAL_FILE.exists() else "(none)"
@@ -299,61 +283,53 @@ def cmd_propose(args):
         if state["phase"] != "PROPOSE":
             print(f"cannot propose in phase {state['phase']}")
             sys.exit(1)
-        if state["turn"] != agent:
-            print(f"not your turn. current turn: {state['turn']}")
-            sys.exit(1)
-        agents = [k for k in state["participants"] if state["participants"][k]["type"] != "human"]
-        other = [a for a in agents if a != agent]
-        state["proposer"] = agent
-        if other:
-            state["reviewer"] = other[0]
 
+        state["last_action_by"] = agent
         msg = {"from": agent, "phase": "PROPOSE", "round": state["round"]}
         msg.update(build_message_fields(body, f"propose-{agent}-r{state['round']}"))
         append_message(msg)
-        state["phase"] = "REVIEW"
-        state["turn"] = state["reviewer"]
+        state["phase"] = "DISCUSS"
         save_state(state)
-        print(f"proposal submitted. {state['turn']}'s turn to review.")
+        print(f"proposal submitted. waiting for review.")
 
     with_lock(do)
 
 
-def cmd_review(args):
+def cmd_discuss(args):
     def do():
         state = require_state()
         agent = get_agent(args, state)
         verdict = args.verdict
         body = get_body(args)
 
-        if state["phase"] != "REVIEW":
+        if state["phase"] != "DISCUSS":
             print(f"cannot review in phase {state['phase']}")
             sys.exit(1)
-        if state["turn"] != agent:
-            print(f"not your turn. current turn: {state['turn']}")
-            sys.exit(1)
         agents = [k for k in state["participants"] if state["participants"][k]["type"] != "human"]
-        other = [a for a in agents if a != agent]
-        state["reviewer"] = agent
-        if other:
-            state["proposer"] = other[0]
+        proposer = state.get("last_action_by")
+        if agent == proposer:
+            if len(agents) >= 2:
+                print(f"another agent is available to review. let them do it.")
+                sys.exit(1)
+            else:
+                print(f"solo agent cannot review their own proposal. a second agent must join to review.")
+                sys.exit(1)
 
-        msg = {"from": agent, "phase": "REVIEW", "round": state["round"],
+        state["last_action_by"] = agent
+        msg = {"from": agent, "phase": "DISCUSS", "round": state["round"],
                "verdict": verdict}
-        msg.update(build_message_fields(body, f"review-{agent}-r{state['round']}"))
+        msg.update(build_message_fields(body, f"discuss-{agent}-r{state['round']}"))
         append_message(msg)
 
         if verdict == "agree":
             state["phase"] = "CONSENSUS"
-            state["turn"] = None
             append_message({"from": "system", "phase": "CONSENSUS",
-                            "body": "both agents agree. waiting for human to advance to IMPLEMENT or send back."})
+                            "body": "agreement reached. waiting for human to advance to IMPLEMENT or send back."})
         else:
-            swap_roles(state)
+            state["round"] += 1
             state["phase"] = "PROPOSE"
-            state["turn"] = state["proposer"]
             append_message({"from": "system", "phase": "PROPOSE",
-                            "body": f"disagreement. roles swapped. {state['proposer']} proposes in round {state['round']}."})
+                            "body": f"disagreement. round {state['round']}."})
 
         save_state(state)
 
@@ -391,34 +367,12 @@ def cmd_force(args):
         state["phase"] = phase
 
         if phase == "PROPOSE":
-            if forced_agent:
-                state["proposer"] = forced_agent
-                state["reviewer"] = [a for a in agents if a != forced_agent][0] if len(agents) >= 2 else None
-            elif state["proposer"] is None and len(agents) >= 2:
-                state["proposer"] = agents[0]
-                state["reviewer"] = agents[1]
-            state["turn"] = state["proposer"]
             state["round"] += 1
-
-        elif phase == "IMPLEMENT":
-            state["turn"] = forced_agent or state["proposer"]
-
-        elif phase == "VERIFY":
-            state["turn"] = forced_agent or state["reviewer"]
-
-        elif phase == "REVIEW":
-            if forced_agent:
-                state["reviewer"] = forced_agent
-                state["proposer"] = [a for a in agents if a != forced_agent][0] if len(agents) >= 2 else None
-            state["turn"] = state["reviewer"]
-
-        elif phase == "DONE":
-            state["turn"] = None
 
         save_state(state)
         append_message({"from": "human", "phase": phase,
-                        "body": f"human forced phase: {old} -> {phase}" + (f", turn: {forced_agent}" if forced_agent else "")})
-        print(f"phase changed: {old} -> {phase}" + (f", turn: {forced_agent}" if forced_agent else f", turn: {state['turn']}"))
+                        "body": f"human forced phase: {old} -> {phase}"})
+        print(f"phase changed: {old} -> {phase}")
 
     with_lock(do)
 
@@ -434,7 +388,7 @@ def cmd_implement(args):
             sys.exit(1)
 
         state["phase"] = "IMPLEMENT"
-        state["turn"] = agent
+        state["last_action_by"] = agent
         save_state(state)
         msg = {"from": agent, "phase": "IMPLEMENT", "round": state["round"]}
         msg.update(build_message_fields(body, f"implement-{agent}-r{state['round']}"))
@@ -460,17 +414,16 @@ def cmd_verify(args):
         msg.update(build_message_fields(body, f"verify-{agent}-r{state['round']}"))
         append_message(msg)
 
+        state["last_action_by"] = agent
         if verdict == "accept":
             state["phase"] = "DONE"
-            state["turn"] = None
             append_message({"from": "system", "phase": "DONE",
                             "body": "implementation accepted. debate complete."})
         else:
+            state["round"] += 1
             state["phase"] = "PROPOSE"
-            swap_roles(state)
-            state["turn"] = state["proposer"]
             append_message({"from": "system", "phase": "PROPOSE",
-                            "body": f"implementation rejected. back to debate. {state['proposer']} proposes in round {state['round']}."})
+                            "body": f"implementation rejected. back to debate. round {state['round']}."})
 
         save_state(state)
 
@@ -528,7 +481,7 @@ def main():
     p.add_argument("--file", default=None, help="read body from this file instead of args")
     p.add_argument("message", nargs="*", default=[])
 
-    p = sub.add_parser("review", help="review a proposal")
+    p = sub.add_parser("discuss", help="respond to a proposal")
     p.add_argument("verdict", choices=["agree", "disagree", "revise"])
     p.add_argument("--file", default=None, help="read body from this file instead of args")
     p.add_argument("message", nargs="*", default=[])
@@ -560,7 +513,7 @@ def main():
 
     cmds = {
         "new": cmd_new, "join": cmd_join, "status": cmd_status,
-        "read": cmd_read, "propose": cmd_propose, "review": cmd_review,
+        "read": cmd_read, "propose": cmd_propose, "discuss": cmd_discuss,
         "say": cmd_say, "force": cmd_force, "implement": cmd_implement,
         "verify": cmd_verify, "done": cmd_done, "watch": cmd_watch,
     }
