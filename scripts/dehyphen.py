@@ -90,7 +90,8 @@ def _rewrite_line(line: str) -> str:
         return ". " + nxt
 
     # `<space><dash><dash><space><nonspace>` form.
-    line = re.sub(r" -- (\S)", replace_inline, line)
+    # Exclude `-` after ` -- ` so CLI patterns (`-- --flag`) pass through.
+    line = re.sub(r" -- ([^\s-])", replace_inline, line)
     # Trailing `<space><dash><dash>` at end of line (continuation wraps).
     line = re.sub(r" --$", ".", line)
     # `<space><emdash><space><nonspace>` inline form.
