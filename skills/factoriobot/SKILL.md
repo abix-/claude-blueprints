@@ -501,6 +501,20 @@ todo.
   edges and belt sides, electric coverage of every machine in the blueprint,
   and tileable overlap. The wiki documents all of it; a geometry argument
   without a wiki citation is a guess and was rejected repeatedly.
+- **Blueprint geometry comes from Factorio facts, never direction guesses:**
+  read the current official Lua and prototype documentation, capture the
+  relevant prototype values, and make the shared tests calculate the same
+  geometry Factorio uses. Rotate each inserter prototype's documented pickup
+  and drop positions by the blueprint direction. A source or destination is an
+  entity colliding with the tile box beneath that position; never require the
+  position to equal the entity centre. Validate every inserter source and
+  destination, entity overlap, underground-belt endpoint direction and
+  prototype maximum distance, and pipe-to-ground direction, pairing, and
+  documented range. Apply these checks without exceptions to every source and
+  constructed tile and every complete constructed hexagon. A focused recipe
+  test supplements these shared checks; it never replaces them. Do not claim a
+  blueprint complete until the generic tile, shared, and complete-hexagon
+  checks pass.
 - Any modded game must work: game knowledge from prototype data at runtime,
   never hardcoded vanilla lists.
 - The bot-built starter base is a one-sided main bus running west to east. Raw
