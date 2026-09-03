@@ -635,10 +635,21 @@ todo.
   `docs/runs/attempts.jsonl`, `watch` polls (10s fast, 300s slow), latches
   alerts (fire on start, fire on clear, never repeat), and delivers to stdout
   plus in-game chat.
+- The blueprint book reaches the game through the mod, never the clipboard
+  (proved live 2026-09-03): `factoriobot blueprints load-book coop` runs
+  `scripts/make_coop_book.py` and sends the string to the running bot, which
+  asks the mod's `import_blueprint_book` handler to put it in the player's
+  inventory, replacing the book with the same label ("Cooperative rail
+  base"). The 360 KB book is 103 chunk datagrams; the mailbox paces them
+  eight per 20 ms because the game drains its socket once per tick and a
+  burst lost its tail on every resend (commit 56f1ce3, proof test
+  `a_book_sized_request_survives_a_per_tick_drain_with_a_small_socket_buffer`).
+  Needs the watch running on the current build: `restart.ps1` first after a
+  Rust change.
 - Game setup: in Factorio's config.ini [other] section, uncomment
   local-rcon-socket and local-rcon-password, then host via Multiplayer, Host
   New Game. RCON listens only while hosting, including solo.
-- Development restart: `restart.ps1` (default save `factoriobot-start.zip`,
+- Development restart: `restart.ps1` (default save `factoriobot-going-space.zip`,
   hidden watch). Pass `-Save NAME.zip` for another save, `-Checkpoint` or
   `-Milestone` for autosave resume points, `-Hypothesis "..."` to label a
   deliberate change in the attempt catalog (`FACTORIOBOT_HYPOTHESIS`),
