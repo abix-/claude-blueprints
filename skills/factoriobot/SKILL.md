@@ -41,6 +41,12 @@ words are deleted on sight, so writing one costs the work twice.
 
 ### 1. Classify the operator's message
 
+Obey the operator. Do exactly what the operator says.
+
+Blueprint source files are JSON. When the operator requests a direct blueprint
+field or name change, edit the owning JSON file directly and do nothing else
+unless the operator asks for it.
+
 The latest operator message always wins. `stop` or `pause` stops immediately.
 `stop hooks` makes every project hook a no-op until `enable hooks`. Hooks never
 prevent conversation.
