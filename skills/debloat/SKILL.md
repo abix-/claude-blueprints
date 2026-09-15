@@ -303,6 +303,13 @@ Done, with revert for each:
 | Mozilla tasks disabled (both) | `Get-ScheduledTask -TaskPath '\Mozilla\' \| Enable-ScheduledTask` (admin) |
 | GoogleUserPEH tasks disabled (both) | `Get-ScheduledTask -TaskPath '\GoogleUserPEH\' \| Enable-ScheduledTask` |
 | 28 Windows telemetry/sync tasks disabled (the section 3 list). SettingSync BackgroundUploadTask refused, access denied | `Enable-ScheduledTask` per task (admin) |
+| Logi Download Assistant removed from HKLM Run | `Set-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Logi Download Assistant' -Value '"C:\Program Files\LogiDownloadAssistant\bin\logi_download_assistant.exe" -system-restarted'` |
+| Send to OneNote.lnk deleted from user Startup folder | recreate from OneNote options |
+| Services registry Start=4 and stopped: IAStorDataMgrSvc, edgeupdate, edgeupdatem, GoogleUpdaterInternalService152.0.7933.0, GoogleUpdaterService152.0.7933.0 | set Start back to 2 under `HKLM:\SYSTEM\CurrentControlSet\Services\<name>` |
+
+Defender re-enabled its own three scheduled tasks (Cache Maintenance,
+Cleanup, Verification) within a day of being disabled. Real-time stayed off
+by policy. Expect those tasks to come back; they are maintenance only.
 
 Also found: Brave .ldb churn was one web tab stuck in a loop rewriting a
 localStorage key. Find the site with the origin count over the live
@@ -311,9 +318,9 @@ localStorage key. Find the site with the origin count over the live
 with `rm -f /c/code/factoriobot/*.log` (Claude Code's safety filter blocks
 the bulk delete, operator runs it).
 
-Not done, still open: Steam (operator keeps it), Camera Hub, Greenshot,
-IDMan, f.lux, Logi Download Assistant still autostart. Intel RST
-(IAStorDataMgrSvc) and MuseAuthService still Automatic. VisualStudio
+Not done, still open: Steam (operator keeps it), Discord, Spotify, Camera
+Hub, Greenshot, IDMan, f.lux, eufy-viewer still autostart. MuseAuthService
+still Automatic. DPS, TrkWks, stisvc still Automatic. VisualStudio
 BackgroundDownload task still enabled. Reboot pending to confirm MsMpEng
 stays unloaded. Disk at 23 GB free of 1862 GB pending the log delete.
 
