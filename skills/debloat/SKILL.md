@@ -306,6 +306,12 @@ Done, with revert for each:
 | Logi Download Assistant removed from HKLM Run | `Set-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Logi Download Assistant' -Value '"C:\Program Files\LogiDownloadAssistant\bin\logi_download_assistant.exe" -system-restarted'` |
 | Send to OneNote.lnk deleted from user Startup folder | recreate from OneNote options |
 | Services registry Start=4 and stopped: IAStorDataMgrSvc, edgeupdate, edgeupdatem, GoogleUpdaterInternalService152.0.7933.0, GoogleUpdaterService152.0.7933.0 | set Start back to 2 under `HKLM:\SYSTEM\CurrentControlSet\Services\<name>` |
+| Settings sync off: policy `HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync` DisableSettingSync=2, DisableSettingSyncUserOverride=1; HKCU SettingSync SyncPolicy=5, every Groups\*\Enabled=0. Neuters the TrustedInstaller-locked BackgroundUploadTask | delete the policy key, SyncPolicy=0 |
+| DPS stopped and disabled via `sc.exe config DPS start= disabled` (registry key refuses even admin) | `sc.exe config DPS start= auto` |
+| DoSvc registry Start=4, stopped; policy `HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization` DODownloadMode=0 | Start=2, delete the policy key |
+| VisualStudio\Updates\BackgroundDownload task disabled | `Enable-ScheduledTask` (admin) |
+| MuseAuthService stopped, `sc.exe config MuseAuthService start= disabled` | `sc.exe config MuseAuthService start= auto` |
+| Camera Hub killed. Facecam MK.2 keeps settings on the camera, app not needed for the webcam to work. Run entry was already gone | relaunch from Start menu, re-enable "launch at startup" in its settings |
 
 Defender re-enabled its own three scheduled tasks (Cache Maintenance,
 Cleanup, Verification) within a day of being disabled. Real-time stayed off
@@ -318,10 +324,9 @@ localStorage key. Find the site with the origin count over the live
 with `rm -f /c/code/factoriobot/*.log` (Claude Code's safety filter blocks
 the bulk delete, operator runs it).
 
-Not done, still open: Steam (operator keeps it), Discord, Spotify, Camera
-Hub, Greenshot, IDMan, f.lux, eufy-viewer still autostart. MuseAuthService
-still Automatic. DPS, TrkWks, stisvc still Automatic. VisualStudio
-BackgroundDownload task still enabled. Reboot pending to confirm MsMpEng
+Not done, still open: Steam (operator keeps it), Discord, Spotify,
+Greenshot, IDMan, f.lux, eufy-viewer still autostart. TrkWks, stisvc,
+iphlpsvc, MapsBroker still Automatic. Reboot pending to confirm MsMpEng
 stays unloaded. Disk at 23 GB free of 1862 GB pending the log delete.
 
 ## Presentation
