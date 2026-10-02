@@ -2,7 +2,7 @@
 name: mygoal
 description: "Working under the operator's /mygoal goal: the approved finish check, the judge, and how to propose a check that cannot pass while the goal is unmet; how the mygoal mod works inside, its known gaps, and proving a goal with a game's test queue. Use whenever a /mygoal goal is open, when asked to propose a finish check, when the mygoal mod sends a 'not done yet' turn, or when changing the mygoal mod."
 user-invocable: false
-version: "1.1"
+version: "1.2"
 ---
 # mygoal
 
@@ -68,7 +68,7 @@ finish check there is for game work:
 2. Commit the tests before the goal starts, so a change to a test shows
    in the judge's changes and cannot quietly turn the check green.
 3. The finish check runs the group through the queue, for topside
-   `pwsh -NoProfile -File scripts/build.ps1 queue "<group>::"`. It exits
+   `pwsh -NoProfile -File scripts/build.ps1 queue <test file> [<test file> ...]`. It exits
    0 only when every queued test passed; the `tests` op's status holds each
    test's result and output while the run goes and after.
 4. A test that cannot play what it tests must fail, never return early as
