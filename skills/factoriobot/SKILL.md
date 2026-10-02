@@ -579,30 +579,179 @@ todo.
   last fallback deletes this rule with it.
 - No arbitrary-execution command in the shipped CLI surface.
 
-## Factory desired state (approved 2026-07-27)
+## Authority lessons (2026-08-15, one long night of deadlocks)
 
-- The manifest remains authority for intended buildings.
-- The factory audit reports missing, nonfunctional, wrong, extra, and
-  satisfied buildings.
-- Compile every audit result into the existing available actions used by all
+- **RCA owns the root cause. THAT IS WHAT RCA MEANS.** Every deadlock
+  hotfix that landed in an op or the executor (the executor-side
+  collection, the craft-time source picking) was the SAME violation:
+  execution choosing sources or inventing work. Ops and playbooks only
+  EXECUTE the selected Work and report the exact need they wait on;
+  the next round's derived Work is what fixes it. Two commits were
+  reverted as authority sabotage for this.
+- **WE RCA AND WORK UP (operator-locked):** a build short on
+  machine-made materials is NEVER a selectable option. The RCA reads
+  the picture each round, computes the shortfall fresh from the
+  checked-in blueprint (the material bill), and routes the run's value
+  down to the root work (collect the plates, fuel the drill). ONE
+  observation/react cycle, NO memory, and never defer work: deferred
+  work never shows up in RCA.
+- **Ownership lives in ONE place:** the numbered system table in
+  docs/authority.md, every row opening "Authoritative for:". The
+  duplicated per-section ownership tables were the disease that let
+  the same deadlock ship as scattered hotfixes; they are deleted. RCA
+  absorbed the former research-resolution and acquisition rows.
+- **Pockets serve fixing only.** Ore and fuel must be IN THE BUILDING
+  to count; measuring what the factory needs never counts the
+  player's pockets, and acquiring uses pockets first.
+- **Fuel work derives from the observed empty fuel slot, never the
+  status string** (a fuel-empty burner behind "working" still
+  starves). The fueling lock: a fuel job carrying routed value above
+  its own floor orders before every non-fuel pick. The fuel plan
+  serves the lone coal-producing drill first and reports need even
+  with empty hands.
+- **Chains read the FULL recipe book, locked recipes included.** The
+  enabled-only book cut every chain at the locked science-pack recipe
+  and value below it died (the copper run re-picked 467 times).
+- **A to_player transfer count means the player ENDS WITH that many**
+  (control.lua's own rule); collect jobs use the chain's full
+  requirement as that ends-with count.
+- **Op answer contracts drift silently:** deleting fields from an
+  op's answers while `provides` still promises them caused a live
+  abort storm the whole green suite never caught. Row 24 needs
+  every-path desk proofs like the ghost.connect-items branch matrix.
+- **ONE super test:** the opening game test plays the real opening
+  (crash loot, hand-mining, real costs, real fuel math, the coal
+  pair, collect jobs, measured timings) and EVERY live deadlock folds
+  into it with its recorded data. Never a second scenario test.
+- **No change without facts.** A theory shipped as an edit is a
+  guess; two in a row is worse. Trace the exact line or measure
+  before touching anything; the operator halts work over this.
+
+## Factory desired state (approved 2026-07-27, manifest deleted 2026-08-15)
+
+- Checked-in Blueprints say what the factory should contain; Factory
+  Observation says what exists. NOTHING else: the manifest, the saved
+  building records, and the audit types are deleted. The ghosts in
+  the world are the plan.
+- The blueprint comparison reports missing, nonfunctional, wrong,
+  extra, and satisfied buildings fresh each round.
+- Compile every comparison result into the existing available actions used by all
   body work. Do not add another scheduler or repair queue.
-- Missing buildings use existing build or restore work. Nonfunctional
-  buildings use existing fuel, input, power, or configuration work. Wrong and
-  extra buildings use explicit adopt or remove work.
+- A missing or lost building is re-derived from the blueprint
+  comparison on the next round; no restore op or saved restore path
+  exists (2026-08-15: `ghost.restore-selected` is deleted; the world
+  holds the work). Nonfunctional buildings use existing fuel, input,
+  power, or configuration work. Wrong and extra buildings use explicit
+  adopt or remove work.
 - Authored parent requirements are scheduling dependencies. The copper base
   must complete before the copper lab becomes an available action.
 - Preserve each building's stable identity, exact arguments, completion
   condition, and blocker through execution.
 - Applying work, probing progress, deciding completion, and reviewing logs use
   the same completion condition.
-- The coal bootstrap keeps one persistent starting-fuel work item across
-  gathering and transfer so exactly one piece of coal is loaded once.
+- The coal bootstrap's one starting coal is derived from live entities
+  each call (nothing saved): the closed self-feeding pair is owned by
+  its one-seed lifecycle and the shared fuel plan never targets a
+  closed-pair member.
 - Existing playbooks execute selected work. They never rediscover the same
   desired state independently.
 - Acceptance requires the copper base, then copper lab, all planned copper
   transport drained, one coal bootstrap load, unchanged placement failure
   escalation, foreground idle below 3 percent, and fuel shortage below 15
   percent.
+
+## Blueprint metadata is the usage authority (operator-locked 2026-08-15)
+
+- Every `blueprints/<id>.json` carries the complete factoriobot block
+  (id, from_to, in, out, tile, book, rating, params, and the structure
+  fields where present). Every in and out port names what it carries:
+  a concrete Factorio item or fluid, or a `${param}` the unit
+  declares; belt/bus pieces declare the `${item}` they move
+  (`${second_item}` where two ride the lanes); power is the one
+  item-less role. The schema test
+  (`every_blueprint_meets_the_design_contract`) checks EVERY field;
+  a new blueprint with complete metadata is usable by the bot with no
+  code change.
+- The bot answers "which blueprint" by READING the declared metadata
+  (`match_providing` / `direct_output_unit` in
+  `src/blueprint_catalog.rs`), best rating first. NEVER select a
+  blueprint by opening blueprints and checking their buildings; that
+  structural sweep (`direct_output_artifact`) was the minutes-long
+  round and is deleted.
+- The library loads from disk ONCE (`ensure_loaded`, cached folder);
+  per-lookup staleness checks were the disk storm. `refresh()` exists
+  only for an explicit reload.
+
+## Reviewing a belt change: one picture, one script (operator, 2026-09-03)
+
+Every time a blueprint's belts are reviewed with the operator, show a
+picture drawn by `scripts/draw_belts.py` in the repo. Never hand-draw a
+one-off, never change the format between pictures, never use ASCII grids.
+
+```
+python scripts/assemble.py blueprints/constructed/<name>.json > <scratch>/after.json
+python scripts/draw_belts.py <scratch>/out.png <scratch>/after.json [<scratch>/before.json] --box X0 X1 Y0 Y1 --note "..."
+cmd //c start "" <scratch>/out.png
+```
+
+- Rows and columns are whole tile numbers. A belt stored at 51.5 is
+  tile 51 (the game stores an odd-sized entity's centre, LuaEntity
+  `tile_width` docs). Never label a row or column with a .5.
+- The picture draws the whole region: belts tan with an arrow,
+  underground belts brown with in/out, splitters green, inserters blue,
+  chests brown, machines grey, beacons purple, substations dark grey,
+  rails light grey, train stops pink.
+- Every belt tile shows its two lanes as two strips on the sides they
+  are on, coloured by item. Item colours are derived, never guessed: the
+  station's filtered inserters seed their items, machines with a recipe
+  put out their products, and chests, inserters and belts carry them
+  forward the way the game does (straight, curve, underground and
+  splitter keep lanes; a side-load lands on the near lane; an inserter
+  drops on the far lane). A tan strip is an empty lane. A lane with two
+  items is split and outlined in red. A legend is drawn every time.
+- With a before file, both panels box every removed, added or turned
+  tile in red. The before file for a connections file is the assembled
+  hexagon with the old connections entities swapped in (git show the
+  old file, replace by entity key).
+- Open the picture on the operator's screen with `cmd //c start`; the
+  terminal shows nothing. Then explain it in Factorio words: which item
+  comes from which stop, which belt it lands on, which lane, where it
+  ends, and what the change does to that. One join at a time.
+
+## Wasted rows: every tile and station is compact (operator, 2026-09-03)
+
+No tile, station, or connections file keeps a row or column that holds
+nothing, or nothing but straight belts passing through. Before and after
+any tile, station, or connections work, run the tool and read its list:
+
+```
+python scripts/wasted_rows.py <file-or-assembled-hexagon>.json [--box X0 X1 Y0 Y1]
+```
+
+- It reports every row and column in the box that is empty or holds only
+  belts and underground belt ends whose direction crosses it, and the
+  totals. Rails, rail signals, big poles and roboports are the block's
+  and are ignored. Rows and columns are whole tile numbers.
+- On the assembled hexagon, a wasted row belongs to whichever file drew
+  it: the tile (rows at a copy's top and bottom repeat once per copy),
+  the station (belts running to its own balancer), or the connections
+  (output columns running to the output line). Fix it in that file.
+- Freed rows are what the input balancers need; do not place a balancer
+  by pushing a tile into the output station while wasted rows remain.
+
+## Proof tables are generated, never hand-edited (2026-08-15)
+
+- Every design doc's "Proof: what tests validate this doc" table is
+  generated from the test module's `///` doc comments by
+  `k3sc cargo-lock run --bin design-docs`. Hand-editing rows makes the
+  sync gates red and lies until regeneration.
+- A `#[cfg(any())]`-disabled test STILL generates a CODE-VERIFIED row
+  (the generator reads source text), which is a standing lie. Never
+  park a test that way: rewrite it onto the current world or delete it
+  and fold its rule into an active proof, then regenerate.
+- Keep a proof's `///` block to the design statement alone; every
+  extra `///` line leaks into the doc row. Commentary goes in `//`
+  comments inside the function.
 
 ## Repo layout
 
@@ -631,6 +780,21 @@ todo.
   game. `-BuildOnly` stops after install without launching the game or watch. NEVER hand-copy the exe: a
   running watch locks it and `restart.ps1` owns stopping the watch.
 - Tests only: `k3sc cargo-lock check | test`, never bare cargo.
+- Per-test timing and the 10-second rule (operator-locked 2026-08-15):
+  `k3sc cargo-lock nextest run --test all` prints every test's
+  wall-clock time and CANCELS any test over 10 seconds as a failure
+  (`.config/nextest.toml`, slow-timeout, one framework rule for every
+  test, no per-test attributes). A test that needs more than 10
+  seconds is a bad test; fix the test or the code it exposes, never
+  raise the limit. Use this instead of a bare full-suite run when a
+  run is slow: it NAMES the slow tests instead of sitting silent.
+  nextest stops at the first failure by default; pass `--no-fail-fast`
+  for the complete timed list. First full measurement 2026-08-15: the
+  whole suite runs in 15 seconds; the only tests over 2 seconds were
+  the two app.rs tests that drive the round-deciding code with a real
+  game picture (the opening game test and the collect-job test), so
+  "the suite takes minutes" always meant those two, and cargo test
+  hid that behind one silent run.
 - Live tests, game must be hosted: `k3sc cargo-lock test -- --ignored`
 - CLI: `factoriobot ping | status | problems | next | diagnose | runs
   list|compare | watch`. Default address 127.0.0.1:27015. `problems` is the
