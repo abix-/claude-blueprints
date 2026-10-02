@@ -1,0 +1,6 @@
+{
+  "name": "mygoal",
+  "version": "0.2.0",
+  "description": "Keeps Claude on the operator's goal until an approved check passes and a separate judge agrees it is done",
+  "types": "./types/index.d.ts"
+}

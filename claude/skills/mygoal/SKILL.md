@@ -2,7 +2,7 @@
 name: mygoal
 description: "Working under the operator's /mygoal goal: the approved finish check, the judge, and how to propose a check that cannot pass while the goal is unmet; how the mygoal mod works inside, its known gaps, and proving a goal with a game's test queue. Use whenever a /mygoal goal is open, when asked to propose a finish check, when the mygoal mod sends a 'not done yet' turn, or when changing the mygoal mod."
 user-invocable: false
-version: "1.2"
+version: "1.3"
 ---
 # mygoal
 
@@ -19,7 +19,7 @@ Two things outside Claude, both every turn:
   approves with a pane button only the operator can press. The mod runs it
   itself after every turn and reads the exit code. 0 is passed, anything else
   is failed. Claude cannot paste a result in its place.
-- **The judge.** A different model (`sonnet`) that sees only the goal in the
+- **The judge.** A separate call to Opus 5.5 (operator, 2026-10-02) that sees only the goal in the
   operator's words, the check's real output, and the code changes since
   approval. Never Claude's explanation. It answers what is missing and what
   was changed that the goal did not ask for.
@@ -77,9 +77,10 @@ finish check there is for game work:
 ## How the mod works
 
 The mod is one hooks module, `hooks/register.tsx`, with its test
-`hooks/register.test.tsx`, in the mod's folder under
-`~/.claude/dev-mods/<session id>/goal/`. Read it before changing anything
-here; this section is a map of it, not a second copy.
+`hooks/register.test.tsx`, in this skill's own folder (the repo's
+`claude/skills/mygoal`, installed by sync.ps1 to `~/.claude/skills/mygoal`).
+A plugin in a skill's folder loads in every session. Read it before
+changing anything here; this section is a map of it, not a second copy.
 
 - **What it keeps** (`persist`, `load`): the goal's words, the status
   (`none`, `needs`, `approval`, `working`, `done`, `stopped`), the
@@ -99,13 +100,13 @@ here; this section is a map of it, not a second copy.
 - **Every request** (`prompt.compose`): the goal word for word and the
   step for the status are added to what Claude is sent.
 - **Guard** (`tool.call`): while a goal is open, any tool call whose text
-  holds `plugins/store` or `dev-mods` is refused.
+  holds `plugins/store` or `skills/mygoal` is refused.
 - **After each turn** (`turn.complete` then `evaluate`): skipped for
   subagents and stopped turns. Counts the turn (past the limit it stops),
   runs the check with no shell and a 10 minute limit, keeps its exit code
   and the last 4000 characters, takes the changes since approval
   (`git diff HEAD` per file, only files whose diff differs from the
-  baseline, cut at 40000 characters), and asks the judge (`sonnet`,
+  baseline, cut at 40000 characters), and asks the judge (`claude-opus-5-5`,
   effort high) for `met`, `missing`, `outside_goal` as JSON. Done only on
   exit 0, met, and nothing outside the goal; otherwise it starts the next
   turn with the verdict.
@@ -123,8 +124,9 @@ here; this section is a map of it, not a second copy.
   a test from being changed to pass.
 - **A judge with no answer** (no reply, or no JSON) counts as not met and
   the next turn starts.
-- **The mod lives in one session's dev-mods folder,** not in a repo, so
-  its history is not kept.
+- **The check runs after every turn, with a 30 turn limit.** The right
+  trigger is a commit, as CI runs on a change (see the orchestration
+  skill's known gap).
 
 ## Never
 
