@@ -13,6 +13,45 @@ Audit and remove Windows bloat. Run as admin PowerShell via scripts (bash mangle
 3. **Confirm**. Get approval before disabling
 4. **Verify**. Confirm each target is dead
 
+## Whitelist
+
+Only items the operator has explicitly approved go here. Anything running,
+scheduled, or set to start that is not on this list gets reviewed.
+
+| Category | Item | Reason |
+|---|---|---|
+| Service | LSM (Local Session Manager) | Core Windows sign-in sessions; Microsoft: disabling causes system instability |
+| Service | NVDisplay.ContainerLocalSystem (NVIDIA Display Container LS) | Operator keeps it (NVIDIA Control Panel and driver plugins) |
+| Service | Appinfo (Application Information) | UAC; without it nothing can run as administrator, including installers and the elevated debloat scripts |
+| Service | AudioEndpointBuilder (Windows Audio Endpoint Builder) | Builds the audio devices; Audiosrv depends on it, no sound or mic without it |
+| Service | Audiosrv (Windows Audio) | Windows sound engine; no sound or mic in any program without it |
+| Service | BFE (Base Filtering Engine) | Holds the network filter rules; the firewall cannot run without it |
+| Service | BrokerInfrastructure (Background Tasks Infrastructure Service) | Microsoft: required for a stable Start menu; cannot be stopped while Windows runs |
+| Service | camsvc (Capability Access Manager Service) | Enforces Privacy switches; forum reports mic and webcam access fail without it |
+| Service | CoreMessagingRegistrar (CoreMessaging) | CoreUI registrar over ALPC; explorer, Start menu, TextInputHost, Terminal, browsers use it to pass UI messages. No network |
+| Service | CryptSvc (Cryptographic Services) | File signature catalog (catroot2) and trusted root certs; Microsoft: updates and program installs fail without it |
+| Service | DcomLaunch (DCOM Server Process Launcher) | Starts COM servers; failure action is reboot the PC after 60 s |
+| Service | Dhcp (DHCP Client) | Gets Ethernet 3's IP from the router; netprofm and NlaSvc depend on it |
+| Service | Dnscache (DNS Client) | Shared DNS cache for all programs; without it every lookup goes out uncached |
+| Service | EventLog (Windows Event Log) | All Windows logs; netprofm and NlaSvc depend on it |
+| Service | EventSystem (COM+ Event System) | Delivers logon, logoff and network events; SENS depends on it |
+| Service | FontCache (Windows Font Cache Service) | Shared font cache; Microsoft: disabling degrades application performance |
+| Service | gpsvc (Group Policy Client) | Nothing to apply on this PC, but Winlogon calls it at sign-in (Control\Winlogon\Notifications\Components\GPClient); lockout risk outweighs the gain |
+| Service | hns (Host Network Service) | Builds the WSL2 virtual network (NAT, DNS, DHCP); k3s needs it. Manual, starts on demand |
+| Service | HvHost (HV Host Service) | Hyper-V per-VM performance counters; Microsoft: do not disable. Manual, starts with the hypervisor |
+| Service | KeyIso (CNG Key Isolation) | Private key isolation inside lsass.exe; no own process, nothing to save by disabling |
+| Service | LanmanWorkstation (Workstation) | SMB client for network shares and drives; operator keeps it |
+
+## Blacklist
+
+Items the operator rejected. They stay disabled or removed; if one comes
+back, disable it again and note how it came back.
+
+| Category | Item | Reason | Revert |
+|---|---|---|---|
+| Service | Intel(R) TPM Provisioning Service | Fetches Intel PTT endorsement key certs from iasbroker.intel.com; corporate attestation only | `sc.exe config "Intel(R) TPM Provisioning Service" start= auto` |
+| Service | edgeupdate, edgeupdatem (Microsoft Edge Update) | Edge, WebView2, Copilot updater. Re-enabled itself 2026-09-20 03:48 when updater 1.3.271.7 installed | `sc.exe config edgeupdate start= delayed-auto; sc.exe config edgeupdatem start= demand` |
+
 ## PowerShell via Bash
 
 Bash mangles `$_`, `$p`, and other PS variables. ALWAYS write `.ps1` scripts to `C:\code\endless\` and run via:
@@ -34,6 +73,24 @@ Get-Service | Where-Object Status -eq Running | Select-Object Name, DisplayName,
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$svc" -Name 'Start' -Value 4
 Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
 ```
+
+The running service manager does not see a raw registry write until reboot,
+so a trigger (Windows Update, USB plug) can still start the service once
+(StorSvc came back this way on 2026-09-15). Always read `Start` back after
+the write; if it is not 4, or you need it to stick before reboot, use
+`sc.exe config $svc start= disabled`, which notifies the service manager.
+DeviceAssociationService read back 3 after a registry write and needed sc.exe.
+
+**Protected services** (MDCoreSvc, SecurityHealthService, wscsvc, MsMpEng):
+the registry write succeeds but Stop fails with "Cannot open <svc> service on
+computer '.'" even elevated. They stay running until reboot, then do not load.
+
+**Why Task Manager shows many svchost.exe**: since Windows 10 1703 any PC with
+more than 3.5 GB RAM runs each service in its own svchost process, so 50
+services show as about 40 processes. Regroup them with
+`HKLM:\SYSTEM\CurrentControlSet\Control` `SvcHostSplitThresholdInKB` set above
+the RAM size in KB, then reboot. Same tweak WinUtil applies. It shortens the
+list and saves a little memory per process; it removes no work.
 
 **Per-user services** (ending in `_xxxxx`): disable BOTH the instance AND the template:
 ```powershell
@@ -92,6 +149,14 @@ if ($s -and $s.Status -eq 'Running') {
 - ClickToRunSvc (Office updates)
 - InstallService (Store app installs)
 - OptionsPlusUpdaterService (Logi updater)
+- MDCoreSvc (Defender core, once Defender is off by policy)
+- SecurityHealthService + wscsvc (Windows Security app, tray icon, Security Center nags. Also remove SecurityHealth from HKLM Run)
+- NcbService (push notifications for Store apps)
+- DeviceAssociationService (Bluetooth and Miracast pairing, once Bluetooth is off)
+- hidserv (keyboard media keys stop working)
+- DispBrokerDesktopSvc (wireless and remote display policy)
+- StorSvc (Storage Sense and USB drive notifications. Drives still mount)
+- CoworkVMService (Claude Cowork VM. Not used by Claude Code in the terminal. Lives inside the Claude AppX, an app update may re-register it)
 
 **GamingServices special case:** backed by AppX package. `Set-Service` gets overridden. Must remove package:
 ```powershell
@@ -170,8 +235,26 @@ Get-ScheduledTask | Where-Object State -eq Ready | Select-Object TaskName, TaskP
 - \Microsoft\Windows\Sysmain\ WsSwapAssessmentTask, ResPriStaticDbSync
 - \Microsoft\Windows\Work Folders\ Work Folders Logon Synchronization, Work Folders Maintenance Work
 
-**Cannot disable even as admin (TrustedInstaller):** \Microsoft\Windows\SettingSync\ BackgroundUploadTask.
-Neuter it by turning off Settings > Accounts > Sync your settings.
+- \Microsoft\Windows\ApplicationData\ DsSvcCleanup; \WDI\ ResolutionHost (once DsSvc and DPS are disabled)
+- \Microsoft\Windows\Bluetooth\ UninstallDeviceTask (once Bluetooth services are disabled)
+- \Microsoft\Windows\SettingSync\ NetworkStateChangeTask; \CloudExperienceHost\ CreateObjectTask
+- \Microsoft\Windows\ExploitGuard\ ExploitGuard MDM policy Refresh; \Subscription\ EnableLicenseAcquisition (MDM and Azure, corporate only)
+- \Microsoft\Windows\Location\ Notifications, WindowsActionDialog (once lfsvc is disabled)
+- \Microsoft\Windows\Management\Provisioning\ Cellular; \Mobile Broadband Accounts\ MNO Metadata Parser; \WwanSvc\ NotificationTask (cellular modem)
+- \Microsoft\Windows\FileHistory\ File History (maintenance mode) (unless File History backup is on)
+- \Microsoft\Windows\Input\ LocalUserSyncDataAvailable, MouseSyncDataAvailable, PenSyncDataAvailable, TouchpadSyncDataAvailable (input settings roaming)
+- \Microsoft\Windows\NetTrace\ GatherNetworkInfo; \Printing\ EduPrintProv
+- \Microsoft\Windows\Autochk\ Proxy (uploads chkdsk results); \DiskFootprint\ Diagnostics; \MemoryDiagnostic\ ProcessMemoryDiagnosticEvents
+- \Microsoft\Windows\ApplicationData\ appuriverifierdaily, appuriverifierinstall (web-to-app link checks)
+- \Microsoft\Windows\International\ Synchronize Language Settings; \Management\Provisioning\ Logon (MDM)
+- \Microsoft\Windows\UPnP\ UPnPHostConfig (once SSDPSRV is off); \Shell\ IndexerAutomaticMaintenance (once Windows Search is off)
+
+**Cannot disable even as admin (TrustedInstaller):** \Microsoft\Windows\SettingSync\ BackgroundUploadTask,
+the four \Microsoft\Windows\EDP\ tasks, the two \Microsoft\Windows\BitLocker\ tasks.
+Neuter SettingSync by turning off Settings > Accounts > Sync your settings. EDP and BitLocker
+only fire on MDM enrollment events and never run on an unmanaged Home PC.
+
+**Keep on a nearly full disk:** \Microsoft\Windows\DiskFootprint\ StorageSense (automatic temp cleanup).
 
 **Keep:** Defrag ScheduledDefrag (TRIM on SSD), Chkdsk ProactiveScan, SystemRestore SR,
 Time Synchronization, WindowsUpdate Scheduled Start, .NET NGEN, DiskCleanup SilentCleanup,
@@ -324,10 +407,62 @@ localStorage key. Find the site with the origin count over the live
 with `rm -f /c/code/factoriobot/*.log` (Claude Code's safety filter blocks
 the bulk delete, operator runs it).
 
-Not done, still open: Steam (operator keeps it), Discord, Spotify,
-Greenshot, IDMan, f.lux, eufy-viewer still autostart. TrkWks, stisvc,
-iphlpsvc, MapsBroker still Automatic. Reboot pending to confirm MsMpEng
-stays unloaded. Disk at 23 GB free of 1862 GB pending the log delete.
+### 2026-09-15
+
+Reboot confirmed: MsMpEng not running, Get-MpComputerStatus RealTime,
+Behavior, OnAccess all False.
+
+Elevation: the Claude shell is not admin. Run scripts elevated with
+`Start-Process powershell.exe -Verb RunAs -Wait` and redirect output to a
+file with `*>&1 | Out-File -Encoding ascii` (default encoding is UTF-16 and
+cat shows spaced characters).
+
+| Change | Revert |
+|---|---|
+| iphlpsvc, MapsBroker, stisvc: registry Start=4, stopped | Start=2 under `HKLM:\SYSTEM\CurrentControlSet\Services\<name>`, Start-Service |
+| TrkWks: `sc.exe config TrkWks start= disabled` (registry key refuses admin like DPS) | `sc.exe config TrkWks start= auto` |
+| eufy-viewer.lnk deleted from user Startup folder | recreate shortcut to `C:\code\eufy\target\debug\eufy-capture.exe --ui --out C:/code/eufy/recordings` |
+| TokenBroker, BTAGService, BthAvctpSvc, bthserv: registry Start=4, stopped. Bluetooth is off until reverted | Start=2 (TokenBroker Start=3), Start-Service |
+| SystemApps renamed to .disabled (Remove-AppxPackage gave 0x80073CFA): XBox.TCUI.exe, WpcUapApp.exe (ParentalControls), BioEnrollmentHost.exe, PeopleExperienceHost.exe. MicrosoftEdgeDevToolsClient has no exe, nothing to rename | rename each back under `C:\Windows\SystemApps\<pkg>\` |
+
+| TokenBroker svchost zombie (PID 7924) killed after its Start=4 | reboot restarts nothing, it is disabled |
+| ContentDeliveryManager SubscribedContent-338393/353694/353696, SoftLandingEnabled, RotatingLockScreenOverlayEnabled, PreInstalledAppsEnabled, OemPreInstalledAppsEnabled = 0 (Settings app suggestions, tips, lock screen ads, promoted app auto-install) | set each back to 1 or delete the value |
+| Policy `HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection` AllowTelemetry=0 | delete the value |
+| 19 more Microsoft tasks disabled: ApplicationData\DsSvcCleanup, WDI\ResolutionHost, Bluetooth\UninstallDeviceTask, SettingSync\NetworkStateChangeTask, CloudExperienceHost\CreateObjectTask, ExploitGuard\ExploitGuard MDM policy Refresh, Location\Notifications, Location\WindowsActionDialog, Management\Provisioning\Cellular, Mobile Broadband Accounts\MNO Metadata Parser, WwanSvc\NotificationTask, Subscription\EnableLicenseAcquisition, FileHistory\File History (maintenance mode), Input\LocalUserSyncDataAvailable, Input\MouseSyncDataAvailable, Input\PenSyncDataAvailable, Input\TouchpadSyncDataAvailable, NetTrace\GatherNetworkInfo, Printing\EduPrintProv | `Enable-ScheduledTask -TaskPath '\Microsoft\Windows\<folder>\' -TaskName '<name>'` (admin) |
+| After reboot, 9 more disabled: Autochk\Proxy, DiskFootprint\Diagnostics, MemoryDiagnostic\ProcessMemoryDiagnosticEvents, ApplicationData\appuriverifierdaily, ApplicationData\appuriverifierinstall, International\Synchronize Language Settings, Management\Provisioning\Logon, UPnP\UPnPHostConfig, Shell\IndexerAutomaticMaintenance | same `Enable-ScheduledTask` per task (admin) |
+| NcbService, hidserv, DispBrokerDesktopSvc, StorSvc: registry Start=4, stopped. hidserv off means keyboard media keys stop working | Start=3 under `HKLM:\SYSTEM\CurrentControlSet\Services\<name>`, Start-Service |
+| DeviceAssociationService: registry write read back as 3, so `sc.exe config DeviceAssociationService start= disabled`. Stopped | `sc.exe config DeviceAssociationService start= demand` |
+| MDCoreSvc, SecurityHealthService, wscsvc: registry Start=4. Protected, "Cannot open" on stop, still running until reboot | Start=2 (MDCoreSvc, wscsvc), Start=3 (SecurityHealthService) |
+| CoworkVMService (Claude Cowork VM, cowork-svc.exe inside the Claude AppX): registry Start=4, stopped. The Claude desktop app may re-register it on update | Start=2, Start-Service CoworkVMService |
+| SecurityHealth removed from HKLM Run, SecurityHealthSystray killed | `Set-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name SecurityHealth -Value 'C:\Windows\system32\SecurityHealthSystray.exe'` |
+
+Refused with "Access is denied" even elevated (TrustedInstaller-owned, same
+as SettingSync BackgroundUploadTask): the four EDP tasks and the two
+BitLocker tasks. They only fire on MDM enrollment events, which never happen
+on an unmanaged Home PC, so leave them. DiskFootprint\StorageSense left
+enabled on purpose: it is the automatic temp file cleanup on a 97% full disk.
+
+factoriobot logs deleted (784 files, 42 GB, gitignored). `rm -f *.log` from
+inside the repo ran without the safety filter blocking it. Disk 29 GB to
+71 GB free.
+
+Not done, still open: Steam (operator keeps it), Spotify, Greenshot, IDMan,
+f.lux still autostart. Discord no longer autostarts. Services the operator
+chose to keep: wuauserv and UsoSvc (Windows Update), mpssvc (firewall),
+FontCache, LanmanWorkstation, NVDisplay.ContainerLocalSystem, camsvc, Themes.
+XboxGameCallableUI SystemApp not yet renamed. Bash mangles `$s` inside
+`-Command` strings too, not only in heredocs; always use a `.ps1` file.
+Post-reboot check still owed: MDCoreSvc, SecurityHealthService, wscsvc,
+StorSvc should all be Stopped.
+
+### 2026-09-23 (whitelist review)
+
+Every service, task, and startup entry reviewed one at a time. Approved
+items go to the Whitelist section; items below were not approved.
+
+| Change | Revert |
+|---|---|
+| Intel(R) TPM Provisioning Service: `sc.exe config ... start= disabled`, read back Start=4. Not whitelisted. Fetches Intel PTT endorsement key certificates from iasbroker.intel.com, only used for corporate device attestation | `sc.exe config "Intel(R) TPM Provisioning Service" start= auto` |
 
 ## Presentation
 

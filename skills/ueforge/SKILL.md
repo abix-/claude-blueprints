@@ -424,6 +424,121 @@ matching `[package.metadata.ueforge].game_name_regex`
 containing `game_sub_path`. Per-mod `target_dir` keeps two
 cdylibs from colliding on `target/release/main.dll`.
 
+## Reading a live object can fault, so guard it
+
+A streamed world is being built and torn down while you look at
+it. "This pointer came out of a live object so it is valid" is
+NOT true: some actors have a mesh component pointer that does not
+resolve, and dereferencing one kills the process.
+
+```text
+EXCEPTION_ACCESS_VIOLATION reading 0x0000008000000018
+  ueforge::ue::pieces::read_level (+0x1e0)
+```
+
+Wrap the per-item read in `modforge::seh::guard`. One bad item
+becomes one skipped item, counted and logged, rather than a dump.
+The guard existed for a long time before anything used it.
+
+**The clue arrives before the crash.** Items were already coming
+back named `<bogus-fname>` and `<none>`, which is the FName side
+refusing to trust what it read. If one field is refusing, the
+others on the same object are reading the same memory and are not
+refusing.
+
+## You cannot build an FName from a string
+
+Every `FName` the framework has was READ off something that
+already existed: a class, an actor, an asset entry. Nothing
+constructs one from a string you choose.
+
+So **any engine call whose argument is a name YOU pick is out of
+reach**, and that is not obvious until you are half way into one.
+It blocked reading the asset registry's cooked tags on
+2026-08-27: `AssetRegistryHelpers::GetTagValue` is right there
+and callable, and its tag-name argument cannot be supplied.
+
+If a call needs a name, the name has to be FOUND on something
+rather than typed. Check that before designing around a call.
+
+The general fix, not yet done: resolve `FName::FName(const
+TCHAR*)` with patternsleuth and call it. Walking the name pool
+instead is around half a million entries and leaks a buffer per
+unique name resolved, so it is fine once for research and wrong
+as a primitive.
+
+## Memory the engine keeps MUST come from the engine
+
+The rule, and it is absolute:
+
+> Passing a Rust buffer to the engine is fine. **STORING** one
+> where the engine keeps it is what kills the process, and it
+> kills it later, somewhere else.
+
+Hand the engine a Rust-heap pointer and it works right up until
+the engine grows or frees that structure. Then `FMallocBinned2`
+looks for its marker in the bytes before the block, finds Rust's
+data, and takes the process down:
+
+```text
+FMallocBinned2 Attempt to realloc an unrecognized block
+canary == 0x1e != 0xe3
+```
+
+The canary byte is whatever Rust's allocator left there, so it
+differs run to run. **The crash fires on the way to the main menu
+or on disconnect**, long after the write that caused it, which is
+why it is so hard to trace back.
+
+Use `ue::gmalloc::alloc_zeroed(size, DEFAULT_ALIGNMENT)`. There is
+deliberately NO fallback to `std::alloc`: not growing is better
+than growing wrong.
+
+### Which shapes are dangerous
+
+Two greps find every case:
+
+```text
+std::alloc | alloc_zeroed | Layout::from_size_align
+as u64).to_le_bytes()      <- a pointer being STORED
+```
+
+| Shape | Safe? |
+|---|---|
+| a buffer whose pointer is written into an engine struct | **NO. This is the bug.** |
+| `parms.as_mut_ptr()` into `process_event` | yes: borrowed for one call, not kept |
+| a world-context pointer written into a parm block | yes: that object is the engine's already |
+| `Box::into_raw` on a detour or a `HookDef` | yes: ours, the engine never sees it |
+
+### `FMalloc::Malloc`'s vtable slot is MEASURED, never guessed
+
+Calling the engine allocator means calling a virtual, which means
+knowing the slot. Guessing it is fatal: slot 2 was inferred from
+patternsleuth's own pattern bytes, tried live, returned null and
+killed the game in the same second.
+
+`ue::gmalloc::measure_malloc_slot` reads it out of the running
+image, and `misery-mod/tests/research_gmalloc.rs` is the pattern
+to copy. On MISERY's Steam build it is **slot 5**.
+
+Anchoring on an xref to the GMalloc global is NOT enough: every
+`FMalloc` virtual is reached as `mov rax,[rcx]` then a call
+through the vtable, so `Free` and `Realloc` match just as well.
+The discriminator is the ARGUMENTS, because `Malloc` takes
+`(Count, Alignment)`. And read the real byte order rather than
+assuming it: this build loads the vtable FIRST and TAIL-JUMPS.
+
+**Make the test fail rather than answer** when call sites
+disagree. That assertion is what caught a scan returning seven
+different slots, instead of handing one over to be set.
+
+### Fixing one site is not fixing the bug
+
+Setting the slot made the array GROWTH work and the feature still
+crashed, because a second Rust allocation sat in the same file
+building a per-entry array. Audit the whole workspace with the
+greps above, not just the file you are in.
+
 ## Hardening doctrine (kovarex review outcomes: do not regress)
 
 These landed across the kovarex P0/P1 waves; new code must
@@ -446,6 +561,79 @@ respect them:
 - `Curve` upper guard against absurd XP values.
 - Workspace lint `clippy::undocumented_unsafe_blocks = "warn"`
  : every new `unsafe { ... }` needs a `// SAFETY:` comment.
+
+## Performance principle: the fastest work is the work you skip
+
+**The principle itself is in the `modforge` skill**, with the
+Factorio prior art and the three questions to ask before adding
+any repeating work. Read it BEFORE the allocation rules below:
+those make a loop cheaper, that one deletes the loop.
+
+Below is the Unreal-shaped version of the trap.
+
+### The specific trap in a UE mod
+
+`find_actors_by_chain` and friends read EVERY UObject the game has
+loaded. Measured in MISERY, 2026-08-26: **174,000 to 230,000
+objects and 94 to 132 ms per search**, on the game thread, which
+is six to eight frames the game did not draw. **The price grows
+with the world**, so it gets worse the more is streamed in around
+the player.
+
+Two watchers doing this on a 5 second timer held the game thread
+for **126 ms of every second**, in stalls up to 305 ms. See
+`misery-mod/docs/performance.md` for the whole measurement.
+
+What they were searching for, the engine already had:
+`StreamingLevels` on the world generator is the list of loaded
+squares, and a `ULevel` carries its own actor list. A short array
+read instead of a 174,000 object scan.
+
+So: **never put a full object search on a timer.** Find the thing
+once, cache the pointer, and read the game's own list off it.
+
+### The pieces that make it cheap
+
+- `ue::streaming::LevelStreamer` reads which regions are loaded
+  from the GAME'S OWN array, off a cached pointer. Not a search.
+- `ue::streaming::NewLevels` reports only what appeared since
+  last time, so a check with nothing new does nothing.
+- `ue::streaming::world_is_up` answers "is a world loaded" for a
+  pointer read and an array length. Use it before anything
+  expensive, including before searching for something that cannot
+  exist yet at a main menu.
+- `ue::actor::LiveActor` finds an actor ONCE and keeps it until
+  the world ends. `new` for something in a level, `anywhere` for
+  a game instance or widget that is not. MISERY had five separate
+  searches for the same player.
+- `ue::actor::forget_all` runs when the world ends and clears both
+  those and `modforge::read_once`, because anything read out of a
+  world that has ended is an old screenshot.
+
+### Cheap by construction, the UE pieces
+
+- A hook that has done its job COMES OUT:
+  `ueforge::hook::remove(class_name)`. NEVER from inside that
+  hook's own handler: the drop waits for calls already inside our
+  code to leave, and the caller would be one of them.
+- `install_for_live_object_until` installs a hook, removes it when
+  the caller says it is finished, and ends its own watcher. The
+  "already installed" check runs off the game thread.
+- **A widget hook fires for EVERY widget.** Blueprint widget
+  classes add no C++ virtuals, so they SHARE the base
+  `UUserWidget` vtable. Leaving one installed taxes all UI for the
+  session, and forgetting this collapsed the main menu once.
+
+### Measuring on the game thread
+
+`pe_stats` reports `queued_work_ms`, the total time held on the
+game thread, always counted (one clock read per pass). Read it
+twice a second apart: the difference against a 16.7 ms frame is
+what the player feels.
+
+The named timing, the `timing` controls and the two ways to
+misread a report are in the `modforge` skill.
+`misery-mod/tests/research_timing.rs` is the pattern to copy.
 
 ## Performance principle: zero allocations on hot paths
 
@@ -602,6 +790,26 @@ crate root unless noted.
 | File                  | Subject                                        |
 | --------------------- | ---------------------------------------------- |
 | `ueforge/ue4ss/UE4SS.lib` | Import lib generated from the user's installed `UE4SS.dll` exports |
+
+## CDO safety: NEVER read actor offsets from a `singleton:` selector
+
+`singleton:<ClassName>` resolves to the Class Default Object, a
+template copy the engine keeps in memory. Its memory layout is
+NOT the same as a live actor instance. Reading actor property
+offsets (the ones from the object dump, like 0x2B0, 0x2B8) from
+a CDO reads garbage memory and can crash the game.
+
+This crashed MISERY mid-session on 2026-08-14.
+
+Rules:
+- **NEVER use `singleton:` to read instance property values.**
+  It is only safe for reading class metadata.
+- Use `first_class:` or `addr:0x...` to reach live instances.
+- `walk_class` returns both CDOs and live instances. Filter out
+  entries where `is_cdo == true` before reading property data.
+- If `walk_class` returns 0 live instances, the object may still
+  exist. Find it through a known pointer (another actor that
+  references it) rather than falling back to the CDO.
 
 ## Session etiquette
 

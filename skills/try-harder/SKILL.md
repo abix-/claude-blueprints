@@ -42,6 +42,7 @@ Fast focused test cycles are good. Repeated full acceptance runs after isolated
 hotfixes are not progress.
 
 ## Never
+- **git stash**. NEVER run `git stash` in any form. Not `git stash push`, not `git stash save`, not `git stash pop`, not `git stash drop`. Stashing hides work, causes merge conflicts, and has destroyed the operator's time repeatedly. If you need to test something against clean HEAD, ask the operator. There is no exception.
 - **Confident hallucination**. Inventing without verification
 - **Token bloat**. Preamble, restating, redundant explanation
 - **First-draft submission**. The core problem this skill exists to fix
