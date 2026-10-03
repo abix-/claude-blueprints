@@ -42,19 +42,34 @@ let busy = false
 // goal is working, one silent for CHECK_IN_MS gets a check-up turn.
 const CHECK_IN_MS = 10 * 60 * 1000
 const CHECK_EVERY_MS = 60 * 1000
-const heard: Record<string, number> = {}
+const SAID_CHARS = 160
+const agents = atom({ plugin: 'mygoal', key: 'agents' } as const, {})
+const now = atom({ plugin: 'mygoal', key: 'now' } as const, 0)
 
-// The session names a delivery is from: a peer's message (from-name="x") or
-// its idle notice ("x", which you asked ...).
-const namesIn = (text: string) =>
-  [...text.matchAll(/from-name="([^"]+)"/g), ...text.matchAll(/idle notice\] "([^"]+)"/g)].map(m => m[1])
+// The start of a message, on one line, without its envelope's tags.
+const gist = (text: string) => {
+  const flat = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  return flat.length > SAID_CHARS ? `${flat.slice(0, SAID_CHARS)}...` : flat
+}
+
+// What a delivery says of each session it is from: a peer's message
+// (from-name="x", the message itself) or its idle notice ("x", which you
+// asked ...: idle).
+function heardIn(text: string): [string, string][] {
+  const out: [string, string][] = []
+  for (const m of text.matchAll(/from-name="([^"]+)"[^>]*>([\s\S]*?)(<\/cross-session-message>|$)/g)) out.push([m[1], gist(m[2])])
+  for (const m of text.matchAll(/idle notice\] "([^"]+)"[^\n]*?finished a turn at (\d+:\d+)/g)) out.push([m[1], `idle since ${m[2]}`])
+  return out
+}
 
 async function checkIn($: EngineInterface) {
+  const t = await $.clock.now()
+  await update($, now, () => t)
   if ((await read($, status)) !== 'working') return
-  const now = await $.clock.now()
-  const silent = Object.keys(heard).filter(name => now - heard[name] >= CHECK_IN_MS)
+  const all = await read($, agents)
+  const silent = Object.keys(all).filter(name => t - Math.max(all[name].heardAt, all[name].checkedAt) >= CHECK_IN_MS)
   if (silent.length === 0) return
-  for (const name of silent) heard[name] = now
+  await update($, agents, a => Object.fromEntries(Object.entries(a).map(([n, x]) => [n, silent.includes(n) ? { ...x, checkedAt: t } : x])))
   await $.prompt.submit({
     text: [
       `mygoal: no word from ${silent.join(', ')} in ${CHECK_IN_MS / 60000} minutes.`,
@@ -250,15 +265,28 @@ export const register: Register = on => {
   })
 
   on('session.receive', async ($, e, next) => {
-    const now = await $.clock.now()
-    for (const name of namesIn(e.text)) heard[name] = now
+    const said = heardIn(e.text)
+    if (said.length > 0) {
+      const t = await $.clock.now()
+      await update($, agents, a => {
+        const out = { ...a }
+        for (const [name, words] of said) {
+          const was = out[name] ?? { heardAt: t, checkedAt: 0, said: '', asked: '' }
+          // An idle notice says only that it stopped; keep what it last said.
+          const before = was.said.replace(/ \(idle since [^)]*\)$/, '')
+          out[name] = { ...was, heardAt: t, said: words.startsWith('idle since') && before !== '' && !before.startsWith('idle since') ? `${before} (${words})` : words }
+        }
+        return out
+      })
+    }
     return next(e)
   })
 
   // A session this one messages is one it works with: its silence counts
   // from the first message, until it answers.
   on('session.send', async ($, e, next) => {
-    if (!(e.to in heard)) heard[e.to] = await $.clock.now()
+    const t = await $.clock.now()
+    await update($, agents, a => ({ ...a, [e.to]: { ...(a[e.to] ?? { heardAt: t, checkedAt: 0, said: '' }), asked: gist(e.text) } }))
     return next(e)
   })
 
@@ -367,6 +395,9 @@ export const register: Register = on => {
     const max = await read($, limit)
     const run = await read($, last)
     const why = await read($, note)
+    const team = Object.entries(await read($, agents)).sort(([a], [b]) => a.localeCompare(b))
+    const t = await read($, now)
+    const ago = (at: number) => (t - at < 60000 ? 'just now' : `${Math.floor((t - at) / 60000)} min ago`)
 
     const approve = async () => {
       const p = await read($, proposed)
@@ -418,6 +449,18 @@ export const register: Register = on => {
           <Text color={s === 'done' ? 'green' : s === 'stopped' ? 'yellow' : undefined}>{label[s]}</Text>
         </Box>
         {goal !== '' && <Text wrap="wrap">{goal}</Text>}
+        {team.length > 0 && (
+          <Box flexDirection="column">
+            <Text bold>Agents</Text>
+            {team.map(([name, a]) => (
+              <Box key={name} flexDirection="column">
+                <Text color={t - a.heardAt >= CHECK_IN_MS ? 'yellow' : undefined}>{`${name}: heard from ${ago(a.heardAt)}`}</Text>
+                {a.said !== '' && <Text wrap="wrap">{`  doing: ${a.said}`}</Text>}
+                {a.asked !== '' && <Text dimColor wrap="wrap">{`  asked: ${a.asked}`}</Text>}
+              </Box>
+            ))}
+          </Box>
+        )}
         {s === 'approval' && prop && (
           <Box flexDirection="column">
             <Text bold>Proposed finish check</Text>

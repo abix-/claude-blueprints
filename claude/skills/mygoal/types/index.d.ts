@@ -17,9 +17,18 @@ export type Status = 'none' | 'needs' | 'approval' | 'working' | 'done' | 'stopp
 // One run of the check and the judge, for the pane.
 export type Run = { turn: number; exitCode: number; tail: string; verdict: Verdict | null }
 
+// Another session this one works with: when it was last heard from (its
+// message or idle notice) and last given a check-up turn, the start of what
+// it last said, and the start of what it was last asked.
+export type Agent = { heardAt: number; checkedAt: number; said: string; asked: string }
+
 declare module 'claude-code' {
   interface PluginState {
     mygoal: {
+      // The sessions this one works with, by name
+      agents: Record<string, Agent>
+      // The time the pane counts from, moved once a minute
+      now: number
       // The goal in the operator's words, as typed after /mygoal
       text: string
       status: Status

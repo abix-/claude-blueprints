@@ -130,6 +130,16 @@ test('while a goal works, an agent silent for 10 minutes gets a check-up turn', 
   // Checked on at minute 10: no second check-up before minute 20.
   await w.clock.advance(8 * 60 * 1000)
   expect(w.submitted.filter(t => t.includes('no word from perf')).length).toBe(1)
+
+  // The pane shows each agent: when it was last heard from, what it last
+  // said, and what it was last asked; an idle notice keeps what it said.
+  await $.session.receive({ origin: { kind: 'unclassified' }, text: '[Cross-session idle notice] "writer", which you asked to be notified about, is idle now — it finished a turn at 22:17.' } as never)
+  await w.clock.advance(3 * 60 * 1000)
+  const drawn = JSON.stringify(await ui.drawn())
+  expect(drawn).toContain('writer: heard from 3 min ago')
+  expect(drawn).toContain('doing: holding built (idle since 22:17)')
+  expect(drawn).toContain('perf: heard from 22 min ago')
+  expect(drawn).toContain('asked: do 9p')
 })
 
 test('the goal is in every request while it is open', async ($, on) => {

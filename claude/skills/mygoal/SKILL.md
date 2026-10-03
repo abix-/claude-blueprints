@@ -106,6 +106,10 @@ changing anything here; this section is a map of it, not a second copy.
   notice marks it heard. Once a minute while working, any tracked session
   silent for 10 minutes gets one turn started: check its repo, ask its
   status, decide what it waits on. The count starts again from that turn.
+- **The pane's Agents list** (`agents`, `now`): each tracked session by
+  name, how long since it was heard from (yellow past 10 minutes), what it
+  last said (an idle notice adds "idle since"), and what it was last
+  asked. `/mygoal` with nothing after it opens the pane.
 - **Guard** (`tool.call`): while a goal is open, any tool call whose text
   holds `plugins/store` or `skills/mygoal` is refused.
 - **After each turn** (`turn.complete` then `evaluate`): skipped for
