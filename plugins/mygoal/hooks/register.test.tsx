@@ -215,4 +215,18 @@ test('the goal is in every request while it is open', async ($, on) => {
   // The rules a skill used to hold: how to propose the check, and the Never list.
   expect(mine?.text).toContain('hardest to pass falsely')
   expect(mine?.text).toContain('Never weaken the approved check')
+
+  // Working, with other sessions on the goal: Claude orchestrates.
+  await $.tool.call({ tool: 'mcp__mygoal__propose_check', input: CHECK } as never)
+  const ui = await $.ui.mount({ plugin: 'mygoal', surface: 'terminal', component: 'Pane', requestId: 'mygoal', props: {} })
+  await ui.press({ key: 'approve' })
+  const working = (await $.prompt.compose({
+    model: 'claude-opus-5-5',
+    promptModel: 'claude-opus-5-5',
+    surfaces: ['terminal'],
+    tools: [],
+    outputStyle: null,
+    traits: [],
+  })) as unknown as { sections: { id: string; text: string }[] }
+  expect(working.sections.find(s => s.id === 'mygoal:goal')?.text).toContain('you orchestrate')
 })
