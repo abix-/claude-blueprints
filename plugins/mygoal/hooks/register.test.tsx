@@ -40,7 +40,8 @@ function world(on: On) {
     if (e.argv[0] === 'git' && e.argv.includes('rev-parse')) return ok(w.head)
     if (e.argv[0] === 'git' && e.argv.includes('diff')) return ok('')
     if (e.argv[0] === 'git' && e.argv.includes('status')) return ok('')
-    return ok(w.checkSays || (w.checkExit === 0 ? 'test result: ok. 12 passed' : 'test result: FAILED. 10 passed; 2 failed'), w.checkExit)
+    const queue = w.checkExit === 0 ? 'running a::one\n  passed\nrunning a::two\n  passed' : 'running 1 test\nrunning a::one\n  passed\nrunning a::two\n  FAILED\n[build] queue FAILED (exit 1)'
+    return ok(w.checkSays || queue, w.checkExit)
   })
   on('model.complete', async (_$, e) => {
     w.judged.push(`${e.system}\n---\n${e.prompt}`)
@@ -77,14 +78,17 @@ test('the approved check runs once per commit, says nothing on the same commit, 
   await $.turn.complete(turnDone('Starting.'))
   expect(ranCheck()).toBe(1)
   expect(w.submitted.at(-1)).toContain('mygoal: not done')
-  expect(w.submitted.at(-1)).toContain('exited 1 on aaaaaaaa')
-  expect(w.submitted.at(-1)).toContain('missing: two foo tests fail')
+  expect(w.submitted.at(-1)).toContain('exit 1 on aaaaaaaa')
+  expect(w.submitted.at(-1)).toContain('1 passed; failed: a::two')
+  expect(w.submitted.at(-1)).toContain('missing two foo tests fail')
+  // Short: the raw output is summed up, never pasted.
+  expect(w.submitted.at(-1)).not.toContain('running a::one')
 
   // The judge is Opus 5.5 and never sees what Claude said, only the goal
   // and the evidence.
   expect(w.judgedBy.at(-1)).toBe('claude-opus-5-5')
   expect(w.judged.at(-1)).toContain(GOAL)
-  expect(w.judged.at(-1)).toContain('2 failed')
+  expect(w.judged.at(-1)).toContain('FAILED')
   expect(w.judged.at(-1)).not.toContain('Starting')
 
   // Turns on the same commit run nothing and say nothing.
@@ -104,11 +108,10 @@ test('the approved check runs once per commit, says nothing on the same commit, 
 
   // A new commit: the check runs once, and the message says what changed.
   w.head = 'bbbbbbbb2222'
-  w.checkSays = 'test result: FAILED. 11 passed; 1 failed'
+  w.checkSays = 'running a::one\n  FAILED\nrunning a::two\n  passed'
   await $.turn.complete(turnDone('Fixed one.'))
   expect(ranCheck()).toBe(2)
-  expect(w.submitted.at(-1)).toContain('Changed since aaaaaaaa')
-  expect(w.submitted.at(-1)).toContain('11 passed; 1 failed')
+  expect(w.submitted.at(-1)).toContain('since aaaaaaaa: fixed a::two; broke a::one')
 
   // The check passes but the judge finds work outside the goal: not done.
   w.head = 'cccccccc3333'
@@ -116,7 +119,7 @@ test('the approved check runs once per commit, says nothing on the same commit, 
   w.checkExit = 0
   w.judgeSays = { met: true, missing: '', outside_goal: 'renamed bar.rs, which the goal did not ask for' }
   await $.turn.complete(turnDone('Fixed.'))
-  expect(w.submitted.at(-1)).toContain('outside the goal: renamed bar.rs')
+  expect(w.submitted.at(-1)).toContain('outside renamed bar.rs')
 
   // Check passes and the judge agrees with nothing outside: done, and no more turns.
   w.head = 'dddddddd4444'
@@ -149,7 +152,7 @@ test('a check that cannot reach the game is not a result: told once, run again o
   await $.turn.complete(turnDone('It is up.'))
   expect(ranCheck()).toBe(3)
   expect(w.judged.length).toBe(1)
-  expect(w.submitted.at(-1)).toContain('exited 1 on aaaaaaaa')
+  expect(w.submitted.at(-1)).toContain('exit 1 on aaaaaaaa')
 })
 
 test('while a goal is open, Claude cannot touch the goal store or the mod', async ($, on) => {

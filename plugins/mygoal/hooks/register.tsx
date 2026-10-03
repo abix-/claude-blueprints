@@ -32,8 +32,6 @@ const CHANGES_CHARS = 40000
 const UNREACHABLE = /no .{0,60} answering|connection refused|could not connect/i
 // A turn that claims the goal done.
 const CLAIMS_DONE = /\b(goal (is )?(done|met|complete)|all (\d+ )?(\w+ )?tests? pass(ed)?)\b/i
-// The lines of a check's output that say how a test went.
-const RESULT_LINE = /\b(pass(ed)?|fail(ed)?)\b/i
 
 const goalText = atom({ plugin: 'mygoal', key: 'text' } as const, '')
 const status = atom({ plugin: 'mygoal', key: 'status' } as const, 'none')
@@ -96,7 +94,7 @@ const JUDGE = [
   'If any part of the goal is not shown done by the evidence, the goal is not met.',
   'Also list everything in the code changes that the goal did not ask for.',
   'Answer with JSON only, no other text:',
-  '{"met": true or false, "missing": "what is not done yet, or empty", "outside_goal": "changes the goal did not ask for, or empty"}',
+  '{"met": true or false, "missing": "what is not done yet, at most 30 words, or empty", "outside_goal": "changes the goal did not ask for, at most 30 words, or empty"}',
 ].join('\n')
 
 // How to propose the finish check: in the tool's description, read at every
@@ -216,25 +214,36 @@ async function judge($: EngineInterface, goal: string, check: Check, exitCode: n
   }
 }
 
-// The lines of `tail` that say how a test went and are not in `before`:
-// what changed since the check before.
-function changedLines(tail: string, before: string): string {
-  const was = new Set(before.split('\n').map(l => l.trim()))
-  return tail
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => RESULT_LINE.test(l) && !was.has(l))
-    .join('\n')
+// A check's output read as test results: each "running <test>" line paired
+// with the passed or failed line after it, and the last line that is
+// neither (where a run stopped).
+function results(tail: string): { passed: string[]; failed: string[]; last: string } {
+  const out = { passed: [] as string[], failed: [] as string[], last: '' }
+  let test = ''
+  for (const line of tail.split('\n').map(l => l.trim()).filter(l => l !== '')) {
+    const running = /^running (\S+::\S+)$/.exec(line)?.[1]
+    if (running) test = running
+    else if (test !== '' && /^passed$/i.test(line)) out.passed.push(test)
+    else if (test !== '' && /^failed$/i.test(line)) out.failed.push(test)
+    else if (!/^running \d+ tests?$/.test(line)) out.last = line
+  }
+  return out
 }
 
-// The "not done yet" message: the goal, the check's last result, the judge.
+// The "not done yet" message, a few lines: passes counted, failures named,
+// what changed since the check before, where it stopped, the judge.
 function notDone(run: Run, before: Run | null, why: string): string {
-  const changed = before ? changedLines(run.tail, before.tail) : ''
+  const now = results(run.tail)
+  const was = before ? results(before.tail) : null
+  const fixed = was ? was.failed.filter(t => now.passed.includes(t)) : []
+  const broke = was ? was.passed.filter(t => now.failed.includes(t)) : []
+  const tested = now.passed.length + now.failed.length > 0
   return [
-    `mygoal: not done ${why}. Check exited ${run.exitCode} on ${run.commit.slice(0, 8)}:`,
-    run.tail || '(no output)',
-    before ? `Changed since ${before.commit.slice(0, 8)}:\n${changed || '(nothing)'}` : '',
-    run.verdict ? `Judge: missing: ${run.verdict.missing || '-'}; outside the goal: ${run.verdict.outsideGoal || '-'}` : 'Judge: no answer.',
+    `mygoal: not done ${why}, exit ${run.exitCode} on ${run.commit.slice(0, 8)}.`,
+    tested ? `${now.passed.length} passed; failed: ${now.failed.join(', ') || '-'}` : `output: ${run.tail.split('\n').slice(-3).join(' | ')}`,
+    fixed.length + broke.length > 0 ? `since ${was && before ? before.commit.slice(0, 8) : ''}: fixed ${fixed.join(', ') || '-'}; broke ${broke.join(', ') || '-'}` : '',
+    tested && now.last !== '' ? `last: ${now.last}` : '',
+    run.verdict ? `judge: missing ${run.verdict.missing || '-'}; outside ${run.verdict.outsideGoal || '-'}` : 'judge: no answer',
   ]
     .filter(l => l !== '')
     .join('\n')
