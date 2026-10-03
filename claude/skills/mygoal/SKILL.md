@@ -98,7 +98,14 @@ changing anything here; this section is a map of it, not a second copy.
   asks for another check; stop sets `stopped`; resume sets `working` with
   the turn count back at 0.
 - **Every request** (`prompt.compose`): the goal word for word and the
-  step for the status are added to what Claude is sent.
+  step for the status are added to what Claude is sent. While working,
+  the step says to read the docs, decide, and never wait on the operator
+  mid-goal.
+- **Check-ups** (`session.send`, `session.receive`, `checkIn`): every
+  session this one messages is tracked by name; its message or idle
+  notice marks it heard. Once a minute while working, any tracked session
+  silent for 10 minutes gets one turn started: check its repo, ask its
+  status, decide what it waits on. The count starts again from that turn.
 - **Guard** (`tool.call`): while a goal is open, any tool call whose text
   holds `plugins/store` or `skills/mygoal` is refused.
 - **After each turn** (`turn.complete` then `evaluate`): skipped for

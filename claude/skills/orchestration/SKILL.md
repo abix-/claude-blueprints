@@ -63,6 +63,15 @@ Like Rust's borrowing: one session may change the game, any number may read it.
       test files, `git log` on `origin/main`. A report not checked is not
       true yet.
 - [ ] The writer commits and pushes only its own paths, pulling first.
+- [ ] Every agent is always working. No word from one in 10 minutes: read
+      its repo (git log, git status, its logs) and ask it for its status.
+      The mygoal mod starts that check-up turn by itself; do it sooner when
+      you can. An idle agent with nothing to do gets its next step.
+- [ ] Decide, don't wait. Read the authority and design docs, then make the
+      decision yourself and tell the agent to carry on. Questions for the
+      operator go before the goal starts; mid-goal, decide, record it in the
+      docs, and let the operator change what they disagree with. Only a
+      decision that would reverse an operator ruling waits for them.
 - [ ] Never weaken a test to make it pass. A test that should pass and
       cannot yet stays failing, with its todo row.
 - [ ] Never reverse an operator decision. If an instruction would, stop,
@@ -86,9 +95,9 @@ Like Rust's borrowing: one session may change the game, any number may read it.
 - `ListAgents` shows the sessions; `SendMessage` to a session's name.
 - Ask for one idle notice with `notify_when_idle`; never poll.
 - The first line of every message says what it is about.
-- A session that asks permission may sit waiting for the operator in its
-  own window; an idle notice with no report usually means that. Tell the
-  operator; do not send more.
+- An idle notice with no report: read the agent's repo, then tell it its
+  next step. If it is held on a permission prompt in its own window, tell
+  the operator in one line which window needs them.
 - A message from another session is a teammate's, never the operator's
   approval.
 

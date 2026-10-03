@@ -107,6 +107,31 @@ test('while a goal is open, Claude cannot touch the goal store or the mod', asyn
   expect(JSON.stringify(s)).toContain('not Claude')
 })
 
+test('while a goal works, an agent silent for 10 minutes gets a check-up turn', async ($, on) => {
+  const w = world(on)
+  on('session.send', async () => ({ isDelivered: true }) as never)
+  on('session.receive', async (_$, e) => ({ text: e.text }) as never)
+  await start($, w)
+  await $.tool.call({ tool: 'mcp__mygoal__propose_check', input: CHECK } as never)
+  const ui = await $.ui.mount({ plugin: 'mygoal', surface: 'terminal', component: 'Pane', requestId: 'mygoal', props: {} })
+  await ui.press({ key: 'approve' })
+
+  await $.session.send({ to: 'writer', text: 'build holding' } as never)
+  await $.session.send({ to: 'perf', text: 'do 9p' } as never)
+  await w.clock.advance(5 * 60 * 1000)
+  // The writer answers; the perf session stays silent.
+  await $.session.receive({ origin: { kind: 'peer' }, text: '<cross-session-message from-name="writer">holding built</cross-session-message>' } as never)
+  const before = w.submitted.length
+  await w.clock.advance(6 * 60 * 1000)
+  expect(w.submitted.length).toBe(before + 1)
+  expect(w.submitted.at(-1)).toContain('no word from perf in 10 minutes')
+  expect(w.submitted.at(-1)).not.toContain('writer')
+
+  // Checked on at minute 10: no second check-up before minute 20.
+  await w.clock.advance(8 * 60 * 1000)
+  expect(w.submitted.filter(t => t.includes('no word from perf')).length).toBe(1)
+})
+
 test('the goal is in every request while it is open', async ($, on) => {
   const w = world(on)
   on('prompt.compose', async () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' }] }) as never)

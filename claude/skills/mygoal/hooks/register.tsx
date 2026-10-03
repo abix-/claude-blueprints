@@ -37,6 +37,33 @@ const note = atom({ plugin: 'mygoal', key: 'note' } as const, '')
 // One check-and-judge at a time.
 let busy = false
 
+// The other sessions this one works with, by name, and when each was last
+// heard from (its message or its idle notice) or last checked on. While a
+// goal is working, one silent for CHECK_IN_MS gets a check-up turn.
+const CHECK_IN_MS = 10 * 60 * 1000
+const CHECK_EVERY_MS = 60 * 1000
+const heard: Record<string, number> = {}
+
+// The session names a delivery is from: a peer's message (from-name="x") or
+// its idle notice ("x", which you asked ...).
+const namesIn = (text: string) =>
+  [...text.matchAll(/from-name="([^"]+)"/g), ...text.matchAll(/idle notice\] "([^"]+)"/g)].map(m => m[1])
+
+async function checkIn($: EngineInterface) {
+  if ((await read($, status)) !== 'working') return
+  const now = await $.clock.now()
+  const silent = Object.keys(heard).filter(name => now - heard[name] >= CHECK_IN_MS)
+  if (silent.length === 0) return
+  for (const name of silent) heard[name] = now
+  await $.prompt.submit({
+    text: [
+      `mygoal: no word from ${silent.join(', ')} in ${CHECK_IN_MS / 60000} minutes.`,
+      'Check on each now: read its repo (git log, git status, its logs), then ask it for its status with SendMessage.',
+      'If it waits on a decision, make it yourself from the docs and tell it to carry on; never leave it waiting on the operator.',
+    ].join('\n'),
+  })
+}
+
 const JUDGE = [
   'You judge whether an operator\'s goal is met. You see only the goal, in the operator\'s own words,',
   'the finish check the operator approved with its real output, and the code changes made for it.',
@@ -218,6 +245,20 @@ export const register: Register = on => {
       },
     })
     await load($)
+    $.clock.every(CHECK_EVERY_MS, () => void checkIn($))
+    return next(e)
+  })
+
+  on('session.receive', async ($, e, next) => {
+    const now = await $.clock.now()
+    for (const name of namesIn(e.text)) heard[name] = now
+    return next(e)
+  })
+
+  // A session this one messages is one it works with: its silence counts
+  // from the first message, until it answers.
+  on('session.send', async ($, e, next) => {
+    if (!(e.to in heard)) heard[e.to] = await $.clock.now()
     return next(e)
   })
 
@@ -290,7 +331,7 @@ export const register: Register = on => {
         ? 'Before any other work, propose the finish check with the propose_check tool: a command whose exit code 0 proves the goal is met in the plain meaning of the operator\'s words.'
         : s === 'approval'
           ? 'Your proposed finish check is waiting for the operator\'s approval. Do no goal work until it is approved.'
-          : 'Work on this goal and nothing else. Do nothing the goal did not ask for.'
+          : 'Work on this goal and nothing else. Do nothing the goal did not ask for. Read the docs first, then make the decisions yourself and keep the work moving; ask the operator only before the work starts, never wait on them mid-goal. The operator changes what they disagree with.'
     const text = [
       'The operator\'s goal (/mygoal), in their words:',
       await read($, goalText),
