@@ -3,7 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 type On = Parameters<Parameters<typeof test>[1]>[1]
 
 const GOAL = 'every test in crates/foo passes and nothing else changes'
-const CHECK = { argv: ['cargo', 'test', '-p', 'foo'], why: 'exit 0 means every foo test passed' }
+const CHECK = { argv: ['cargo', 'test', '-p', 'foo'], why: 'exit 0 means every foo test passed', repo: 'C:\\code\\foo' }
 
 // Stand in for the engine beneath the mod: the store, the pane, prompts it
 // sends, the commands it runs, and the judge model. `world.checkExit` and
@@ -15,6 +15,8 @@ function world(on: On) {
     judgedBy: [] as string[],
     ran: [] as string[][],
     checkExit: 1,
+    checkSays: '',
+    head: 'aaaaaaaa1111',
     judgeSays: { met: false, missing: 'two foo tests fail', outside_goal: '' } as Record<string, unknown>,
   }
   mock.store(on)
@@ -35,9 +37,10 @@ function world(on: On) {
     const ok = (stdout: string, exitCode = 0) => ({
       value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
     })
-    if (e.argv[0] === 'git' && e.argv[1] === 'diff') return ok('')
-    if (e.argv[0] === 'git' && e.argv[1] === 'status') return ok('')
-    return ok(w.checkExit === 0 ? 'test result: ok. 12 passed' : 'test result: FAILED. 10 passed; 2 failed', w.checkExit)
+    if (e.argv[0] === 'git' && e.argv.includes('rev-parse')) return ok(w.head)
+    if (e.argv[0] === 'git' && e.argv.includes('diff')) return ok('')
+    if (e.argv[0] === 'git' && e.argv.includes('status')) return ok('')
+    return ok(w.checkSays || (w.checkExit === 0 ? 'test result: ok. 12 passed' : 'test result: FAILED. 10 passed; 2 failed'), w.checkExit)
   })
   on('model.complete', async (_$, e) => {
     w.judged.push(`${e.system}\n---\n${e.prompt}`)
@@ -57,7 +60,7 @@ async function start($: Parameters<Parameters<typeof test>[1]>[0], w: ReturnType
 
 const turnDone = (answer: string) => ({ answer, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' as const })
 
-test('a goal needs an approved check; until it passes and the judge agrees, the next turn starts by itself', async ($, on) => {
+test('the approved check runs once per commit, says nothing on the same commit, and ends when it passes and the judge agrees', async ($, on) => {
   const w = world(on)
   await start($, w)
   expect(w.submitted.at(-1)).toContain('propose its finish check')
@@ -69,11 +72,12 @@ test('a goal needs an approved check; until it passes and the judge agrees, the 
   await ui.press({ key: 'approve' })
   expect(w.submitted.at(-1)).toContain('approved the finish check `cargo test -p foo`')
 
-  // Claude says it is done. The check fails: the mod sends the next turn.
-  await $.turn.complete(turnDone('All done! Every test passes now.'))
-  expect(w.ran).toContainEqual(CHECK.argv)
-  expect(w.submitted.at(-1)).toContain('the goal is not done yet (checked turn 1 of 30)')
-  expect(w.submitted.at(-1)).toContain('exited 1')
+  // The first turn after approval runs the check on the commit there.
+  const ranCheck = () => w.ran.filter(a => a[0] === 'cargo').length
+  await $.turn.complete(turnDone('Starting.'))
+  expect(ranCheck()).toBe(1)
+  expect(w.submitted.at(-1)).toContain('the goal is not done yet')
+  expect(w.submitted.at(-1)).toContain('exited 1 on commit aaaaaaaa')
   expect(w.submitted.at(-1)).toContain('missing: two foo tests fail')
 
   // The judge is Opus 5.5 and never sees what Claude said, only the goal
@@ -81,20 +85,71 @@ test('a goal needs an approved check; until it passes and the judge agrees, the 
   expect(w.judgedBy.at(-1)).toBe('claude-opus-5-5')
   expect(w.judged.at(-1)).toContain(GOAL)
   expect(w.judged.at(-1)).toContain('2 failed')
-  expect(w.judged.at(-1)).not.toContain('All done')
+  expect(w.judged.at(-1)).not.toContain('Starting')
+
+  // Turns on the same commit run nothing and say nothing.
+  const said = w.submitted.length
+  await $.turn.complete(turnDone('Waiting on the writer.'))
+  await $.turn.complete(turnDone('Read the logs.'))
+  expect(ranCheck()).toBe(1)
+  expect(w.submitted.length).toBe(said)
+
+  // Claiming the goal done on that commit is sent back, once.
+  await $.turn.complete(turnDone('The goal is done.'))
+  expect(ranCheck()).toBe(1)
+  expect(w.submitted.length).toBe(said + 1)
+  expect(w.submitted.at(-1)).toContain('Nothing has been committed since the check last ran')
+  await $.turn.complete(turnDone('The goal is done.'))
+  expect(w.submitted.length).toBe(said + 1)
+
+  // A new commit: the check runs once, and the message says what changed.
+  w.head = 'bbbbbbbb2222'
+  w.checkSays = 'test result: FAILED. 11 passed; 1 failed'
+  await $.turn.complete(turnDone('Fixed one.'))
+  expect(ranCheck()).toBe(2)
+  expect(w.submitted.at(-1)).toContain('Changed since the check before (on aaaaaaaa)')
+  expect(w.submitted.at(-1)).toContain('11 passed; 1 failed')
 
   // The check passes but the judge finds work outside the goal: not done.
+  w.head = 'cccccccc3333'
+  w.checkSays = ''
   w.checkExit = 0
   w.judgeSays = { met: true, missing: '', outside_goal: 'renamed bar.rs, which the goal did not ask for' }
   await $.turn.complete(turnDone('Fixed.'))
   expect(w.submitted.at(-1)).toContain('outside the goal: renamed bar.rs')
 
   // Check passes and the judge agrees with nothing outside: done, and no more turns.
+  w.head = 'dddddddd4444'
   w.judgeSays = { met: true, missing: '', outside_goal: '' }
   const before = w.submitted.length
   await $.turn.complete(turnDone('Undid the rename.'))
   expect(w.submitted.length).toBe(before)
   expect(JSON.stringify(await ui.drawn())).toContain('done: checked and judged')
+})
+
+test('a check that cannot reach the game is not a result: told once, run again on a later turn', async ($, on) => {
+  const w = world(on)
+  await start($, w)
+  await $.tool.call({ tool: 'mcp__mygoal__propose_check', input: CHECK } as never)
+  const ui = await $.ui.mount({ plugin: 'mygoal', surface: 'terminal', component: 'Pane', requestId: 'mygoal', props: {} })
+  await ui.press({ key: 'approve' })
+  const ranCheck = () => w.ran.filter(a => a[0] === 'cargo').length
+
+  w.checkSays = 'no topside game answering on http://127.0.0.1:15703/topside'
+  await $.turn.complete(turnDone('Starting.'))
+  expect(w.submitted.at(-1)).toContain('could not reach what it tests')
+  expect(w.judged.length).toBe(0)
+  const said = w.submitted.length
+  await $.turn.complete(turnDone('Asked the writer to launch it.'))
+  expect(ranCheck()).toBe(2)
+  expect(w.submitted.length).toBe(said)
+
+  // The game is back: the same commit is checked for real.
+  w.checkSays = ''
+  await $.turn.complete(turnDone('It is up.'))
+  expect(ranCheck()).toBe(3)
+  expect(w.judged.length).toBe(1)
+  expect(w.submitted.at(-1)).toContain('exited 1 on commit aaaaaaaa')
 })
 
 test('while a goal is open, Claude cannot touch the goal store or the mod', async ($, on) => {

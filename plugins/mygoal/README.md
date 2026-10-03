@@ -16,18 +16,21 @@ and in the request while a check is needed) and what never happens
 
 Two things outside Claude, both every turn:
 
-- **The approved finish check.** A command Claude proposes and the operator
-  approves with a pane button only the operator can press. The mod runs it
-  itself after every turn and reads the exit code. 0 is passed, anything else
-  is failed. Claude cannot paste a result in its place.
+- **The approved finish check.** A command Claude proposes, with the git
+  repo whose commits it tests, and the operator approves with a pane
+  button only the operator can press. The mod runs it itself, once for
+  each new commit in that repo, and reads the exit code. 0 is passed,
+  anything else is failed. Claude cannot paste a result in its place.
 - **The judge.** A separate call to Opus 5.5 (operator, 2026-10-02) that sees
   only the goal in the operator's words, the check's real output, and the
   code changes since approval. Never Claude's explanation. It answers what
   is missing and what was changed that the goal did not ask for.
 
 Done only when the check exits 0 AND the judge says met AND nothing is
-outside the goal. Otherwise the mod starts the next turn with the verdict.
-It stops at the turn limit (30) or when the operator presses stop.
+outside the goal, on one commit. A failed check is told to Claude once,
+with what changed since the check before. There is no turn limit: a turn
+with no new commit runs nothing and costs nothing (CI's rule, as Rust's
+bors runs on a commit), so the operator's stop is the only limit.
 
 ## The flow
 
@@ -63,10 +66,12 @@ second copy.
 
 - **What it keeps** (`persist`, `load`): the goal's words, the status
   (`none`, `needs`, `approval`, `working`, `done`, `stopped`), the
-  proposed check, the approved check, the turns checked, the limit (30),
-  the last result, and a note, in the plugin store under `goal`. Loaded at
-  session start, so a goal carries into the next session. The working
-  tree at approval is kept apart as `baseline`.
+  proposed check, the approved check, how many checks have run, the last
+  result, the commit last checked (`checked`), the last thing Claude was
+  told (`told`), and a note, in the plugin store under `goal`. Loaded at
+  session start, so a goal carries into the next session. The commit at
+  approval is kept apart as `base`, and the working tree then as
+  `baseline`.
 - **`/mygoal <goal>`** (`command.run`): only from the composer. Resets
   everything to `needs` and starts a turn asking for the check.
   `/mygoal stop` stops it. `/mygoal` with nothing after it opens the pane.
@@ -93,14 +98,21 @@ second copy.
   holds `plugins/store`, `plugins/mygoal` or `claude-blueprints/mygoal` is
   refused.
 - **After each turn** (`turn.complete` then `evaluate`): skipped for
-  subagents and stopped turns. Counts the turn (past the limit it stops),
-  runs the check with no shell and a 10 minute limit, keeps its exit code
-  and the last 4000 characters, takes the changes since approval
-  (`git diff HEAD` per file, only files whose diff differs from the
-  baseline, cut at 40000 characters), and asks the judge (`claude-opus-5-5`,
-  effort high) for `met`, `missing`, `outside_goal` as JSON. Done only on
-  exit 0, met, and nothing outside the goal; otherwise it starts the next
-  turn with the verdict.
+  subagents and stopped turns. Reads the check repo's HEAD.
+  - **Same commit as last checked:** nothing runs, nothing is said. Only a
+    turn whose words claim the goal done (`CLAIMS_DONE`) is sent back with
+    the last result, once per commit.
+  - **A new commit:** runs the check with no shell and a 10 minute limit,
+    keeps its exit code and the last 4000 characters. If the output says
+    it could not reach what it tests (`UNREACHABLE`, such as no game
+    answering), that is not a result: the commit stays unchecked, so a
+    later turn runs it again, and Claude is told once. Otherwise it takes
+    the changes since approval (`git diff <base>` per file, only files
+    whose diff differs from the baseline, cut at 40000 characters) and
+    asks the judge (`claude-opus-5-5`, effort high) for `met`, `missing`,
+    `outside_goal` as JSON. Done only on exit 0, met, and nothing outside
+    the goal; otherwise Claude is told once, with the result lines that
+    changed since the check before (`changedLines`).
 
 ## Known gaps (to iterate on)
 
@@ -115,6 +127,8 @@ second copy.
   starts keeps a test from being changed to pass.
 - **A judge with no answer** (no reply, or no JSON) counts as not met and
   the next turn starts.
-- **The check runs after every turn, with a 30 turn limit.** The right
-  trigger is a commit, as CI runs on a change (see the orchestration
-  skill's known gap).
+- **Uncommitted work is not checked.** The check runs only on a new
+  commit, so work left uncommitted is never tested until it is committed.
+- **A turn that ends a goal without claiming it done is not sent back.**
+  Only `CLAIMS_DONE`'s words are caught; a turn that drifts off the goal
+  in other words is not.

@@ -7,31 +7,44 @@ import type { Check, Run, Status, Verdict } from '../types'
 //
 // Claude does not decide "done". Two things outside Claude do:
 //   the finish check: a command Claude proposes and the operator approves
-//     with a button only the operator can press; this mod runs it itself
-//     after every turn and reads the exit code,
+//     with a button only the operator can press; this mod runs it itself,
+//     once for each new commit in the check's repo, and reads the exit code,
 //   the judge: a separate call to Opus 5.5 that sees only the goal in the
 //     operator's words, the check's real output and the code changes since
 //     approval, never Claude's explanation. It says what is missing and
 //     what was done that the goal did not ask for.
-// Until the check exits 0 and the judge says met with nothing outside the
-// goal, the next turn starts by itself with what is missing.
+// The check runs when the work changes, as CI runs on a commit (Rust's
+// bors), never because a turn ended: a turn on the same commit costs
+// nothing and is told nothing, unless it claims the goal done. A failed
+// check is told once, with what changed since the check before.
 //
 // The stock /goal is left alone; this is a separate command to compare.
 
 const PANE = 'mygoal'
 const TOOL = 'propose_check'
 const JUDGE_MODEL = 'claude-opus-5-5'
-const DEFAULT_LIMIT = 30
 const TAIL_CHARS = 4000
 const CHANGES_CHARS = 40000
+
+// A check whose output says it could not reach what it tests (the game not
+// running): not a test result, so the commit stays unchecked and the check
+// runs again after a later turn, told once.
+const UNREACHABLE = /no .{0,60} answering|connection refused|could not connect/i
+// A turn that claims the goal done.
+const CLAIMS_DONE = /\b(goal (is )?(done|met|complete)|all (\d+ )?(\w+ )?tests? pass(ed)?)\b/i
+// The lines of a check's output that say how a test went.
+const RESULT_LINE = /\b(pass(ed)?|fail(ed)?)\b/i
 
 const goalText = atom({ plugin: 'mygoal', key: 'text' } as const, '')
 const status = atom({ plugin: 'mygoal', key: 'status' } as const, 'none')
 const proposed = atom({ plugin: 'mygoal', key: 'proposed' } as const, null)
 const approved = atom({ plugin: 'mygoal', key: 'approved' } as const, null)
-const turns = atom({ plugin: 'mygoal', key: 'turns' } as const, 0)
-const limit = atom({ plugin: 'mygoal', key: 'limit' } as const, DEFAULT_LIMIT)
+// How many times the check has run since approval
+const checks = atom({ plugin: 'mygoal', key: 'checks' } as const, 0)
 const last = atom({ plugin: 'mygoal', key: 'last' } as const, null)
+// The commit the check last ran on, and the last commit Claude was told about
+const checked = atom({ plugin: 'mygoal', key: 'checked' } as const, '')
+const told = atom({ plugin: 'mygoal', key: 'told' } as const, '')
 const note = atom({ plugin: 'mygoal', key: 'note' } as const, '')
 
 // One check-and-judge at a time.
@@ -120,48 +133,65 @@ async function persist($: EngineInterface) {
     status: await read($, status),
     proposed: await read($, proposed),
     approved: await read($, approved),
-    turns: await read($, turns),
-    limit: await read($, limit),
+    checks: await read($, checks),
     last: await read($, last),
+    checked: await read($, checked),
+    told: await read($, told),
     note: await read($, note),
   })
 }
 
 async function load($: EngineInterface) {
   const saved = (await $.store.get('goal')) as
-    | { text: string; status: Status; proposed: Check | null; approved: Check | null; turns: number; limit: number; last: Run | null; note: string }
+    | { text: string; status: Status; proposed: Check | null; approved: Check | null; checks?: number; last: Run | null; checked?: string; told?: string; note: string }
     | undefined
   if (!saved) return
   await update($, goalText, () => saved.text)
   await update($, status, () => saved.status)
   await update($, proposed, () => saved.proposed)
   await update($, approved, () => saved.approved)
-  await update($, turns, () => saved.turns)
-  await update($, limit, () => saved.limit)
+  await update($, checks, () => saved.checks ?? 0)
   await update($, last, () => saved.last)
+  await update($, checked, () => saved.checked ?? '')
+  await update($, told, () => saved.told ?? '')
   await update($, note, () => saved.note)
 }
 
-// git diff HEAD split per file, plus the untracked files: what the working
-// tree looks like now, so the judge sees only what changed after approval.
-async function treeNow($: EngineInterface): Promise<Record<string, string>> {
+// The repo the check tests, as `git -C` takes it; the session directory
+// when the check named none.
+const repoOf = (check: Check) => check.repo || '.'
+
+// The commit the repo stands at now, or '' when it is not a git repo.
+async function headOf($: EngineInterface, repo: string): Promise<string> {
+  const r = await $.process.run(['git', '-C', repo, 'rev-parse', 'HEAD'])
+  return r.exitCode === 0 ? r.stdout.trim() : ''
+}
+
+// The working tree against the commit at approval (`base`), split per file,
+// plus the untracked files: commits since approval and edits not yet
+// committed alike, so the judge sees everything done for the goal.
+async function treeNow($: EngineInterface, repo: string, base: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {}
-  const diff = await $.process.run(['git', 'diff', 'HEAD'])
+  const diff = await $.process.run(['git', '-C', repo, 'diff', base || 'HEAD'])
   if (diff.exitCode !== 0) return out
   for (const part of diff.stdout.split(/^(?=diff --git )/m)) {
     const name = /^diff --git a\/(.+?) b\//.exec(part)?.[1]
     if (name) out[name] = part
   }
-  const st = await $.process.run(['git', 'status', '--porcelain'])
+  const st = await $.process.run(['git', '-C', repo, 'status', '--porcelain'])
   for (const line of st.stdout.split('\n')) {
     if (line.startsWith('?? ')) out[line.slice(3).trim()] = '(new file, not tracked yet)'
   }
   return out
 }
 
-async function changesSinceApproval($: EngineInterface): Promise<string> {
+// What changed since approval: every file whose diff from the commit at
+// approval differs from what it was at approval (edits already in the tree
+// then are left out until they change again).
+async function changesSinceApproval($: EngineInterface, repo: string): Promise<string> {
   const before = ((await $.store.get('baseline')) ?? {}) as Record<string, string>
-  const now = await treeNow($)
+  const base = ((await $.store.get('base')) ?? '') as string
+  const now = await treeNow($, repo, base)
   const parts = Object.entries(now)
     .filter(([file, text]) => before[file] !== text)
     .map(([file, text]) => (text.startsWith('diff --git') ? text : `${file}: ${text}`))
@@ -201,21 +231,57 @@ async function judge($: EngineInterface, goal: string, check: Check, exitCode: n
   }
 }
 
-// After a working turn: run the check, ask the judge, then either finish
-// or start the next turn with what is missing.
-async function evaluate($: EngineInterface) {
+// The lines of `tail` that say how a test went and are not in `before`:
+// what changed since the check before.
+function changedLines(tail: string, before: string): string {
+  const was = new Set(before.split('\n').map(l => l.trim()))
+  return tail
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => RESULT_LINE.test(l) && !was.has(l))
+    .join('\n')
+}
+
+// The "not done yet" message: the goal, the check's last result, the judge.
+function notDone(goal: string, check: Check, run: Run, before: Run | null, why: string): string {
+  const changed = before ? changedLines(run.tail, before.tail) : ''
+  return [
+    `mygoal: the goal is not done yet. ${why}`,
+    'The goal, in the operator\'s words:',
+    goal,
+    '',
+    `The finish check \`${check.argv.join(' ')}\` exited ${run.exitCode} on commit ${run.commit.slice(0, 8)}. Last part of its output:`,
+    run.tail || '(no output)',
+    '',
+    before ? `Changed since the check before (on ${before.commit.slice(0, 8)}):\n${changed || '(no test changed)'}` : '',
+    run.verdict
+      ? `The judge (a separate Opus 5.5 call that sees only the goal, this output and the code changes) says\nmissing: ${run.verdict.missing || '(nothing)'}\noutside the goal: ${run.verdict.outsideGoal || '(nothing)'}`
+      : 'The judge did not answer this time.',
+    '',
+    'Keep working on the goal. Undo anything outside the goal. The check runs again on the next commit; only it passing and the judge agreeing end this.',
+  ].join('\n')
+}
+
+// After a working turn (`answer`, what Claude said): when the check's repo
+// has a commit the check has not run on, run it once, ask the judge, then
+// finish or tell Claude what is missing, once. On a commit already checked,
+// nothing runs and nothing is said, unless the turn claims the goal done.
+async function evaluate($: EngineInterface, answer: string) {
   const check = await read($, approved)
   if (!check) return
-  const turn = (await read($, turns)) + 1
-  const max = await read($, limit)
-  if (turn > max) {
-    await update($, status, () => 'stopped')
-    await update($, note, () => `stopped: the limit of ${max} checked turns was reached`)
-    await persist($)
-    $.ui.toast(`mygoal: stopped at the ${max} turn limit`)
+  const repo = repoOf(check)
+  const head = await headOf($, repo)
+  const goal = await read($, goalText)
+  const before = await read($, last)
+
+  if (head === (await read($, checked))) {
+    if (before && CLAIMS_DONE.test(answer) && (await read($, told)) !== `${head} done`) {
+      await update($, told, () => `${head} done`)
+      await persist($)
+      await $.prompt.submit({ text: notDone(goal, check, before, null, 'Nothing has been committed since the check last ran, so it has not passed on this commit.') })
+    }
     return
   }
-  await update($, turns, () => turn)
 
   let exitCode = -1
   let tail = ''
@@ -227,35 +293,46 @@ async function evaluate($: EngineInterface) {
   } catch (err) {
     tail = `the check could not run: ${String(err)}`
   }
-  const changes = await changesSinceApproval($)
-  const goal = await read($, goalText)
+  const n = (await read($, checks)) + 1
+  await update($, checks, () => n)
+
+  // Not a test result: the commit stays unchecked, so a later turn runs the
+  // check again; Claude is told once.
+  if (exitCode !== 0 && UNREACHABLE.test(tail)) {
+    await update($, note, () => `check ${n} on ${head.slice(0, 8)} could not reach what it tests`)
+    if ((await read($, told)) !== `${head} unreachable`) {
+      await update($, told, () => `${head} unreachable`)
+      await persist($)
+      await $.prompt.submit({
+        text: [
+          `mygoal: the finish check could not reach what it tests (commit ${head.slice(0, 8)}), so this is not a test result. Last part of its output:`,
+          tail || '(no output)',
+          '',
+          'Get it running (for a game, its writer launches it). The check runs again after a later turn, without telling you again until it reaches it.',
+        ].join('\n'),
+      })
+    } else {
+      await persist($)
+    }
+    return
+  }
+
+  await update($, checked, () => head)
+  const changes = await changesSinceApproval($, repo)
   const verdict = await judge($, goal, check, exitCode, tail, changes)
-  await update($, last, () => ({ turn, exitCode, tail, verdict }))
+  const run: Run = { check: n, commit: head, exitCode, tail, verdict }
+  await update($, last, () => run)
 
   if (exitCode === 0 && verdict?.met && verdict.outsideGoal.trim() === '') {
     await update($, status, () => 'done')
-    await update($, note, () => `done on turn ${turn}: the check exited 0 and the judge agreed`)
+    await update($, note, () => `done on check ${n}, commit ${head.slice(0, 8)}: the check exited 0 and the judge agreed`)
     await persist($)
     $.ui.toast('mygoal: done, checked and judged')
     return
   }
+  await update($, told, () => head)
   await persist($)
-  await $.prompt.submit({
-    text: [
-      `mygoal: the goal is not done yet (checked turn ${turn} of ${max}).`,
-      'The goal, in the operator\'s words:',
-      goal,
-      '',
-      `The finish check \`${check.argv.join(' ')}\` exited ${exitCode}. Last part of its output:`,
-      tail || '(no output)',
-      '',
-      verdict
-        ? `The judge (a separate Opus 5.5 call that sees only the goal, this output and the code changes) says\nmissing: ${verdict.missing || '(nothing)'}\noutside the goal: ${verdict.outsideGoal || '(nothing)'}`
-        : 'The judge did not answer this time.',
-      '',
-      'Keep working on the goal. Undo anything outside the goal. Only the check passing and the judge agreeing end this.',
-    ].join('\n'),
-  })
+  await $.prompt.submit({ text: notDone(goal, check, run, before, `(check ${n}, on a new commit)`) })
 }
 
 export const register: Register = on => {
@@ -275,8 +352,9 @@ export const register: Register = on => {
         properties: {
           argv: { type: 'array', items: { type: 'string' }, description: 'The command and its arguments, run with no shell from the session directory' },
           why: { type: 'string', description: 'Why exit code 0 proves the whole goal' },
+          repo: { type: 'string', description: 'The git repo whose commits the check tests (an absolute path); the check runs again each time it has a new commit' },
         },
-        required: ['argv', 'why'],
+        required: ['argv', 'why', 'repo'],
       },
     })
     await load($)
@@ -325,8 +403,10 @@ export const register: Register = on => {
       await update($, status, () => 'needs')
       await update($, proposed, () => null)
       await update($, approved, () => null)
-      await update($, turns, () => 0)
+      await update($, checks, () => 0)
       await update($, last, () => null)
+      await update($, checked, () => '')
+      await update($, told, () => '')
       await update($, note, () => '')
       await persist($)
       // A command cannot start a turn while it runs; start it once it has.
@@ -343,10 +423,13 @@ export const register: Register = on => {
   on('tool.call', { tool: 'mcp__mygoal__propose_check' }, async ($, e) => {
     const s = await read($, status)
     if (!isOpen(s)) return { result: 'No /mygoal goal is active.' }
-    const input = (e as unknown as { input?: { argv?: unknown; why?: unknown } }).input ?? (e as unknown as { argv?: unknown; why?: unknown })
+    type Input = { argv?: unknown; why?: unknown; repo?: unknown }
+    const input = (e as unknown as { input?: Input }).input ?? (e as unknown as Input)
     const argv = Array.isArray(input.argv) ? input.argv.map(String) : []
     if (argv.length === 0) return { result: 'argv must be the command and its arguments, at least one item.' }
-    await update($, proposed, () => ({ argv, why: String(input.why ?? '') }))
+    const repo = String(input.repo ?? '')
+    if ((await headOf($, repo || '.')) === '') return { result: `repo must be a git repo; \`git -C ${repo || '.'} rev-parse HEAD\` failed.` }
+    await update($, proposed, () => ({ argv, why: String(input.why ?? ''), repo }))
     await update($, status, () => 'approval')
     await persist($)
     void $.ui.open({ id: PANE, title: 'mygoal' })
@@ -385,7 +468,7 @@ export const register: Register = on => {
       'The operator\'s goal (/mygoal), in their words:',
       await read($, goalText),
       '',
-      'You do not decide when this goal is done. After every turn the approved finish check is run for you and a separate judge reads the goal from its output and your code changes alone. Until both agree, the work goes on.',
+      'You do not decide when this goal is done. Each time the check\'s repo has a new commit, the approved finish check is run for you and a separate judge reads the goal from its output and your code changes alone. Until both agree on a commit, the work goes on. Turns with no new commit are not checked.',
       step,
       '',
       NEVER,
@@ -400,7 +483,7 @@ export const register: Register = on => {
     if (s === 'working') {
       busy = true
       try {
-        await evaluate($)
+        await evaluate($, e.answer ?? '')
       } finally {
         busy = false
       }
@@ -414,23 +497,26 @@ export const register: Register = on => {
     const goal = await read($, goalText)
     const prop = await read($, proposed)
     const check = await read($, approved)
-    const n = await read($, turns)
-    const max = await read($, limit)
+    const n = await read($, checks)
     const run = await read($, last)
     const why = await read($, note)
     const team = Object.entries(await read($, agents)).sort(([a], [b]) => a.localeCompare(b))
     const t = await read($, now)
-    const ago = (at: number) => (t - at < 60000 ? 'just now' : `${Math.floor((t - at) / 60000)} min ago`)
+    const ago = (at: number) => `${Math.max(0, Math.floor((t - at) / 60000))} min ago`
 
     const approve = async () => {
       const p = await read($, proposed)
       if (!p) return
-      await $.store.set('baseline', await treeNow($))
+      const base = await headOf($, repoOf(p))
+      await $.store.set('base', base)
+      await $.store.set('baseline', await treeNow($, repoOf(p), base))
       await update($, approved, () => p)
       await update($, proposed, () => null)
       await update($, status, () => 'working')
-      await update($, turns, () => 0)
+      await update($, checks, () => 0)
       await update($, last, () => null)
+      await update($, checked, () => '')
+      await update($, told, () => '')
       await update($, note, () => '')
       await persist($)
       await $.prompt.submit({ text: `mygoal: the operator approved the finish check \`${p.argv.join(' ')}\`. Work on the goal now.` })
@@ -450,7 +536,6 @@ export const register: Register = on => {
     }
     const resume = async () => {
       await update($, status, () => 'working')
-      await update($, turns, () => 0)
       await update($, note, () => '')
       await persist($)
       await $.prompt.submit({ text: 'mygoal: the operator resumed the goal. Work on it now.' })
@@ -460,7 +545,7 @@ export const register: Register = on => {
       none: 'no goal: type /mygoal <your goal>',
       needs: 'waiting for Claude to propose the finish check',
       approval: 'waiting for you to approve the finish check',
-      working: `working, checked turn ${n} of ${max}`,
+      working: `working, ${n} check${n === 1 ? '' : 's'} run, one for each new commit`,
       done: 'done: checked and judged',
       stopped: 'stopped',
     }
@@ -503,7 +588,7 @@ export const register: Register = on => {
         )}
         {run && (
           <Box flexDirection="column">
-            <Text color={run.exitCode === 0 ? 'green' : 'red'}>{`turn ${run.turn}: the check exited ${run.exitCode}`}</Text>
+            <Text color={run.exitCode === 0 ? 'green' : 'red'}>{`check ${run.check} on ${run.commit.slice(0, 8)}: exited ${run.exitCode}`}</Text>
             <Code source={run.tail.split('\n').slice(-12).join('\n') || '(no output)'} />
             {run.verdict ? (
               <Box flexDirection="column">

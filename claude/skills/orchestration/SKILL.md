@@ -103,12 +103,7 @@ Like Rust's borrowing: one session may change the game, any number may read it.
 
 ## Known gap
 
-The mygoal mod runs the finish check after every turn of the session the
-goal is set in, starts the next turn itself, and stops at 30 turns. While
-the writer works, the orchestrator's turns are waiting, so each one runs the
-whole check and uses a turn for nothing. The right trigger is a commit, as
-CI runs on a change (Rust's bors, "keep a repository that always passes
-all the tests"): the check runs when the writer commits, on that commit,
-the judge reads the commits since the goal started, and the budget is time
-or failed checks, not turns. Not built yet; until it is, set goals whose
-work fits in 30 checks.
+The mygoal mod runs the finish check once for each new commit in the
+check's repo (CI's rule, as Rust's bors), so the writer's commits drive it:
+work left uncommitted is never checked. The writer commits each step, even
+a failing one, with its honest count.
