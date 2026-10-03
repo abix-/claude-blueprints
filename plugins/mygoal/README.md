@@ -91,9 +91,9 @@ second copy.
   silent for 10 minutes gets one turn started: check its repo, ask its
   status, decide what it waits on. The count starts again from that turn.
 - **The pane's Agents list** (`agents`, `now`): each tracked session by
-  name, how long since it was heard from (yellow past 10 minutes), what it
-  last said (an idle notice adds "idle since"), and what it was last
-  asked.
+  name, how long since it was heard from (yellow past 10 minutes), its
+  `instruction:` (the last one sent to it) and its `response:` (the last
+  thing it said; an idle notice adds "idle since").
 - **Guard** (`tool.call`): while a goal is open, any tool call whose text
   holds `plugins/store`, `plugins/mygoal` or `claude-blueprints/mygoal` is
   refused.

@@ -192,9 +192,9 @@ test('while a goal works, an agent silent for 10 minutes gets a check-up turn', 
   await w.clock.advance(3 * 60 * 1000)
   const drawn = JSON.stringify(await ui.drawn())
   expect(drawn).toContain('writer: heard from 3 min ago')
-  expect(drawn).toContain('doing: holding built (idle since 22:17)')
+  expect(drawn).toContain('response: holding built (idle since 22:17)')
   expect(drawn).toContain('perf: heard from 22 min ago')
-  expect(drawn).toContain('asked: do 9p')
+  expect(drawn).toContain('instruction: do 9p')
 })
 
 test('the goal is in every request while it is open', async ($, on) => {

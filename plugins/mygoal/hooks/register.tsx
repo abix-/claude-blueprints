@@ -563,8 +563,8 @@ export const register: Register = on => {
             {team.map(([name, a]) => (
               <Box key={name} flexDirection="column">
                 <Text color={t - a.heardAt >= CHECK_IN_MS ? 'yellow' : undefined}>{`${name}: heard from ${ago(a.heardAt)}`}</Text>
-                {a.said !== '' && <Text wrap="wrap">{`  doing: ${a.said}`}</Text>}
-                {a.asked !== '' && <Text dimColor wrap="wrap">{`  asked: ${a.asked}`}</Text>}
+                {a.asked !== '' && <Text dimColor wrap="wrap">{`  instruction: ${a.asked}`}</Text>}
+                {a.said !== '' && <Text wrap="wrap">{`  response: ${a.said}`}</Text>}
               </Box>
             ))}
           </Box>
