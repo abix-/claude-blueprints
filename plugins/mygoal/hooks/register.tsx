@@ -463,10 +463,7 @@ export const register: Register = on => {
         ? `Before any other work, propose the finish check with the propose_check tool: a command whose exit code 0 proves the goal is met in the plain meaning of the operator's words.\n${PROPOSING}`
         : s === 'approval'
           ? 'Your proposed finish check is waiting for the operator\'s approval. Do no goal work until it is approved.'
-          : [
-              'Work on this goal and nothing else. Do nothing the goal did not ask for. Read the docs first, then make the decisions yourself and keep the work moving; ask the operator only before the work starts, never wait on them mid-goal. The operator changes what they disagree with.',
-              'When other sessions work this goal, you orchestrate. The writer changes the code, builds, runs the game and runs the tests. You never edit the repo, build, or run the game or the tests yourself. You decide, direct, check the agents\' reports against their commits and logs, and keep every agent working.',
-            ].join('\n')
+          : 'Only this goal. Read the docs, decide yourself, never wait on the operator. With other sessions on it, you orchestrate: they edit, build and test; you decide, direct, check and keep them working.'
     const text = [
       'The operator\'s goal (/mygoal), in their words:',
       await read($, goalText),
