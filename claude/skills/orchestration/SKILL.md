@@ -12,7 +12,7 @@ directs the other sessions until those tests pass. The goal passes when its
 tests pass through the game's endpoint, on the running game. Nothing else
 counts: not a summary, not a headless test, not a reading of the code.
 
-Read the `mygoal` skill for how the mod runs the check and the judge.
+How the mygoal mod runs the check and the judge: claude/plugins/mygoal/README.md in claude-blueprints.
 
 ## Who does what: one writer, many readers
 

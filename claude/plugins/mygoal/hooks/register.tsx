@@ -90,6 +90,26 @@ const JUDGE = [
   '{"met": true or false, "missing": "what is not done yet, or empty", "outside_goal": "changes the goal did not ask for, or empty"}',
 ].join('\n')
 
+// How to propose the finish check: in the tool's description, read at every
+// call, and in the request while a check is needed.
+const PROPOSING = [
+  'The check is half of "done", so propose the one hardest to pass falsely.',
+  'It must fail while any part of the goal is unmet, in the plain meaning of the operator\'s words: if it could exit 0 while the goal is not done, it is the wrong check.',
+  'Cover the whole goal, not the easy part. Run against the real thing (the live game, the real CLI, the deploy script), never a mock that cannot see the failure.',
+  'argv runs with no shell from the session directory; wrap a pipeline in a script that is part of the work. why says in one or two sentences why exit 0 proves the whole goal.',
+  'For a game with a test queue: write each piece of the goal as its own test first, see it fail, commit the tests before the goal starts, and check with the queue run of those tests (for topside, pwsh -NoProfile -File scripts/build.ps1 queue <test files>).',
+  'A goal no command can prove leaves only the judge: say so in why rather than propose a check that proves something smaller.',
+].join('\n')
+
+// What never happens while a goal is open, in every request.
+const NEVER = [
+  'Never propose a check that proves a narrower goal than the operator wrote.',
+  'Never weaken the approved check by proposing a new one mid-goal to get past a failure; a new proposal pauses the goal until the operator approves it.',
+  'Never treat a "not done yet" turn as a suggestion: work on what it lists as missing, undo what it lists as outside the goal.',
+  'Never touch the goal store or this mod while a goal is open; those tool calls are refused.',
+  'Never run /mygoal and the stock /goal in one session; both start the next turn and compete.',
+].join('\n')
+
 // Is the goal one that keeps Claude working?
 const isOpen = (s: Status) => s === 'needs' || s === 'approval' || s === 'working'
 
@@ -249,7 +269,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: TOOL,
       description:
-        'Propose the finish check for the operator\'s /mygoal goal: a command whose exit code 0 proves the goal is met in the plain meaning of the operator\'s words. The operator approves or rejects it; until approved, do no goal work.',
+        `Propose the finish check for the operator's /mygoal goal: a command whose exit code 0 proves the goal is met in the plain meaning of the operator's words. The operator approves or rejects it; until approved, do no goal work.\n${PROPOSING}`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -337,13 +357,14 @@ export const register: Register = on => {
   })
 
   // While a goal is open, nothing Claude runs may touch where the goal is
-  // kept (the plugin store) or this mod's code, which lives in the mygoal
-  // skill's folder (the repo's claude/skills/mygoal, installed to
-  // ~/.claude/skills/mygoal).
+  // kept (the plugin store) or this mod's code: the repo's
+  // claude/plugins/mygoal, loaded in place through the claude-blueprints
+  // marketplace, which Claude Code also keeps under
+  // ~/.claude/plugins/cache/claude-blueprints/mygoal.
   on('tool.call', async ($, e, next) => {
     if (!isOpen(await read($, status)) || e.tool.startsWith('mcp__mygoal__')) return next(e)
     const asked = JSON.stringify(e)
-    if (/plugins[\\/]+store/i.test(asked) || /skills[\\/]+mygoal/i.test(asked)) {
+    if (/plugins[\\/]+store/i.test(asked) || /(plugins|claude-blueprints)[\\/]+mygoal/i.test(asked)) {
       return { deny: 'mygoal: while a goal is open, the goal and the mygoal mod are not Claude\'s to change.' }
     }
     return next(e)
@@ -356,7 +377,7 @@ export const register: Register = on => {
     if (!isOpen(s)) return r
     const step =
       s === 'needs'
-        ? 'Before any other work, propose the finish check with the propose_check tool: a command whose exit code 0 proves the goal is met in the plain meaning of the operator\'s words.'
+        ? `Before any other work, propose the finish check with the propose_check tool: a command whose exit code 0 proves the goal is met in the plain meaning of the operator's words.\n${PROPOSING}`
         : s === 'approval'
           ? 'Your proposed finish check is waiting for the operator\'s approval. Do no goal work until it is approved.'
           : 'Work on this goal and nothing else. Do nothing the goal did not ask for. Read the docs first, then make the decisions yourself and keep the work moving; ask the operator only before the work starts, never wait on them mid-goal. The operator changes what they disagree with.'
@@ -366,6 +387,8 @@ export const register: Register = on => {
       '',
       'You do not decide when this goal is done. After every turn the approved finish check is run for you and a separate judge reads the goal from its output and your code changes alone. Until both agree, the work goes on.',
       step,
+      '',
+      NEVER,
     ].join('\n')
     return { ...r, sections: [...r.sections, { id: 'mygoal:goal', text, scope: 'session' as const }] }
   })

@@ -1,0 +1,12 @@
+{
+  "name": "claude-blueprints",
+  "owner": { "name": "abix" },
+  "description": "The plugins of this repository, loaded in place from a local checkout",
+  "plugins": [
+    {
+      "name": "mygoal",
+      "source": "./claude/plugins/mygoal",
+      "description": "Work on the operator's goal until an approved check passes and a separate judge agrees"
+    }
+  ]
+}
