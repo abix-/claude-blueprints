@@ -63,21 +63,21 @@ const turnDone = (answer: string) => ({ answer, durationMs: 1, isAborted: false,
 test('the approved check runs once per commit, says nothing on the same commit, and ends when it passes and the judge agrees', async ($, on) => {
   const w = world(on)
   await start($, w)
-  expect(w.submitted.at(-1)).toContain('propose its finish check')
+  expect(w.submitted.at(-1)).toContain('Propose its check')
 
   // Claude proposes the check; nothing runs until the operator approves.
   await $.tool.call({ tool: 'mcp__mygoal__propose_check', input: CHECK } as never)
   const ui = await $.ui.mount({ plugin: 'mygoal', surface: 'terminal', component: 'Pane', requestId: 'mygoal', props: {} })
   expect(JSON.stringify(await ui.drawn())).toContain('waiting for you to approve the finish check')
   await ui.press({ key: 'approve' })
-  expect(w.submitted.at(-1)).toContain('approved the finish check `cargo test -p foo`')
+  expect(w.submitted.at(-1)).toContain('check approved')
 
   // The first turn after approval runs the check on the commit there.
   const ranCheck = () => w.ran.filter(a => a[0] === 'cargo').length
   await $.turn.complete(turnDone('Starting.'))
   expect(ranCheck()).toBe(1)
-  expect(w.submitted.at(-1)).toContain('the goal is not done yet')
-  expect(w.submitted.at(-1)).toContain('exited 1 on commit aaaaaaaa')
+  expect(w.submitted.at(-1)).toContain('mygoal: not done')
+  expect(w.submitted.at(-1)).toContain('exited 1 on aaaaaaaa')
   expect(w.submitted.at(-1)).toContain('missing: two foo tests fail')
 
   // The judge is Opus 5.5 and never sees what Claude said, only the goal
@@ -98,7 +98,7 @@ test('the approved check runs once per commit, says nothing on the same commit, 
   await $.turn.complete(turnDone('The goal is done.'))
   expect(ranCheck()).toBe(1)
   expect(w.submitted.length).toBe(said + 1)
-  expect(w.submitted.at(-1)).toContain('Nothing has been committed since the check last ran')
+  expect(w.submitted.at(-1)).toContain('nothing committed since the last check')
   await $.turn.complete(turnDone('The goal is done.'))
   expect(w.submitted.length).toBe(said + 1)
 
@@ -107,7 +107,7 @@ test('the approved check runs once per commit, says nothing on the same commit, 
   w.checkSays = 'test result: FAILED. 11 passed; 1 failed'
   await $.turn.complete(turnDone('Fixed one.'))
   expect(ranCheck()).toBe(2)
-  expect(w.submitted.at(-1)).toContain('Changed since the check before (on aaaaaaaa)')
+  expect(w.submitted.at(-1)).toContain('Changed since aaaaaaaa')
   expect(w.submitted.at(-1)).toContain('11 passed; 1 failed')
 
   // The check passes but the judge finds work outside the goal: not done.
@@ -137,7 +137,7 @@ test('a check that cannot reach the game is not a result: told once, run again o
 
   w.checkSays = 'no topside game answering on http://127.0.0.1:15703/topside'
   await $.turn.complete(turnDone('Starting.'))
-  expect(w.submitted.at(-1)).toContain('could not reach what it tests')
+  expect(w.submitted.at(-1)).toContain("can't reach what it tests")
   expect(w.judged.length).toBe(0)
   const said = w.submitted.length
   await $.turn.complete(turnDone('Asked the writer to launch it.'))
@@ -149,7 +149,7 @@ test('a check that cannot reach the game is not a result: told once, run again o
   await $.turn.complete(turnDone('It is up.'))
   expect(ranCheck()).toBe(3)
   expect(w.judged.length).toBe(1)
-  expect(w.submitted.at(-1)).toContain('exited 1 on commit aaaaaaaa')
+  expect(w.submitted.at(-1)).toContain('exited 1 on aaaaaaaa')
 })
 
 test('while a goal is open, Claude cannot touch the goal store or the mod', async ($, on) => {
@@ -179,7 +179,7 @@ test('while a goal works, an agent silent for 10 minutes gets a check-up turn', 
   const before = w.submitted.length
   await w.clock.advance(6 * 60 * 1000)
   expect(w.submitted.length).toBe(before + 1)
-  expect(w.submitted.at(-1)).toContain('no word from perf in 10 minutes')
+  expect(w.submitted.at(-1)).toContain('no word from perf in 10 min')
   expect(w.submitted.at(-1)).not.toContain('writer')
 
   // Checked on at minute 10: no second check-up before minute 20.
@@ -211,10 +211,10 @@ test('the goal is in every request while it is open', async ($, on) => {
   })) as unknown as { sections: { id: string; text: string }[] }
   const mine = r.sections.find(s => s.id === 'mygoal:goal')
   expect(mine?.text).toContain(GOAL)
-  expect(mine?.text).toContain('You do not decide when this goal is done')
+  expect(mine?.text).toContain("You don't decide done")
   // The rules a skill used to hold: how to propose the check, and the Never list.
   expect(mine?.text).toContain('hardest to pass falsely')
-  expect(mine?.text).toContain('Never weaken the approved check')
+  expect(mine?.text).toContain('Never: a check narrower than the goal')
 
   // Working, with other sessions on the goal: Claude orchestrates.
   await $.tool.call({ tool: 'mcp__mygoal__propose_check', input: CHECK } as never)

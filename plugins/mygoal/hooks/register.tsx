@@ -84,11 +84,7 @@ async function checkIn($: EngineInterface) {
   if (silent.length === 0) return
   await update($, agents, a => Object.fromEntries(Object.entries(a).map(([n, x]) => [n, silent.includes(n) ? { ...x, checkedAt: t } : x])))
   await $.prompt.submit({
-    text: [
-      `mygoal: no word from ${silent.join(', ')} in ${CHECK_IN_MS / 60000} minutes.`,
-      'Check on each now: read its repo (git log, git status, its logs), then ask it for its status with SendMessage.',
-      'If it waits on a decision, make it yourself from the docs and tell it to carry on; never leave it waiting on the operator.',
-    ].join('\n'),
+    text: `mygoal: no word from ${silent.join(', ')} in ${CHECK_IN_MS / 60000} min. Check its repo, ask its status, decide what it waits on.`,
   })
 }
 
@@ -105,23 +101,12 @@ const JUDGE = [
 
 // How to propose the finish check: in the tool's description, read at every
 // call, and in the request while a check is needed.
-const PROPOSING = [
-  'The check is half of "done", so propose the one hardest to pass falsely.',
-  'It must fail while any part of the goal is unmet, in the plain meaning of the operator\'s words: if it could exit 0 while the goal is not done, it is the wrong check.',
-  'Cover the whole goal, not the easy part. Run against the real thing (the live game, the real CLI, the deploy script), never a mock that cannot see the failure.',
-  'argv runs with no shell from the session directory; wrap a pipeline in a script that is part of the work. why says in one or two sentences why exit 0 proves the whole goal.',
-  'For a game with a test queue: write each piece of the goal as its own test first, see it fail, commit the tests before the goal starts, and check with the queue run of those tests (for topside, pwsh -NoProfile -File scripts/build.ps1 queue <test files>).',
-  'A goal no command can prove leaves only the judge: say so in why rather than propose a check that proves something smaller.',
-].join('\n')
+const PROPOSING =
+  'Propose the check hardest to pass falsely: it fails while any part of the goal is unmet, covers the whole goal, runs against the real thing, no shell. For a game: the queue run of the goal\'s tests, committed first. No command can prove it: say so in why.'
 
 // What never happens while a goal is open, in every request.
-const NEVER = [
-  'Never propose a check that proves a narrower goal than the operator wrote.',
-  'Never weaken the approved check by proposing a new one mid-goal to get past a failure; a new proposal pauses the goal until the operator approves it.',
-  'Never treat a "not done yet" turn as a suggestion: work on what it lists as missing, undo what it lists as outside the goal.',
-  'Never touch the goal store or this mod while a goal is open; those tool calls are refused.',
-  'Never run /mygoal and the stock /goal in one session; both start the next turn and compete.',
-].join('\n')
+const NEVER =
+  'Never: a check narrower than the goal; a new check to dodge a failure; ignoring "not done yet"; touching this mod or its store; /goal alongside.'
 
 // Is the goal one that keeps Claude working?
 const isOpen = (s: Status) => s === 'needs' || s === 'approval' || s === 'working'
@@ -243,23 +228,16 @@ function changedLines(tail: string, before: string): string {
 }
 
 // The "not done yet" message: the goal, the check's last result, the judge.
-function notDone(goal: string, check: Check, run: Run, before: Run | null, why: string): string {
+function notDone(run: Run, before: Run | null, why: string): string {
   const changed = before ? changedLines(run.tail, before.tail) : ''
   return [
-    `mygoal: the goal is not done yet. ${why}`,
-    'The goal, in the operator\'s words:',
-    goal,
-    '',
-    `The finish check \`${check.argv.join(' ')}\` exited ${run.exitCode} on commit ${run.commit.slice(0, 8)}. Last part of its output:`,
+    `mygoal: not done ${why}. Check exited ${run.exitCode} on ${run.commit.slice(0, 8)}:`,
     run.tail || '(no output)',
-    '',
-    before ? `Changed since the check before (on ${before.commit.slice(0, 8)}):\n${changed || '(no test changed)'}` : '',
-    run.verdict
-      ? `The judge (a separate Opus 5.5 call that sees only the goal, this output and the code changes) says\nmissing: ${run.verdict.missing || '(nothing)'}\noutside the goal: ${run.verdict.outsideGoal || '(nothing)'}`
-      : 'The judge did not answer this time.',
-    '',
-    'Keep working on the goal. Undo anything outside the goal. The check runs again on the next commit; only it passing and the judge agreeing end this.',
-  ].join('\n')
+    before ? `Changed since ${before.commit.slice(0, 8)}:\n${changed || '(nothing)'}` : '',
+    run.verdict ? `Judge: missing: ${run.verdict.missing || '-'}; outside the goal: ${run.verdict.outsideGoal || '-'}` : 'Judge: no answer.',
+  ]
+    .filter(l => l !== '')
+    .join('\n')
 }
 
 // After a working turn (`answer`, what Claude said): when the check's repo
@@ -278,7 +256,7 @@ async function evaluate($: EngineInterface, answer: string) {
     if (before && CLAIMS_DONE.test(answer) && (await read($, told)) !== `${head} done`) {
       await update($, told, () => `${head} done`)
       await persist($)
-      await $.prompt.submit({ text: notDone(goal, check, before, null, 'Nothing has been committed since the check last ran, so it has not passed on this commit.') })
+      await $.prompt.submit({ text: notDone(before, null, '(nothing committed since the last check)') })
     }
     return
   }
@@ -304,12 +282,7 @@ async function evaluate($: EngineInterface, answer: string) {
       await update($, told, () => `${head} unreachable`)
       await persist($)
       await $.prompt.submit({
-        text: [
-          `mygoal: the finish check could not reach what it tests (commit ${head.slice(0, 8)}), so this is not a test result. Last part of its output:`,
-          tail || '(no output)',
-          '',
-          'Get it running (for a game, its writer launches it). The check runs again after a later turn, without telling you again until it reaches it.',
-        ].join('\n'),
+        text: `mygoal: the check can't reach what it tests (${head.slice(0, 8)}); get it running. Retried quietly.\n${tail.split('\n').slice(-5).join('\n')}`,
       })
     } else {
       await persist($)
@@ -332,7 +305,7 @@ async function evaluate($: EngineInterface, answer: string) {
   }
   await update($, told, () => head)
   await persist($)
-  await $.prompt.submit({ text: notDone(goal, check, run, before, `(check ${n}, on a new commit)`) })
+  await $.prompt.submit({ text: notDone(run, before, `(check ${n})`) })
 }
 
 export const register: Register = on => {
@@ -346,13 +319,13 @@ export const register: Register = on => {
     await $.tool.register({
       name: TOOL,
       description:
-        `Propose the finish check for the operator's /mygoal goal: a command whose exit code 0 proves the goal is met in the plain meaning of the operator's words. The operator approves or rejects it; until approved, do no goal work.\n${PROPOSING}`,
+        `Propose the /mygoal finish check: exit 0 proves the goal met. The operator approves it. ${PROPOSING}`,
       inputSchema: {
         type: 'object',
         properties: {
-          argv: { type: 'array', items: { type: 'string' }, description: 'The command and its arguments, run with no shell from the session directory' },
-          why: { type: 'string', description: 'Why exit code 0 proves the whole goal' },
-          repo: { type: 'string', description: 'The git repo whose commits the check tests (an absolute path); the check runs again each time it has a new commit' },
+          argv: { type: 'array', items: { type: 'string' }, description: 'Command and arguments, no shell' },
+          why: { type: 'string', description: 'Why exit 0 proves the whole goal' },
+          repo: { type: 'string', description: 'Absolute path of the git repo; the check runs on each new commit there' },
         },
         required: ['argv', 'why', 'repo'],
       },
@@ -412,7 +385,7 @@ export const register: Register = on => {
       // A command cannot start a turn while it runs; start it once it has.
       void $.clock.after(0, () => {
         void $.prompt.submit({
-          text: 'mygoal: the operator set a new goal. Before any other work, propose its finish check with the propose_check tool.',
+          text: 'mygoal: new goal. Propose its check with propose_check first.',
         })
       })
     }
@@ -460,17 +433,13 @@ export const register: Register = on => {
     if (!isOpen(s)) return r
     const step =
       s === 'needs'
-        ? `Before any other work, propose the finish check with the propose_check tool: a command whose exit code 0 proves the goal is met in the plain meaning of the operator's words.\n${PROPOSING}`
+        ? `First propose the check with propose_check. ${PROPOSING}`
         : s === 'approval'
-          ? 'Your proposed finish check is waiting for the operator\'s approval. Do no goal work until it is approved.'
+          ? 'The check awaits the operator\'s approval; no goal work until then.'
           : 'Only this goal. Read the docs, decide yourself, never wait on the operator. With other sessions on it, you orchestrate: they edit, build and test; you decide, direct, check and keep them working.'
     const text = [
-      'The operator\'s goal (/mygoal), in their words:',
-      await read($, goalText),
-      '',
-      'You do not decide when this goal is done. Each time the check\'s repo has a new commit, the approved finish check is run for you and a separate judge reads the goal from its output and your code changes alone. Until both agree on a commit, the work goes on. Turns with no new commit are not checked.',
-      step,
-      '',
+      `Goal (/mygoal): ${await read($, goalText)}`,
+      'You don\'t decide done: the check runs on each new commit and a judge reads its output. ' + step,
       NEVER,
     ].join('\n')
     return { ...r, sections: [...r.sections, { id: 'mygoal:goal', text, scope: 'session' as const }] }
@@ -519,14 +488,14 @@ export const register: Register = on => {
       await update($, told, () => '')
       await update($, note, () => '')
       await persist($)
-      await $.prompt.submit({ text: `mygoal: the operator approved the finish check \`${p.argv.join(' ')}\`. Work on the goal now.` })
+      await $.prompt.submit({ text: 'mygoal: check approved. Work on the goal.' })
     }
     const reject = async () => {
       await update($, proposed, () => null)
       await update($, status, () => 'needs')
       await persist($)
       await $.prompt.submit({
-        text: 'mygoal: the operator rejected the proposed check. Propose a different finish check that proves the goal in the plain meaning of the operator\'s words.',
+        text: 'mygoal: check rejected. Propose another.',
       })
     }
     const stop = async () => {
@@ -538,7 +507,7 @@ export const register: Register = on => {
       await update($, status, () => 'working')
       await update($, note, () => '')
       await persist($)
-      await $.prompt.submit({ text: 'mygoal: the operator resumed the goal. Work on it now.' })
+      await $.prompt.submit({ text: 'mygoal: resumed. Work on the goal.' })
     }
 
     const label: Record<Status, string> = {
