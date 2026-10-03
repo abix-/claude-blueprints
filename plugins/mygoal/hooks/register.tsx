@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Check, Run, Status, Verdict } from '../types'
+import type { Agent, Check, Run, Status, Verdict } from '../types'
 
 // /mygoal: keeps Claude on the operator's goal until it is truly done.
 //
@@ -30,6 +30,8 @@ const CHANGES_CHARS = 40000
 // running): not a test result, so the commit stays unchecked and the check
 // runs again after a later turn, told once.
 const UNREACHABLE = /no .{0,60} answering|connection refused|could not connect/i
+// A turn that ends by asking the operator something, read from its end.
+const ASKS = /\?\s*$|\b(say go|your call|tell me|do you want|which do you)\b/i
 // A turn that claims the goal done.
 const CLAIMS_DONE = /\b(goal (is )?(done|met|complete)|all (\d+ )?(\w+ )?tests? pass(ed)?)\b/i
 
@@ -47,11 +49,15 @@ const note = atom({ plugin: 'mygoal', key: 'note' } as const, '')
 
 // One check-and-judge at a time.
 let busy = false
+// Whether the last turn was started by sending a question back.
+let askedBack = false
 
 // The other sessions this one works with, by name, and when each was last
 // heard from (its message or its idle notice) or last checked on. While a
 // goal is working, one silent for CHECK_IN_MS gets a check-up turn.
 const CHECK_IN_MS = 10 * 60 * 1000
+// An agent whose last word was its idle notice has nothing to do: sooner.
+const IDLE_CHECK_IN_MS = 2 * 60 * 1000
 const CHECK_EVERY_MS = 60 * 1000
 const SAID_CHARS = 160
 const agents = atom({ plugin: 'mygoal', key: 'agents' } as const, {})
@@ -78,11 +84,13 @@ async function checkIn($: EngineInterface) {
   await update($, now, () => t)
   if ((await read($, status)) !== 'working') return
   const all = await read($, agents)
-  const silent = Object.keys(all).filter(name => t - Math.max(all[name].heardAt, all[name].checkedAt) >= CHECK_IN_MS)
+  const wait = (x: Agent) => (x.said.includes('idle since') ? IDLE_CHECK_IN_MS : CHECK_IN_MS)
+  const silent = Object.keys(all).filter(name => t - Math.max(all[name].heardAt, all[name].checkedAt) >= wait(all[name]))
   if (silent.length === 0) return
+  const idle = silent.filter(n => all[n].said.includes('idle since'))
   await update($, agents, a => Object.fromEntries(Object.entries(a).map(([n, x]) => [n, silent.includes(n) ? { ...x, checkedAt: t } : x])))
   await $.prompt.submit({
-    text: `mygoal: no word from ${silent.join(', ')} in ${CHECK_IN_MS / 60000} min. Check its repo, ask its status, decide what it waits on.`,
+    text: `mygoal: ${idle.length > 0 ? `idle: ${idle.join(', ')}. ` : ''}no word from ${silent.join(', ')}. Check each, give it its next step.`,
   })
 }
 
@@ -262,10 +270,16 @@ async function evaluate($: EngineInterface, answer: string) {
   const before = await read($, last)
 
   if (head === (await read($, checked))) {
+    const sentBack = askedBack
+    askedBack = false
     if (before && CLAIMS_DONE.test(answer) && (await read($, told)) !== `${head} done`) {
       await update($, told, () => `${head} done`)
       await persist($)
       await $.prompt.submit({ text: notDone(before, null, '(nothing committed since the last check)') })
+    } else if (ASKS.test(answer.slice(-300)) && !sentBack) {
+      // Once: asked again right after, it goes to the operator.
+      askedBack = true
+      await $.prompt.submit({ text: 'mygoal: don\'t ask the operator. Decide from the docs, record it, carry on. Ask only to reverse a ruling.' })
     }
     return
   }

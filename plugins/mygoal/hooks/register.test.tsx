@@ -98,13 +98,21 @@ test('the approved check runs once per commit, says nothing on the same commit, 
   expect(ranCheck()).toBe(1)
   expect(w.submitted.length).toBe(said)
 
+  // A turn ending with a question to the operator is sent back once; asked
+  // again right after, it goes to the operator.
+  await $.turn.complete(turnDone('Two ways to go. Which do you want?'))
+  expect(w.submitted.length).toBe(said + 1)
+  expect(w.submitted.at(-1)).toContain("don't ask the operator")
+  await $.turn.complete(turnDone('It reverses your ruling. Say go?'))
+  expect(w.submitted.length).toBe(said + 1)
+
   // Claiming the goal done on that commit is sent back, once.
   await $.turn.complete(turnDone('The goal is done.'))
   expect(ranCheck()).toBe(1)
-  expect(w.submitted.length).toBe(said + 1)
+  expect(w.submitted.length).toBe(said + 2)
   expect(w.submitted.at(-1)).toContain('nothing committed since the last check')
   await $.turn.complete(turnDone('The goal is done.'))
-  expect(w.submitted.length).toBe(said + 1)
+  expect(w.submitted.length).toBe(said + 2)
 
   // A new commit: the check runs once, and the message says what changed.
   w.head = 'bbbbbbbb2222'
@@ -182,7 +190,7 @@ test('while a goal works, an agent silent for 10 minutes gets a check-up turn', 
   const before = w.submitted.length
   await w.clock.advance(6 * 60 * 1000)
   expect(w.submitted.length).toBe(before + 1)
-  expect(w.submitted.at(-1)).toContain('no word from perf in 10 min')
+  expect(w.submitted.at(-1)).toContain('no word from perf')
   expect(w.submitted.at(-1)).not.toContain('writer')
 
   // Checked on at minute 10: no second check-up before minute 20.
@@ -198,6 +206,8 @@ test('while a goal works, an agent silent for 10 minutes gets a check-up turn', 
   expect(drawn).toContain('response: holding built (idle since 22:17)')
   expect(drawn).toContain('perf: heard from 22 min ago')
   expect(drawn).toContain('instruction: do 9p')
+  // Idle since minute 19: checked on 2 minutes later, not 10.
+  expect(w.submitted.at(-1)).toContain('idle: writer')
 })
 
 test('the goal is in every request while it is open', async ($, on) => {
