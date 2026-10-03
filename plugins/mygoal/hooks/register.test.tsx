@@ -91,28 +91,17 @@ test('the approved check runs once per commit, says nothing on the same commit, 
   expect(w.judged.at(-1)).toContain('FAILED')
   expect(w.judged.at(-1)).not.toContain('Starting')
 
-  // Turns on the same commit run nothing and say nothing.
+  // Claude never gets to stop while the check fails: every turn on the same
+  // commit starts the next one with the last result, without running the
+  // check again.
   const said = w.submitted.length
   await $.turn.complete(turnDone('Waiting on the writer.'))
-  await $.turn.complete(turnDone('Read the logs.'))
-  expect(ranCheck()).toBe(1)
-  expect(w.submitted.length).toBe(said)
-
-  // A turn ending with a question to the operator is sent back once; asked
-  // again right after, it goes to the operator.
-  await $.turn.complete(turnDone('Two ways to go. Which do you want?'))
-  expect(w.submitted.length).toBe(said + 1)
-  expect(w.submitted.at(-1)).toContain("don't ask the operator")
-  await $.turn.complete(turnDone('It reverses your ruling. Say go?'))
-  expect(w.submitted.length).toBe(said + 1)
-
-  // Claiming the goal done on that commit is sent back, once.
+  await $.turn.complete(turnDone('Which do you want?'))
   await $.turn.complete(turnDone('The goal is done.'))
   expect(ranCheck()).toBe(1)
-  expect(w.submitted.length).toBe(said + 2)
-  expect(w.submitted.at(-1)).toContain('nothing committed since the last check')
-  await $.turn.complete(turnDone('The goal is done.'))
-  expect(w.submitted.length).toBe(said + 2)
+  expect(w.submitted.length).toBe(said + 3)
+  expect(w.submitted.at(-1)).toContain('mygoal: not done (no new commit)')
+  expect(w.submitted.at(-1)).toContain('failed: a::two')
 
   // A new commit: the check runs once, and the message says what changed.
   w.head = 'bbbbbbbb2222'
@@ -153,7 +142,7 @@ test('a check that cannot reach the game is not a result: told once, run again o
   const said = w.submitted.length
   await $.turn.complete(turnDone('Asked the writer to launch it.'))
   expect(ranCheck()).toBe(2)
-  expect(w.submitted.length).toBe(said)
+  expect(w.submitted.length).toBe(said + 1)
 
   // The game is back: the same commit is checked for real.
   w.checkSays = ''
@@ -206,8 +195,6 @@ test('while a goal works, an agent silent for 10 minutes gets a check-up turn', 
   expect(drawn).toContain('response: holding built (idle since 22:17)')
   expect(drawn).toContain('perf: heard from 22 min ago')
   expect(drawn).toContain('instruction: do 9p')
-  // Idle since minute 19: checked on 2 minutes later, not 10.
-  expect(w.submitted.at(-1)).toContain('idle: writer')
 })
 
 test('the goal is in every request while it is open', async ($, on) => {

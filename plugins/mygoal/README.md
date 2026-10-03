@@ -99,9 +99,10 @@ second copy.
   refused.
 - **After each turn** (`turn.complete` then `evaluate`): skipped for
   subagents and stopped turns. Reads the check repo's HEAD.
-  - **Same commit as last checked:** nothing runs, nothing is said. Only a
-    turn whose words claim the goal done (`CLAIMS_DONE`) is sent back with
-    the last result, once per commit.
+  - **Same commit as last checked:** the check doesn't run again, but the
+    next turn starts at once with the last result. Claude never gets to
+    stop while the check fails; only it passing or the operator's stop
+    ends the goal.
   - **A new commit:** runs the check with no shell and a 10 minute limit,
     keeps its exit code and the last 4000 characters. If the output says
     it could not reach what it tests (`UNREACHABLE`, such as no game

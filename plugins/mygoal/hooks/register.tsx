@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Agent, Check, Run, Status, Verdict } from '../types'
+import type { Check, Run, Status, Verdict } from '../types'
 
 // /mygoal: keeps Claude on the operator's goal until it is truly done.
 //
@@ -30,10 +30,6 @@ const CHANGES_CHARS = 40000
 // running): not a test result, so the commit stays unchecked and the check
 // runs again after a later turn, told once.
 const UNREACHABLE = /no .{0,60} answering|connection refused|could not connect/i
-// A turn that ends by asking the operator something, read from its end.
-const ASKS = /\?\s*$|\b(say go|your call|tell me|do you want|which do you)\b/i
-// A turn that claims the goal done.
-const CLAIMS_DONE = /\b(goal (is )?(done|met|complete)|all (\d+ )?(\w+ )?tests? pass(ed)?)\b/i
 
 const goalText = atom({ plugin: 'mygoal', key: 'text' } as const, '')
 const status = atom({ plugin: 'mygoal', key: 'status' } as const, 'none')
@@ -49,15 +45,11 @@ const note = atom({ plugin: 'mygoal', key: 'note' } as const, '')
 
 // One check-and-judge at a time.
 let busy = false
-// Whether the last turn was started by sending a question back.
-let askedBack = false
 
 // The other sessions this one works with, by name, and when each was last
 // heard from (its message or its idle notice) or last checked on. While a
 // goal is working, one silent for CHECK_IN_MS gets a check-up turn.
 const CHECK_IN_MS = 10 * 60 * 1000
-// An agent whose last word was its idle notice has nothing to do: sooner.
-const IDLE_CHECK_IN_MS = 2 * 60 * 1000
 const CHECK_EVERY_MS = 60 * 1000
 const SAID_CHARS = 160
 const agents = atom({ plugin: 'mygoal', key: 'agents' } as const, {})
@@ -84,14 +76,10 @@ async function checkIn($: EngineInterface) {
   await update($, now, () => t)
   if ((await read($, status)) !== 'working') return
   const all = await read($, agents)
-  const wait = (x: Agent) => (x.said.includes('idle since') ? IDLE_CHECK_IN_MS : CHECK_IN_MS)
-  const silent = Object.keys(all).filter(name => t - Math.max(all[name].heardAt, all[name].checkedAt) >= wait(all[name]))
+  const silent = Object.keys(all).filter(name => t - Math.max(all[name].heardAt, all[name].checkedAt) >= CHECK_IN_MS)
   if (silent.length === 0) return
-  const idle = silent.filter(n => all[n].said.includes('idle since'))
   await update($, agents, a => Object.fromEntries(Object.entries(a).map(([n, x]) => [n, silent.includes(n) ? { ...x, checkedAt: t } : x])))
-  await $.prompt.submit({
-    text: `mygoal: ${idle.length > 0 ? `idle: ${idle.join(', ')}. ` : ''}no word from ${silent.join(', ')}. Check each, give it its next step.`,
-  })
+  await $.prompt.submit({ text: `mygoal: no word from ${silent.join(', ')} in 10 min. Check each, give it its next step.` })
 }
 
 const JUDGE = [
@@ -257,11 +245,12 @@ function notDone(run: Run, before: Run | null, why: string): string {
     .join('\n')
 }
 
-// After a working turn (`answer`, what Claude said): when the check's repo
-// has a commit the check has not run on, run it once, ask the judge, then
-// finish or tell Claude what is missing, once. On a commit already checked,
-// nothing runs and nothing is said, unless the turn claims the goal done.
-async function evaluate($: EngineInterface, answer: string) {
+// After a working turn: Claude does not stop until the check passes. On a
+// new commit in the check's repo the check runs once and its result starts
+// the next turn; on a commit already checked, the next turn starts at once
+// with the last result. Only the check passing with the judge agreeing, or
+// the operator's stop, ends it.
+async function evaluate($: EngineInterface) {
   const check = await read($, approved)
   if (!check) return
   const repo = repoOf(check)
@@ -270,17 +259,7 @@ async function evaluate($: EngineInterface, answer: string) {
   const before = await read($, last)
 
   if (head === (await read($, checked))) {
-    const sentBack = askedBack
-    askedBack = false
-    if (before && CLAIMS_DONE.test(answer) && (await read($, told)) !== `${head} done`) {
-      await update($, told, () => `${head} done`)
-      await persist($)
-      await $.prompt.submit({ text: notDone(before, null, '(nothing committed since the last check)') })
-    } else if (ASKS.test(answer.slice(-300)) && !sentBack) {
-      // Once: asked again right after, it goes to the operator.
-      askedBack = true
-      await $.prompt.submit({ text: 'mygoal: don\'t ask the operator. Decide from the docs, record it, carry on. Ask only to reverse a ruling.' })
-    }
+    await $.prompt.submit({ text: before ? notDone(before, null, '(no new commit)') : 'mygoal: not done. Keep working.' })
     return
   }
 
@@ -297,19 +276,12 @@ async function evaluate($: EngineInterface, answer: string) {
   const n = (await read($, checks)) + 1
   await update($, checks, () => n)
 
-  // Not a test result: the commit stays unchecked, so a later turn runs the
-  // check again; Claude is told once.
+  // Not a test result: the commit stays unchecked, so the next turn runs the
+  // check again.
   if (exitCode !== 0 && UNREACHABLE.test(tail)) {
     await update($, note, () => `check ${n} on ${head.slice(0, 8)} could not reach what it tests`)
-    if ((await read($, told)) !== `${head} unreachable`) {
-      await update($, told, () => `${head} unreachable`)
-      await persist($)
-      await $.prompt.submit({
-        text: `mygoal: the check can't reach what it tests (${head.slice(0, 8)}); get it running. Retried quietly.\n${tail.split('\n').slice(-5).join('\n')}`,
-      })
-    } else {
-      await persist($)
-    }
+    await persist($)
+    await $.prompt.submit({ text: `mygoal: the check can't reach what it tests (${head.slice(0, 8)}); get it running.\n${tail.split('\n').slice(-3).join('\n')}` })
     return
   }
 
@@ -459,7 +431,7 @@ export const register: Register = on => {
         ? `First propose the check with propose_check. ${PROPOSING}`
         : s === 'approval'
           ? 'The check awaits the operator\'s approval; no goal work until then.'
-          : 'Only this goal. Read the docs, decide yourself, never wait on the operator. With other sessions on it, you orchestrate: they edit, build and test; you decide, direct, check and keep them working.'
+          : 'Only this goal. You make every decision and get every step done: never ask the operator what to do, never leave an agent waiting on them. With other sessions on it, you orchestrate: they edit, build and test; you decide, direct, check and keep them working.'
     const text = [
       `Goal (/mygoal): ${await read($, goalText)}`,
       'You don\'t decide done: the check runs on each new commit and a judge reads its output. ' + step,
@@ -475,7 +447,7 @@ export const register: Register = on => {
     if (s === 'working') {
       busy = true
       try {
-        await evaluate($, e.answer ?? '')
+        await evaluate($)
       } finally {
         busy = false
       }
