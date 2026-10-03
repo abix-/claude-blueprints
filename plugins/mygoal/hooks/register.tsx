@@ -358,7 +358,7 @@ export const register: Register = on => {
 
   // While a goal is open, nothing Claude runs may touch where the goal is
   // kept (the plugin store) or this mod's code: the repo's
-  // claude/plugins/mygoal, loaded in place through the claude-blueprints
+  // plugins/mygoal, loaded in place through the claude-blueprints
   // marketplace, which Claude Code also keeps under
   // ~/.claude/plugins/cache/claude-blueprints/mygoal.
   on('tool.call', async ($, e, next) => {

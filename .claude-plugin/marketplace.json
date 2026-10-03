@@ -5,7 +5,7 @@
   "plugins": [
     {
       "name": "mygoal",
-      "source": "./claude/plugins/mygoal",
+      "source": "./plugins/mygoal",
       "description": "Work on the operator's goal until an approved check passes and a separate judge agrees"
     }
   ]

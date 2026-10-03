@@ -40,7 +40,8 @@ It stops at the turn limit (30) or when the operator presses stop.
 
 ## Where it lives and how it loads
 
-The repo's `claude/plugins/mygoal` is the plugin: `.claude-plugin/plugin.json`,
+The repo's `plugins/mygoal` is the plugin (at the repo root, not under
+`claude/`, which sync.ps1 copies into `~/.claude`): `.claude-plugin/plugin.json`,
 `hooks/hooks.json`, `hooks/register.tsx` with its test
 `hooks/register.test.tsx`, and `types/index.d.ts`. The repo root's
 `.claude-plugin/marketplace.json` lists it, and it is installed once:

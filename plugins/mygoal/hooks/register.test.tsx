@@ -101,7 +101,7 @@ test('while a goal is open, Claude cannot touch the goal store or the mod', asyn
   const w = world(on)
   on('tool.call', async () => ({ result: 'ran' }) as never)
   await start($, w)
-  const r = await $.tool.call({ tool: 'Edit', file_path: 'C:\\code\\claude-blueprints\\claude\\plugins\\mygoal\\hooks\\register.tsx', old_string: 'a', new_string: 'b' } as never)
+  const r = await $.tool.call({ tool: 'Edit', file_path: 'C:\\code\\claude-blueprints\\plugins\\mygoal\\hooks\\register.tsx', old_string: 'a', new_string: 'b' } as never)
   expect(JSON.stringify(r)).toContain('not Claude')
   const s = await $.tool.call({ tool: 'Bash', command: 'cat ~/.claude/plugins/store/mygoal.json' } as never)
   expect(JSON.stringify(s)).toContain('not Claude')
