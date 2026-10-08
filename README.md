@@ -181,6 +181,8 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | Skill | Description |
 |-------|-------------|
 | [/1note](skills/1note/) | Read and search OneNote notebooks via COM interop |
+| [onelog](skills/onelog/) | The onelog notebook: YAML pages, projects, daily log, backup |
+| [onelog-orchestrator](skills/onelog-orchestrator/) | The one session that plans the day, starts an agent per project and hands out work |
 
 ## Hooks
 
