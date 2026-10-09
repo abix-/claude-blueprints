@@ -1,0 +1,157 @@
+| Size | Store | Question | Middle ms | Fastest ms | Slowest ms | Runs |
+|---|---|---|---:|---:|---:|---:|
+| 1x (327 pages) | yaml | import every page | 127 | 127 | 127 | 1 |
+| 1x (327 pages) | yaml | open the daily section | 40.74 | 39.37 | 42.63 | 8 |
+| 1x (327 pages) | yaml | open one page | 0.193 | 0.191 | 0.226 | 50 |
+| 1x (327 pages) | yaml | save one page | 0.362 | 0.354 | 0.495 | 50 |
+| 1x (327 pages) | yaml | search every page | 144 | 144 | 145 | 3 |
+| 1x (327 pages) | yaml | active projects | 22.01 | 21.44 | 24.37 | 14 |
+| 1x (327 pages) | json | import every page | 135 | 135 | 135 | 1 |
+| 1x (327 pages) | json | open the daily section | 15.58 | 15.31 | 18.10 | 19 |
+| 1x (327 pages) | json | open one page | 0.209 | 0.206 | 0.285 | 50 |
+| 1x (327 pages) | json | save one page | 0.509 | 0.493 | 0.603 | 50 |
+| 1x (327 pages) | json | search every page | 22.55 | 21.90 | 24.22 | 14 |
+| 1x (327 pages) | json | active projects | 4.16 | 3.90 | 6.68 | 50 |
+| 1x (327 pages) | yaml+tantivy | import every page | 260 | 260 | 260 | 1 |
+| 1x (327 pages) | yaml+tantivy | open the daily section | 0.362 | 0.355 | 0.995 | 50 |
+| 1x (327 pages) | yaml+tantivy | open one page | 0.191 | 0.189 | 0.301 | 50 |
+| 1x (327 pages) | yaml+tantivy | save one page | 50.09 | 47.37 | 50.68 | 7 |
+| 1x (327 pages) | yaml+tantivy | search every page | 0.519 | 0.480 | 0.867 | 50 |
+| 1x (327 pages) | yaml+tantivy | search the full-text index | 0.010 | 0.010 | 0.074 | 50 |
+| 1x (327 pages) | yaml+tantivy | active projects | 0.029 | 0.029 | 0.286 | 50 |
+| 1x (327 pages) | sqlite | import every page | 63.99 | 63.99 | 63.99 | 1 |
+| 1x (327 pages) | sqlite | open the daily section | 0.146 | 0.144 | 0.234 | 50 |
+| 1x (327 pages) | sqlite | open one page | 0.178 | 0.177 | 0.269 | 50 |
+| 1x (327 pages) | sqlite | save one page | 2.42 | 2.28 | 15.70 | 50 |
+| 1x (327 pages) | sqlite | search every page | 1.07 | 1.07 | 1.65 | 50 |
+| 1x (327 pages) | sqlite | search the full-text index | 0.022 | 0.022 | 0.030 | 50 |
+| 1x (327 pages) | sqlite | active projects | 0.014 | 0.014 | 0.044 | 50 |
+| 1x (327 pages) | turso | import every page | 1251 | 1251 | 1251 | 1 |
+| 1x (327 pages) | turso | open the daily section | 0.222 | 0.219 | 0.798 | 50 |
+| 1x (327 pages) | turso | open one page | 0.167 | 0.165 | 0.578 | 50 |
+| 1x (327 pages) | turso | save one page | 6.13 | 5.59 | 15.82 | 44 |
+| 1x (327 pages) | turso | search every page | 0.629 | 0.608 | 5.50 | 50 |
+| 1x (327 pages) | turso | search the full-text index | 0.064 | 0.060 | 0.081 | 50 |
+| 1x (327 pages) | turso | active projects | 0.056 | 0.056 | 0.178 | 50 |
+| 1x (327 pages) | duckdb | import every page | 1598 | 1598 | 1598 | 1 |
+| 1x (327 pages) | duckdb | open the daily section | 0.446 | 0.403 | 1.27 | 50 |
+| 1x (327 pages) | duckdb | open one page | 0.431 | 0.399 | 0.677 | 50 |
+| 1x (327 pages) | duckdb | save one page | 5.98 | 5.62 | 7.63 | 50 |
+| 1x (327 pages) | duckdb | search every page | 0.809 | 0.792 | 1.56 | 50 |
+| 1x (327 pages) | duckdb | active projects | 0.440 | 0.419 | 0.645 | 50 |
+| 1x (327 pages) | postgres | import every page | 211 | 211 | 211 | 1 |
+| 1x (327 pages) | postgres | open the daily section | 0.742 | 0.712 | 1.31 | 50 |
+| 1x (327 pages) | postgres | open one page | 0.333 | 0.316 | 0.758 | 50 |
+| 1x (327 pages) | postgres | save one page | 1.50 | 1.20 | 2.19 | 50 |
+| 1x (327 pages) | postgres | search every page | 1.03 | 1.02 | 1.38 | 50 |
+| 1x (327 pages) | postgres | search the full-text index | 0.804 | 0.774 | 1.08 | 50 |
+| 1x (327 pages) | postgres | active projects | 0.142 | 0.098 | 0.418 | 50 |
+| 1x (327 pages) | surrealdb | import every page | 325 | 325 | 325 | 1 |
+| 1x (327 pages) | surrealdb | open the daily section | 3.81 | 3.23 | 5.50 | 50 |
+| 1x (327 pages) | surrealdb | open one page | 0.280 | 0.270 | 0.659 | 50 |
+| 1x (327 pages) | surrealdb | save one page | 2.70 | 2.58 | 18.23 | 50 |
+| 1x (327 pages) | surrealdb | search every page | 2.74 | 2.39 | 4.03 | 50 |
+| 1x (327 pages) | surrealdb | search the full-text index | 0.303 | 0.227 | 12.19 | 50 |
+| 1x (327 pages) | surrealdb | active projects | 0.523 | 0.465 | 1.37 | 50 |
+| 1x (327 pages) | polodb | import every page | 40.54 | 40.54 | 40.54 | 1 |
+| 1x (327 pages) | polodb | open the daily section | 5.01 | 4.85 | 5.64 | 50 |
+| 1x (327 pages) | polodb | open one page | 0.217 | 0.206 | 0.333 | 50 |
+| 1x (327 pages) | polodb | save one page | 5.73 | 5.50 | 6.36 | 50 |
+| 1x (327 pages) | polodb | search every page | 4.51 | 4.37 | 5.05 | 50 |
+| 1x (327 pages) | polodb | active projects | 2.80 | 2.64 | 3.04 | 50 |
+| 1x (327 pages) | redb | import every page | 15.98 | 15.98 | 15.98 | 1 |
+| 1x (327 pages) | redb | open the daily section | 0.064 | 0.063 | 0.151 | 50 |
+| 1x (327 pages) | redb | open one page | 0.157 | 0.155 | 0.257 | 50 |
+| 1x (327 pages) | redb | save one page | 3.08 | 2.50 | 4.16 | 50 |
+| 1x (327 pages) | redb | search every page | 0.633 | 0.565 | 1.11 | 50 |
+| 1x (327 pages) | redb | active projects | 0.005 | 0.005 | 0.012 | 50 |
+| 1x (327 pages) | fjall | import every page | 178 | 178 | 178 | 1 |
+| 1x (327 pages) | fjall | open the daily section | 0.120 | 0.118 | 0.144 | 50 |
+| 1x (327 pages) | fjall | open one page | 0.157 | 0.156 | 0.204 | 50 |
+| 1x (327 pages) | fjall | save one page | 2.24 | 2.09 | 2.49 | 50 |
+| 1x (327 pages) | fjall | search every page | 0.600 | 0.574 | 1.41 | 50 |
+| 1x (327 pages) | fjall | active projects | 0.012 | 0.012 | 0.021 | 50 |
+| 1x (327 pages) | lmdb | import every page | 54.94 | 54.94 | 54.94 | 1 |
+| 1x (327 pages) | lmdb | open the daily section | 0.055 | 0.054 | 0.083 | 50 |
+| 1x (327 pages) | lmdb | open one page | 0.158 | 0.154 | 0.210 | 50 |
+| 1x (327 pages) | lmdb | save one page | 0.465 | 0.359 | 0.960 | 50 |
+| 1x (327 pages) | lmdb | search every page | 0.610 | 0.527 | 1.77 | 50 |
+| 1x (327 pages) | lmdb | active projects | 0.003 | 0.003 | 0.015 | 50 |
+| 10x (3270 pages) | yaml | import every page | 1328 | 1328 | 1328 | 1 |
+| 10x (3270 pages) | yaml | open the daily section | 404 | 400 | 424 | 3 |
+| 10x (3270 pages) | yaml | open one page | 0.199 | 0.197 | 0.231 | 50 |
+| 10x (3270 pages) | yaml | save one page | 0.369 | 0.358 | 0.767 | 50 |
+| 10x (3270 pages) | yaml | search every page | 1428 | 1421 | 1436 | 3 |
+| 10x (3270 pages) | yaml | active projects | 223 | 221 | 224 | 3 |
+| 10x (3270 pages) | json | import every page | 1425 | 1425 | 1425 | 1 |
+| 10x (3270 pages) | json | open the daily section | 151 | 149 | 173 | 3 |
+| 10x (3270 pages) | json | open one page | 0.212 | 0.210 | 0.295 | 50 |
+| 10x (3270 pages) | json | save one page | 0.502 | 0.491 | 0.628 | 50 |
+| 10x (3270 pages) | json | search every page | 216 | 214 | 225 | 3 |
+| 10x (3270 pages) | json | active projects | 41.78 | 40.85 | 43.72 | 8 |
+| 10x (3270 pages) | yaml+tantivy | import every page | 1512 | 1512 | 1512 | 1 |
+| 10x (3270 pages) | yaml+tantivy | open the daily section | 4.31 | 4.12 | 7.43 | 50 |
+| 10x (3270 pages) | yaml+tantivy | open one page | 0.204 | 0.199 | 0.540 | 50 |
+| 10x (3270 pages) | yaml+tantivy | save one page | 50.32 | 47.44 | 51.91 | 6 |
+| 10x (3270 pages) | yaml+tantivy | search every page | 6.49 | 6.05 | 8.59 | 46 |
+| 10x (3270 pages) | yaml+tantivy | search the full-text index | 0.080 | 0.078 | 0.089 | 50 |
+| 10x (3270 pages) | yaml+tantivy | active projects | 0.257 | 0.252 | 0.313 | 50 |
+| 10x (3270 pages) | sqlite | import every page | 828 | 828 | 828 | 1 |
+| 10x (3270 pages) | sqlite | open the daily section | 1.17 | 1.14 | 1.66 | 50 |
+| 10x (3270 pages) | sqlite | open one page | 0.173 | 0.169 | 0.310 | 50 |
+| 10x (3270 pages) | sqlite | save one page | 2.39 | 2.19 | 4.48 | 50 |
+| 10x (3270 pages) | sqlite | search every page | 19.70 | 19.12 | 20.54 | 16 |
+| 10x (3270 pages) | sqlite | search the full-text index | 0.046 | 0.045 | 0.061 | 50 |
+| 10x (3270 pages) | sqlite | active projects | 0.112 | 0.106 | 0.773 | 50 |
+| 10x (3270 pages) | turso | import every page | 16096 | 16096 | 16096 | 1 |
+| 10x (3270 pages) | turso | open the daily section | 2.50 | 2.37 | 3.97 | 50 |
+| 10x (3270 pages) | turso | open one page | 0.167 | 0.166 | 0.437 | 50 |
+| 10x (3270 pages) | turso | save one page | 6.12 | 5.48 | 23.04 | 46 |
+| 10x (3270 pages) | turso | search every page | 52.44 | 42.60 | 56.15 | 6 |
+| 10x (3270 pages) | turso | search the full-text index | 0.155 | 0.153 | 0.360 | 50 |
+| 10x (3270 pages) | turso | active projects | 0.800 | 0.781 | 1.02 | 50 |
+| 10x (3270 pages) | duckdb | import every page | 41807 | 41807 | 41807 | 1 |
+| 10x (3270 pages) | duckdb | open the daily section | 1.59 | 1.53 | 2.31 | 50 |
+| 10x (3270 pages) | duckdb | open one page | 0.459 | 0.437 | 0.594 | 50 |
+| 10x (3270 pages) | duckdb | save one page | 9.62 | 9.23 | 87.29 | 22 |
+| 10x (3270 pages) | duckdb | search every page | 4.57 | 4.29 | 5.38 | 50 |
+| 10x (3270 pages) | duckdb | active projects | 0.684 | 0.627 | 0.991 | 50 |
+| 10x (3270 pages) | postgres | import every page | 2152 | 2152 | 2152 | 1 |
+| 10x (3270 pages) | postgres | open the daily section | 5.04 | 4.87 | 5.88 | 50 |
+| 10x (3270 pages) | postgres | open one page | 0.292 | 0.273 | 0.914 | 50 |
+| 10x (3270 pages) | postgres | save one page | 1.32 | 1.26 | 2.21 | 50 |
+| 10x (3270 pages) | postgres | search every page | 10.06 | 9.81 | 10.62 | 30 |
+| 10x (3270 pages) | postgres | search the full-text index | 7.38 | 7.01 | 7.90 | 41 |
+| 10x (3270 pages) | postgres | active projects | 0.326 | 0.299 | 0.533 | 50 |
+| 10x (3270 pages) | surrealdb | import every page | 2025 | 2025 | 2025 | 1 |
+| 10x (3270 pages) | surrealdb | open the daily section | 31.82 | 31.41 | 33.68 | 10 |
+| 10x (3270 pages) | surrealdb | open one page | 0.268 | 0.261 | 0.535 | 50 |
+| 10x (3270 pages) | surrealdb | save one page | 2.73 | 2.56 | 4.46 | 50 |
+| 10x (3270 pages) | surrealdb | search every page | 22.39 | 21.21 | 25.41 | 14 |
+| 10x (3270 pages) | surrealdb | search the full-text index | 0.760 | 0.730 | 1.38 | 50 |
+| 10x (3270 pages) | surrealdb | active projects | 3.65 | 3.49 | 5.13 | 50 |
+| 10x (3270 pages) | polodb | import every page | 338 | 338 | 338 | 1 |
+| 10x (3270 pages) | polodb | open the daily section | 35.90 | 34.92 | 37.60 | 9 |
+| 10x (3270 pages) | polodb | open one page | 0.206 | 0.204 | 0.324 | 50 |
+| 10x (3270 pages) | polodb | save one page | 12.35 | 11.83 | 13.38 | 25 |
+| 10x (3270 pages) | polodb | search every page | 31.93 | 30.46 | 32.28 | 10 |
+| 10x (3270 pages) | polodb | active projects | 11.14 | 10.84 | 12.07 | 27 |
+| 10x (3270 pages) | redb | import every page | 100 | 100 | 100 | 1 |
+| 10x (3270 pages) | redb | open the daily section | 0.596 | 0.593 | 0.722 | 50 |
+| 10x (3270 pages) | redb | open one page | 0.160 | 0.156 | 0.488 | 50 |
+| 10x (3270 pages) | redb | save one page | 3.64 | 2.83 | 4.63 | 50 |
+| 10x (3270 pages) | redb | search every page | 8.85 | 8.54 | 10.23 | 34 |
+| 10x (3270 pages) | redb | active projects | 0.037 | 0.037 | 0.057 | 50 |
+| 10x (3270 pages) | fjall | import every page | 250 | 250 | 250 | 1 |
+| 10x (3270 pages) | fjall | open the daily section | 1.39 | 1.38 | 3.13 | 50 |
+| 10x (3270 pages) | fjall | open one page | 0.161 | 0.159 | 0.229 | 50 |
+| 10x (3270 pages) | fjall | save one page | 2.20 | 2.01 | 2.44 | 50 |
+| 10x (3270 pages) | fjall | search every page | 9.26 | 8.55 | 15.44 | 31 |
+| 10x (3270 pages) | fjall | active projects | 0.066 | 0.063 | 0.111 | 50 |
+| 10x (3270 pages) | lmdb | import every page | 471 | 471 | 471 | 1 |
+| 10x (3270 pages) | lmdb | open the daily section | 0.498 | 0.492 | 0.803 | 50 |
+| 10x (3270 pages) | lmdb | open one page | 0.158 | 0.155 | 0.254 | 50 |
+| 10x (3270 pages) | lmdb | save one page | 0.482 | 0.402 | 2.03 | 50 |
+| 10x (3270 pages) | lmdb | search every page | 9.01 | 8.08 | 31.52 | 29 |
+| 10x (3270 pages) | lmdb | active projects | 0.027 | 0.027 | 0.052 | 50 |
+took 95 s
