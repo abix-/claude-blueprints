@@ -13,34 +13,34 @@ below is copied from it.
 
 ## Findings
 
-The best store for each question, from the tables below, at the notebook's
-real size (327 pages) and at ten times it. "Best with queries" is the best
-store that also has SQL or a query language and a full-text index, the
-things the app needs without writing its own indexes. Times in ms.
+The app has to ask its questions (list a section by date, filter by
+status, search text), so only stores that can answer them themselves are
+ranked here: SQLite, Turso, DuckDB, PostgreSQL, SurrealDB, PoloDB and YAML +
+tantivy. The stores without queries (YAML and JSON files, redb, fjall, LMDB)
+stay in the tables below as reference points; YAML, what the app uses today,
+is shown beside the winners. Times in ms, at the notebook's real size (327
+pages) / at ten times it.
 
-| Question | Best | Runner-up | Best with queries |
+| Question | Best | Runner-up | Today (YAML) |
 |---|---|---|---|
-| Import every page | redb 16 / 100 | PoloDB 41 at 1x, fjall 250 at 10x | SQLite 64 / 828 |
-| Open the daily section | LMDB 0.055 / 0.50 | redb 0.064 / 0.60 | SQLite 0.146 / 1.17 |
-| Open one page | redb and fjall 0.157 at 1x, LMDB 0.158 at 10x | LMDB 0.158 at 1x, redb 0.160 at 10x | Turso 0.167 / 0.167, SQLite 0.178 / 0.173 |
-| Save one page | YAML 0.36 / 0.37 (not forced to disk) | LMDB 0.47 / 0.48 (forced, not checked against the disk) | PostgreSQL 1.50 / 1.32, then SQLite 2.42 / 2.39 |
-| Search every page for text | YAML + tantivy 0.52 at 1x, DuckDB 4.57 at 10x | fjall 0.60 at 1x, YAML + tantivy 6.49 at 10x | YAML + tantivy 0.52 / 6.49 |
-| Full-text search | YAML + tantivy 0.010 at 1x, SQLite 0.046 at 10x | SQLite 0.022 at 1x, YAML + tantivy 0.080 at 10x | YAML + tantivy 0.010 at 1x, SQLite 0.046 at 10x |
-| Active projects | LMDB 0.003 / 0.027 | redb 0.005 / 0.037 | SQLite 0.014 / 0.112 |
-| Readable git diff, fix a page by hand | YAML | JSON (diffs poor, a page is one line) | none |
-| No server | every store but PostgreSQL | | SQLite |
-| **Overall for this app** | **SQLite** | PostgreSQL (needs a server, slower than SQLite on 5 of 7 questions) | SQLite |
+| Import every page | PoloDB 41 / 338 | SQLite 64 / 828 | 127 / 1328 |
+| Open the daily section | SQLite 0.146 / 1.17 | Turso 0.222 at 1x, DuckDB 1.59 at 10x | 40.74 / 404 |
+| Open one page | Turso 0.167 / 0.167 | SQLite 0.178 / 0.173 | 0.193 / 0.199 |
+| Save one page | PostgreSQL 1.50 / 1.32 | SQLite 2.42 / 2.39 | 0.362 / 0.369 (not forced to disk) |
+| Search every page for text | YAML + tantivy 0.52 at 1x, DuckDB 4.57 at 10x | Turso 0.63 at 1x, YAML + tantivy 6.49 at 10x | 144 / 1428 |
+| Full-text search | YAML + tantivy 0.010 at 1x, SQLite 0.046 at 10x | SQLite 0.022 at 1x, YAML + tantivy 0.080 at 10x | none |
+| Active projects | SQLite 0.014 / 0.112 | YAML + tantivy 0.029 / 0.257 | 22.01 / 223 |
+| No server | all but PostgreSQL | | |
+| **Overall for this app** | **SQLite** | PostgreSQL | |
 
-**Why SQLite overall:** among the stores that can answer the app's
-questions themselves (a query language and a full-text index), it is the
-fastest or close on every question at both sizes, needs no server, keeps
-everything in one file, and forces every save to disk. YAML + tantivy beats
-it at searching, but every save costs 50 ms. LMDB and redb are faster at
-lists and lookups but have no queries and no full-text search, so the app
-would write and keep every index itself. PostgreSQL wins two questions,
-saving (1.5 against 2.4 ms) and searching every page for text (1.03 against
-1.07 ms, 10.1 against 19.7 ms at 10x), and needs its server running; it
-would be the pick if many users or machines shared one notebook.
+**Why SQLite overall:** it wins three questions outright (the daily
+section, active projects, full-text search at 10x) and is second on three
+more (import, open, save), the only store in the top two on six of the
+seven; it needs no server, keeps everything in one file, and forces every
+save to disk. YAML + tantivy wins the searches but every save costs 50 ms.
+PostgreSQL wins the save (1.5 against 2.4 ms) and needs its server running;
+it would be the pick if many users or machines shared one notebook. PoloDB
+imports fastest but never forces a save to disk and has an index bug.
 
 ## How each store was set up
 
