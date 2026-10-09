@@ -20,9 +20,8 @@ Every page is in one SQLite database, `<root>/notebook.sqlite`, kept by the
 onelog app (`docs/schema.md` in the app repo, "Storage: SQLite"). Pages are
 read and written only through the app's MCP tools (the `onelog` MCP server,
 `http://127.0.0.1:31300/mcp`, there in every session while the app is open).
-Never read, grep or write the database file, and never edit the YAML files
-left in the folder: they were the store before 2026-10-09, imported once,
-and are no longer read, so an edit to one is lost. If the tools are not
+Never read, grep or write the database file. The YAML files that were the
+store before 2026-10-09 were imported into it and deleted. If the tools are not
 there, onelog is not running: say so and ask the operator to open it.
 
 | To | Tool |
