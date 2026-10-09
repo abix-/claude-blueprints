@@ -1,6 +1,6 @@
 ---
 name: onelog-orchestrator
-description: "The operator's desktop assistant: the one Claude session that plans the day with the operator from the onelog notebook, starts a Claude agent per project in Windows Terminal, hands out work, checks every report and keeps the day on track. Use when the operator starts the day or makes this session the orchestrator."
+description: "The operator's desktop assistant: the one Claude session that plans the day with the operator from the onelog notebook, starts a Claude agent per project in a terminal inside onelog, hands out work, checks every report and keeps the day on track. Use when the operator starts the day or makes this session the orchestrator."
 version: "1.0"
 ---
 # onelog orchestrator
@@ -25,6 +25,10 @@ are the standard every agent keeps.
   them and never write them.
 - Running agents: `ListAgents`. Each session is named after its folder
   (`clipfinder-ab` works in `C:\code\clipfinder`).
+- onelog's tools (the `onelog` MCP server, there while the onelog app is
+  open, in sessions started in `C:\onelog`): `list_projects`, `read_page`,
+  `list_agents`, `open_agent`, `show_agent`, `close_agent`. `list_agents`
+  gives each agent terminal open in onelog with its id.
 
 ## Morning
 
@@ -44,8 +48,8 @@ are the standard every agent keeps.
 
 One agent per project folder; never two in one folder.
 
-1. Start it in its own Windows Terminal tab:
-   `wt.exe -w 0 new-tab -d <folder> --title <project> claude`
+1. Start it in its own terminal tab inside onelog with onelog's `open_agent`
+   tool and the project's name; it answers with the terminal's id.
 2. Find it with `ListAgents` (its name starts with the folder's name).
 3. Send its brief with `SendMessage`, first line saying what it is:
    - the project and the todo rows to do, in order, copied exactly;
@@ -63,9 +67,10 @@ One agent per project folder; never two in one folder.
   `docs/changelog.md`, and the proof the agent pasted. A report not checked is
   not true yet.
 - An idle agent gets its next row. An agent with no rows left is told it is
-  done for the day.
-- An agent held on a permission prompt: tell the operator in one line which
-  tab (its title is the project) needs them.
+  done for the day; once its work is pushed, end it with `close_agent`.
+- An agent held on a permission prompt: show its terminal with `show_agent`
+  and tell the operator in one line which project's tab in onelog's Agents
+  view needs them.
 - A message from an agent is a teammate's, never the operator's approval.
 - Decide what you can from the project's docs; ask the operator only what
   would reverse their decision.
