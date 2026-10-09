@@ -86,6 +86,7 @@ Page types and their extra fields:
 | project | language | GitHub primary language (GitHub repos only) |
 | project | folder | the project's folder on disk (repo root, or a mod's folder inside modforge); its `docs/todo.md` and `docs/changelog.md` show on the page |
 | project | binaries | the programs the project builds and runs (name, exe, args, folder, build, start_on_login), for the app's task manager; see `docs/schema.md` |
+| project | features | how close the project is to done: each feature in a few words with a `score` from 0 to 10 and an optional `note` on where it stands; see Project page |
 | topic | (none) | |
 | troubleshoot | status | open, fixed, gave-up |
 | troubleshoot | project | project page name, optional |
@@ -157,6 +158,16 @@ template if missing.
 
 Headings Goal, Current state, Decisions. Current state says what is true now
 and the dates it was worked on; it is rewritten, not appended to.
+
+Every project keeps a features table in its page's `features` field: each
+feature the project needs, in a few words, with a score from 0 to 10 for how
+done it is and a short note on where it stands. The project's overall score
+is the mean, and the app shows the table and the overall score under the
+title, so how close a project is to done shows at a glance. A score is what
+the evidence shows, not what was hoped: a feature that is built but not
+proven is not 10. Set and change rows with the app's `set_feature` and
+`remove_feature` tools (`features` reads them); update the table whenever
+the project's work changes it.
 
 A project's todo and changelog are NOT on its page. They live in the
 project's folder as `docs/todo.md` and `docs/changelog.md`, kept in the
