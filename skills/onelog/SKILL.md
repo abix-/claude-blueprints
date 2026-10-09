@@ -1,7 +1,7 @@
 ---
 name: onelog
 description: "onelog, the operator's local notebook: personal knowledge base, project tracker, and daily log, its pages in a SQLite database read and written through the onelog app's MCP tools. Use when the operator asks to note, log, look up, or track anything, when recording what was done today, or when migrating OneNote pages."
-version: "3.0"
+version: "3.1"
 ---
 # onelog
 
@@ -36,6 +36,8 @@ there, onelog is not running: say so and ask the operator to open it.
 | today's daily page, made from the template when missing | `today` |
 | search every page | `search` |
 | a project's features table | `features`, `set_feature`, `remove_feature` |
+| a project's todo, or every project's | `todo`, `todo_add`, `todo_change`, `todo_finish` (the `todo` skill) |
+| a project's rank | `set_rank` |
 | open a page in the window | `open_page` |
 
 A page is named by its section and its name: `read_page` with section
@@ -92,7 +94,9 @@ Page types and their extra fields:
 | project | fork | true, false (GitHub repos only) |
 | project | visibility | public, private (GitHub repos only) |
 | project | language | GitHub primary language (GitHub repos only) |
-| project | folder | the project's folder on disk (repo root, or a mod's folder inside modforge); its `docs/todo.md` and `docs/changelog.md` show on the page |
+| project | folder | the project's folder on disk (repo root, or a mod's folder inside modforge); its `docs/changelog.md` shows on the page |
+| project | rank | whole number from 1, the projects to work on first; optional |
+| project | todo | the project's todo rows (`priority`, `system`, `todo`, `done_when`); kept with the todo tools, see Project page |
 | project | binaries | the programs the project builds and runs (name, exe, args, folder, build, start_on_login), for the app's task manager; see `docs/schema.md` |
 | project | features | how close the project is to done: each feature in a few words with a `score` from 0 to 10 and an optional `note` on where it stands; see Project page |
 | topic | (none) | |
@@ -125,7 +129,7 @@ number of cells is refused, with the line named. So:
    `list: "bullet"`, a numbered item `list: "number"`, a checkbox
    `list: "task"` with `done: false` and `task_added`. Checking one sets
    `done: true`, `done_at` and `edited`. A project's work items are not
-   checkboxes on its page; they go in its `docs/todo.md` (see Project page).
+   checkboxes on its page; they are its todo rows (see Project page).
 7. An item indented under another goes in that item's `children`.
 
 ## Rules
@@ -175,13 +179,17 @@ proven is not 10. Set and change rows with the app's `set_feature` and
 `remove_feature` tools (`features` reads them); update the table whenever
 the project's work changes it.
 
-A project's todo and changelog are NOT on its page. They live in the
-project's folder as `docs/todo.md` and `docs/changelog.md`, kept in the
-`todo` and `changelog` skills' standards by the Claude doing the work. The
-page names that folder in `folder`; the onelog app shows both files beside
-the page and gathers every project's todo rows in its Tasks view. onelog
-never writes them, and nothing from them is copied into the notebook. Every
-modforge mod has its own folder, todo and changelog.
+A project's todo is on its page, in the `todo` field, kept through the todo
+tools in the `todo` skill's standard. Its changelog stays in the repo as
+`docs/changelog.md`, in the `changelog` skill's standard, since it records
+the work done there; the page names the repo in `folder` and the app shows
+the changelog on the page. Finishing a row is `todo_finish`, then the
+changelog row in the repo. The page is one column: features, the page's
+boxes, the todo, then the changelog, each folding away. The Tasks view
+gathers every project's rows, by `rank` then priority. Every modforge mod has
+its own page and so its own todo; the changelog is modforge's. A project
+whose repo still has a `docs/todo.md` has not been moved yet
+(`onelog-import todos` moves it).
 
 The daily page still records what was done each day under the project's
 heading; find a project's days with `search` for `[[<name>]]`.

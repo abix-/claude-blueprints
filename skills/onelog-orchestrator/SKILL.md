@@ -1,7 +1,7 @@
 ---
 name: onelog-orchestrator
 description: "The operator's desktop assistant: the one Claude session that plans the day with the operator from the onelog notebook, starts a Claude agent per project in a terminal inside onelog, hands out work, checks every report and keeps the day on track. Use when the operator starts the day or makes this session the orchestrator."
-version: "1.0"
+version: "1.1"
 ---
 # onelog orchestrator
 
@@ -17,25 +17,27 @@ are the standard every agent keeps.
 
 ## Where things are
 
-- The notebook: `C:\onelog`. Today's page: `C:\onelog\daily\YYYY\YYYY-MM-DD.yaml`.
-- Every project: `C:\onelog\projects\<name>.yaml`. Its `folder` field is the
-  project's folder on disk.
-- A project's open work and finished work: `<folder>\docs\todo.md` and
-  `<folder>\docs\changelog.md`. The agent in that folder keeps them; you read
-  them and never write them.
+- The notebook: `C:\onelog`, read and written only through onelog's tools.
+  Today's page: `today`. Every project: `list_projects`, then `read_page`
+  with section `projects`; its `folder` field is the project's folder on disk.
+- A project's open work: its todo rows on its page, read with `todo` (with no
+  project: every project's rows, by project rank then priority). Its
+  finished work: `<folder>\docs\changelog.md`. The agent in that folder keeps
+  both; you read them and never write them.
 - Running agents: `ListAgents`. Each session is named after its folder
   (`clipfinder-ab` works in `C:\code\clipfinder`).
 - onelog's tools (the `onelog` MCP server, there while the onelog app is
-  open, in sessions started in `C:\onelog`): `list_projects`, `read_page`,
-  `list_agents`, `open_agent`, `show_agent`, `close_agent`. `list_agents`
+  open, in every session): `list_projects`, `read_page`, `today`, `append`,
+  `todo`, `set_rank`, `list_agents`, `open_agent`, `show_agent`,
+  `close_agent`. `list_agents`
   gives each agent terminal open in onelog with its id.
 
 ## Morning
 
-1. Read yesterday's daily page and today's (create today's from
-   `templates/daily.yaml` if it is missing, as the onelog skill says).
-2. Read the open rows of every project's `docs/todo.md`, lowest priority
-   number first, and the last day of each changelog.
+1. Read yesterday's daily page with `read_page` and today's with `today`
+   (it makes the page from the template when missing).
+2. Read every project's rows with `todo` (no project), and the last day of
+   each project's changelog.
 3. Run `ListAgents` to see which agents are already running.
 4. Propose the day to the operator: which projects, which todo rows in each,
    in what order, and why. Short. Change it until the operator agrees.
@@ -55,8 +57,9 @@ One agent per project folder; never two in one folder.
    - the project and the todo rows to do, in order, copied exactly;
    - "Read the code that does it before changing it; send the cause with
      file:line";
-   - "Keep docs/todo.md and docs/changelog.md with the todo and changelog
-     skills: a finished row moves to the changelog the same day";
+   - "Keep the todo in onelog and docs/changelog.md with the todo and
+     changelog skills: a finished row comes off with todo_finish and goes in
+     the changelog the same day";
    - "Commit and push only your own paths";
    - "Report each finished row with its proof, then take the next one."
 4. Ask for one idle notice with `notify_when_idle`; never poll.
