@@ -1,7 +1,7 @@
 ---
 name: onelog
 description: "onelog, the operator's local notebook: personal knowledge base, project tracker, and daily log, its pages in a SQLite database read and written through the onelog app's MCP tools. Use when the operator asks to note, log, look up, or track anything, when recording what was done today, or when migrating OneNote pages."
-version: "3.1"
+version: "3.2"
 ---
 # onelog
 
@@ -36,7 +36,7 @@ there, onelog is not running: say so and ask the operator to open it.
 | today's daily page, made from the template when missing | `today` |
 | search every page | `search` |
 | a project's features table | `features`, `set_feature`, `remove_feature` |
-| a project's todo, or every project's | `todo`, `todo_add`, `todo_change`, `todo_finish` (the `todo` skill) |
+| a project's todo, or every project's | `todo`, `todo_add`, `todo_change`, `todo_check`, `todo_finish` (the `todo` skill) |
 | a project's rank | `set_rank` |
 | open a page in the window | `open_page` |
 
@@ -96,7 +96,7 @@ Page types and their extra fields:
 | project | language | GitHub primary language (GitHub repos only) |
 | project | folder | the project's folder on disk (repo root, or a mod's folder inside modforge); its `docs/changelog.md` shows on the page |
 | project | rank | whole number from 1, the projects to work on first; optional |
-| project | todo | the project's todo rows (`priority`, `system`, `todo`, `done_when`); kept with the todo tools, see Project page |
+| project | todo | the project's todo rows (`priority`, `system`, `todo`, `done_when`, and `done` with `done_at` once checked); kept with the todo tools, see Project page |
 | project | binaries | the programs the project builds and runs (name, exe, args, folder, build, start_on_login), for the app's task manager; see `docs/schema.md` |
 | project | features | how close the project is to done: each feature in a few words with a `score` from 0 to 10 and an optional `note` on where it stands; see Project page |
 | topic | (none) | |
@@ -183,8 +183,11 @@ A project's todo is on its page, in the `todo` field, kept through the todo
 tools in the `todo` skill's standard. Its changelog stays in the repo as
 `docs/changelog.md`, in the `changelog` skill's standard, since it records
 the work done there; the page names the repo in `folder` and the app shows
-the changelog on the page. Finishing a row is `todo_finish`, then the
-changelog row in the repo. The page is one column: features, the page's
+the changelog on the page. Each row has a box. The Claude agent working
+a row runs its Done when test, checks it (`todo_check`), takes it off
+(`todo_finish`, which refuses an unchecked row), writes the changelog row in
+the repo, then commits and pushes; a row the operator checked by hand waits
+checked for the next agent. The page is one column: features, the page's
 boxes, the todo, then the changelog, each folding away. The Tasks view
 gathers every project's rows, by `rank` then priority. Every modforge mod has
 its own page and so its own todo; the changelog is modforge's. A project
