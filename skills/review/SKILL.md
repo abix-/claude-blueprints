@@ -292,7 +292,7 @@ Check associated docs before approving:
 
 If docs are clearly missing or stale and the update is small and unambiguous, make the doc update on the PR branch, re-read the diff, and include that change in the review.
 
-### Doc and changelog update (/done checklist)
+### Doc and changelog update (the onelog skill's endless finishing checklist)
 
 If the PR is missing doc updates, changelog entry, or has stale docs:
 1. Identify which docs in docs/ cover the changed systems (use docs/README.md file map)
@@ -300,7 +300,7 @@ If the PR is missing doc updates, changelog entry, or has stale docs:
 3. Add CHANGELOG.md entry if missing
 4. Commit doc updates on the PR branch before continuing review
 
-This is the same checklist as `/done`. The reviewer applies it when the implementer missed it.
+This is the same checklist as "Finishing work in endless" in the `onelog` skill. The reviewer applies it when the implementer missed it.
 
 If you cannot map a changed code path to an acceptance item, required doc update, regression test, benchmark, or authority-doc requirement where required, record a finding.
 

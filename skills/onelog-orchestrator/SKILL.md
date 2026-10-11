@@ -12,8 +12,8 @@ project's work yourself: each project's work is done by its own agent.
 
 Read first: the `onelog` skill (the notebook and how pages are written), and
 the `orchestration` skill (its rules on agents, reports and decisions apply
-here across all projects, not one game). The `todo` and `changelog` skills
-are the standard every agent keeps.
+here across all projects, not one game). The `onelog` skill's Todo and
+Changelog rules are the standard every agent keeps.
 
 ## Where things are
 
@@ -57,9 +57,9 @@ One agent per project folder; never two in one folder.
    - the project and the todo rows to do, in order, copied exactly;
    - "Read the code that does it before changing it; send the cause with
      file:line";
-   - "Keep the todo in onelog and docs/changelog.md with the todo and
-     changelog skills: a finished row comes off with todo_finish and goes in
-     the changelog the same day";
+   - "Keep the todo in onelog and docs/changelog.md as the onelog skill
+     says: a finished row comes off with todo_finish and goes in the
+     changelog the same day";
    - "Commit and push only your own paths";
    - "Report each finished row with its proof, then take the next one."
 4. Ask for one idle notice with `notify_when_idle`; never poll.

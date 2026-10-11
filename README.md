@@ -149,7 +149,7 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | [/review](skills/review/) | Review a PR or issue against hard merge gates |
 | [/approve](skills/approve/) | Approve and merge a PR after review |
 | [/reject](skills/reject/) | Close a failed PR, comment findings, reset |
-| [/done](skills/done/) | Update docs, changelog, commit, and push |
+| [/onelog](skills/onelog/) | Record and handle all work: todo, changelog, daily page, cleanup, finishing work |
 | [/learn](skills/learn/) | Review conversation and update skills |
 | [/why](claude/skills/why/) | Trace why Claude made its previous response |
 
