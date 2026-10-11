@@ -69,6 +69,9 @@ One agent per project folder; never two in one folder.
 - Check every report yourself before believing it: the repo's `git log`,
   `docs/changelog.md`, and the proof the agent pasted. A report not checked is
   not true yet.
+- A row is done only when its Done when proof ran on the build that was
+  pushed and the product moved. Tests, docs, commits and builds alone are not
+  done.
 - An idle agent gets its next row. An agent with no rows left is told it is
   done for the day; once its work is pushed, end it with `close_agent`.
 - An agent held on a permission prompt: show its terminal with `show_agent`

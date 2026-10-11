@@ -182,6 +182,9 @@ batch.
   with its commit, and loses `In progress:`.
 - **Stopped part way.** The row stays open and the bullet says where the
   work stopped and what is left.
+- **Picking up after a break or compaction.** Read today's daily page and
+  the project's open rows first, and carry on from its `In progress:`
+  bullet.
 - Work goes on the daily page of the day its commits were made.
 
 ## Project page
