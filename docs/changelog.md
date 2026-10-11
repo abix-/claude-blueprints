@@ -27,4 +27,5 @@ These rules govern `docs/changelog.md`. Follow them exactly.
 | System | Item | Done when |
 |---|---|---|
 | `skills/advance-project` | [x] Retire advance-project: its recovery rule into onelog, its done rule into onelog-orchestrator, then delete it and its test. | `skills/advance-project` and `tests/test_advance_project_skill.py` are gone from the repo and both live skill folders, `grep -r advance-project` finds no file, and the onelog and onelog-orchestrator skills carry the two rules, installed live (15d8620). |
+| `skills/onelog` | [x] Roll the todo, changelog, cleanup and done skills into the onelog skill with every detail kept, then remove the four. | A line check of the four old skills against the new onelog skill (3.4) found 29 lines not word for word, each one a renamed heading or "skill" made "section", no rule lost; the four are gone from the repo and both live folders, and grep finds nothing pointing at them (cea41ed). |
 | `skills/onelog` | [x] onelog is updated when work starts and again when it is done (onelog skill 3.3). | The skill's "When onelog is updated" section says it, installed live (79dc307). |
