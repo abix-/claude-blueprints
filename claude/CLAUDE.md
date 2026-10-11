@@ -106,11 +106,7 @@ top, dated, and old entries are never shortened or rotated out.
 
 ### Memory discipline
 - Don't just save corrections. Save: design decisions, architecture choices, current project state
-- Each repo has `.claude/project_state.md` (git-tracked, shared across agent clones)
-- project_state.md tracks: current focus, design goals, last session summary, next steps, open questions
-- At session end, if meaningful work was done, update .claude/project_state.md before stopping
-- For trivial sessions (quick question, small fix), skip the update
-- NEVER put secrets, tokens, or credentials in project_state.md. It is git-tracked
+- A project's state lives in onelog, by the onelog skill: its project page's Current state, its todo rows, and the daily page. Repos have no `project_state.md`; the old ones are kb pages named `<project>-project-state`
 
 ### k3s agents (claude-a through claude-f)
 - k3s pods have no GPU, no display, and no game runtime. They cannot run the game or do BRP profiling

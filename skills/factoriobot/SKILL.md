@@ -69,8 +69,8 @@ After any crash, interruption, or compaction: carried instruction text is
 recovery evidence only. Reread the current filesystem `AGENTS.md` and matching
 skills. Then, before acting:
 
-1. Read `.Codex/project_state.md` when present, else
-   `.claude/project_state.md`.
+1. Read today's onelog daily page and factoriobot's open todo rows
+   (onelog skill, "Picking up after a break or compaction").
 2. Read recent git history, status, and every relevant uncommitted diff.
    Preserve all existing work; continue the in-flight batch.
 3. Read the latest batch report and attempt log when they exist; use the
@@ -763,7 +763,6 @@ python scripts/wasted_rows.py <file-or-assembled-hexagon>.json [--box X0 X1 Y0 Y
   current source.
 - tests/live.rs live tests behind #[ignore]
 - docs/: see repo `README.md`; one authoritative doc per subject.
-- .claude/project_state.md current focus and next steps
 
 ## Commands
 

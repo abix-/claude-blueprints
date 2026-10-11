@@ -355,8 +355,7 @@ expectations.
   `grounded2-rpg/docs/damage.md` before changing anything.
 - Each crate's `docs/` is authoritative on its subject; read
   the right one first instead of rediscovering.
-- All meaningful sessions update `.claude/project_state.md` at
-  end (git-tracked, no secrets).
+- Work is recorded in onelog, by the onelog skill.
 - Commits on `main`, lowercase concise message, **push
   immediately**, NO Co-Authored-By trailer.
 - ASCII in source/docs/commits. Unicode allowed in terminal

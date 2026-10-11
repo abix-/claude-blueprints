@@ -825,7 +825,6 @@ Rules:
   immediately, NO Co-Authored-By trailer.
 - **Never run the game yourself**: no GPU, no display. Mark
   unverified work "untested" in docs and stop.
-- All meaningful sessions update `.claude/project_state.md` at
-  end (git-tracked, no secrets).
+- Work is recorded in onelog, by the onelog skill.
 - When promoting a pattern: change ueforge first, then migrate
   game crates. Document the lift in `docs/changelog.md`.

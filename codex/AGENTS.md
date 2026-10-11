@@ -39,7 +39,7 @@
 
 - Use existing authoritative documents. Do not create parallel design documents.
 - Keep unfinished work in the existing todo, shipped history in the repository changelog, and durable design in the owning design document.
-- Update `.Codex/project_state.md` after meaningful work. Record the current focus, design goals, last session summary, next steps, and open questions.
+- Record project state in onelog, by the onelog skill: the project page's Current state, its todo rows, and the daily page. Repos have no `project_state.md`; the old ones are kb pages named `<project>-codex-project-state`.
 - Never put secrets, tokens, credentials, or authentication data in project state or documentation.
 
 ## Safety
