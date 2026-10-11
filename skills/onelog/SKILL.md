@@ -1,7 +1,7 @@
 ---
 name: onelog
 description: "onelog, the operator's local notebook: personal knowledge base, project tracker, and daily log, its pages in a SQLite database read and written through the onelog app's MCP tools. Use when the operator asks to note, log, look up, or track anything, when recording what was done today, or when migrating OneNote pages."
-version: "3.2"
+version: "3.3"
 ---
 # onelog
 
@@ -163,6 +163,26 @@ A bullet that belongs to another project goes under that project's heading.
 If no project fits, create the project page first. Add every project with a
 heading to `projects` (`read_page`, change the field, `write_page`). `today`
 makes the day's page from the template when missing.
+
+## When onelog is updated
+
+onelog is updated when work starts and again when it is done, so it shows
+the work in progress, not only what is finished. Never only at the end of a
+batch.
+
+- **Starting work.** Before the first change, the work is a row on its
+  project's todo (`todo_add` if it is not there yet, in the `todo` skill's
+  standard), and today's daily page has a bullet under the project's
+  heading saying what is starting, beginning `In progress:`. Work across
+  several projects gets each project's heading and bullet as that project's
+  work starts.
+- **Finishing work.** When the row's Done when test passes: `todo_check`,
+  `todo_finish`, the changelog row in the repo, commit and push; then the
+  daily bullet is rewritten (`read_page`, `write_page`) to say what was done,
+  with its commit, and loses `In progress:`.
+- **Stopped part way.** The row stays open and the bullet says where the
+  work stopped and what is left.
+- Work goes on the daily page of the day its commits were made.
 
 ## Project page
 
