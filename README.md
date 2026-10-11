@@ -144,14 +144,12 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 
 | Skill | Description |
 |-------|-------------|
-| [/issue](skills/issue/) | Create, claim, and work GitHub issues |
-| [/n](skills/n/) | Auto-pick next PR/issue and start reviewing |
-| [/review](skills/review/) | Review a PR or issue against hard merge gates |
-| [/approve](skills/approve/) | Approve and merge a PR after review |
-| [/reject](skills/reject/) | Close a failed PR, comment findings, reset |
 | [/onelog](skills/onelog/) | Record and handle all work: todo, changelog, daily page, cleanup, finishing work |
+| [/orchestrator](skills/orchestrator/) | Run several agents for the operator's design: the day's plan, one agent per project, checking every report |
 | [/learn](skills/learn/) | Review conversation and update skills |
 | [/why](claude/skills/why/) | Trace why Claude made its previous response |
+
+The GitHub issue skills (`/issue`, `/n`, `/review`, `/approve`, `/reject`) are deprecated: [archive/skills](archive/skills/).
 
 ### Shared Behavior
 
@@ -181,8 +179,6 @@ All skills use directory format: `skills/<name>/SKILL.md`.
 | Skill | Description |
 |-------|-------------|
 | [/1note](skills/1note/) | Read and search OneNote notebooks via COM interop |
-| [onelog](skills/onelog/) | The onelog notebook: YAML pages, projects, daily log, backup |
-| [onelog-orchestrator](skills/onelog-orchestrator/) | The one session that plans the day, starts an agent per project and hands out work |
 
 ## Hooks
 

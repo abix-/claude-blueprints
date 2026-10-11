@@ -4,16 +4,15 @@ description: "List all available slash commands grouped by workflow stage"
 ---
 # Slash Command Reference
 
-## AI Workflow (issue -> code -> review -> merge)
+## Recording and running work
 
 | Command | What it does | When to use |
 |---------|-------------|-------------|
-| `/issue [N]` | Create issues with `ready` label, or claim and implement an issue | Create bugs/features or start work on an issue |
-| `/onelog` | Record and handle all work: todo rows, docs/changelog.md, the daily page, cleanup, finishing work (endless's docs and changelog checklist included; /review applies it when docs are missing) | Starting or finishing work, `/todo`, `/changelog`, `/done` |
-| `/review [repo] [N]` | Full review with all gates: compliance, acceptance, spec, DRY, regression tests, benchmarks | Review a PR before merge. All review logic lives here |
-| `/approve [N]` | Merge a PR that passed /review | After /review says ready to merge |
-| `/reject [N]` | Close failed PR, comment on issue, reset | After /review says needs work |
-| `/n` | Peek at next item needing review (read-only, no reservation) | Quick look at what needs attention |
+| `/onelog` | Record and handle all work: todo rows, docs/changelog.md, the daily page, cleanup, finishing work (endless's docs and changelog checklist included) | Starting or finishing work, `/todo`, `/changelog`, `/done` |
+| `/orchestrator` | Run several agents for the operator's design: the day's plan, one agent per project, checking every report; a `/mygoal` game goal | Starting the day, or making this session the orchestrator |
+| `/debate` | Two sessions review one design by message | A design worth a second session's review |
+
+The GitHub issue skills (`/issue`, `/n`, `/review`, `/approve`, `/reject`) are deprecated and kept in claude-blueprints `archive/skills/`.
 
 ## Build & Run
 
