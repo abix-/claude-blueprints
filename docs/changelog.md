@@ -26,6 +26,7 @@ These rules govern `docs/changelog.md`. Follow them exactly.
 
 | System | Item | Done when |
 |---|---|---|
+| `claude/settings.json` | [x] Keep Claude's project history 3000 days instead of the default 30. | `cleanupPeriodDays` reads 3000 in `claude/settings.json` and the live `~/.claude/settings.json`, both parsed as JSON. |
 | `claude/skills/one-owner` | [x] Put the live one-owner skill in the repo. | `claude/skills/one-owner/SKILL.md` is the same as `~/.claude/skills/one-owner/SKILL.md` (diff empty, sync.ps1 says OK). |
 | `claude/CLAUDE.md` | [x] Never take screenshots of the operator's computer. | The absolute rules in `claude/CLAUDE.md` and the live `~/.claude/CLAUDE.md` both carry "NEVER take screenshots of the operator's computer". |
 | `skills/debate` | [x] Fix debate's seven stale parts: no inbox step, reply to the message's from, delivery and silence, start the peer with open_agent, a useful first line, results into onelog todo rows and design docs, current examples. | grep finds no "check your incoming", `docs/debates`, old model names, `brain.md`, `factory_work` or Factorio in it (only "there is no inbox to check"), each new part is there, and it is installed for Claude and Codex. |
