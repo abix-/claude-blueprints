@@ -4,22 +4,28 @@ description: "Start or participate in a structured multi-agent debate. Invoke wi
 ---
 # debate
 
-Structured debate between two Claude Code sessions. One human, two
+Structured debate between two Claude Code sessions. One operator, two
 agents, direct messaging via SendMessage/ListAgents.
 
 ## when invoked with a goal: /debate "goal here"
 
 You are starting a new debate. Do all of this automatically:
 
-1. Run ListAgents to find peer sessions.
-2. If a peer session exists, do your research (see below), then send
-   your proposal to the peer via SendMessage. Include the goal and
-   your role (proposer) in the message. Use notify_when_idle: true
-   so you hear back when they respond.
-3. If no peer session exists, tell the user:
-   "open another Claude Code terminal in this repo and say: /debate"
-   then wait for them to confirm.
-4. Tell the user what you proposed and that you are waiting for review.
+1. Run ListAgents to find the peer. The peer is the session the
+   operator named, or the one session working in this repo's folder
+   (its name starts with the folder's name). With several candidates
+   and none named, ask the operator which one; never guess.
+2. If there is no peer, start one inside onelog with onelog's
+   `open_agent` tool and this repo's project name, find it with
+   ListAgents, and tell it to join with `/debate`. If onelog is not
+   open, ask the operator to open a second Claude Code session in this
+   repo and say `/debate`.
+3. Do your research (see below), then send your proposal to the peer
+   via SendMessage, `to` its name exactly as ListAgents prints it.
+   Include the goal and your role (proposer). Use
+   notify_when_idle: true so you hear when they finish their turn.
+4. Tell the operator what you proposed and that you are waiting for
+   review.
 
 You do NOT wait for the second agent before researching. You are the
 proposer. Research and propose immediately. The reviewer joins later,
@@ -30,14 +36,16 @@ reads your proposal message, and reviews it.
 You are joining an existing debate as the reviewer. Do all of this
 automatically:
 
-1. Run ListAgents to find peer sessions.
-2. Check your incoming messages. If the proposer already sent a
-   proposal, read it carefully.
+1. Run ListAgents to find the proposer.
+2. Messages arrive by themselves; there is no inbox to check. If the
+   proposal is already in your conversation (a
+   `<cross-session-message from="...">` block), read it carefully.
 3. Do your research (see below), then send your review back via
-   SendMessage.
+   SendMessage, `to` the proposal's `from` attribute copied exactly.
 4. If no proposal has arrived yet, send a message to the proposer
    saying you have joined and are waiting. Use notify_when_idle: true
-   to hear when they send their proposal.
+   to hear when they finish their turn; the proposal arrives as a
+   message of its own.
 
 ## message format
 
@@ -45,16 +53,22 @@ All debate messages follow this structure so both sides can parse
 them reliably:
 
 ```
-DEBATE: <goal (first message only)>
+DEBATE <phase>: <goal in a few words>; <the one-line point of this message>
 PHASE: propose | review | implement | verify | done
 FROM: <your session name from ListAgents>
-MODEL: <your model name, e.g. "Opus 4.6", "Fable 5">
+MODEL: <your model name, as your system prompt gives it>
 
 <body>
 ```
 
-Include your MODEL in every message. This lets both sides (and the
-human) know which model is arguing which position.
+The receiver sees only the first line until they expand the message,
+so the first line of every message says the debate, the phase and what
+this message is about (e.g. `DEBATE review: power poles; disagree, the
+fix targets the wrong function`), never just `PHASE:`.
+
+Include your MODEL in every message, the name your own system prompt
+gives you, never one remembered from an example. This lets both sides
+(and the operator) know which model is arguing which position.
 
 ## research comes first
 
@@ -116,19 +130,19 @@ review verdict (agree, disagree, revise), you MUST:
 2. Verify every factual claim: does the function do what the
    proposal says? Is the line number right? Does the proposed fix
    target the actual code that exists today?
-3. If the proposal references a design doc, authority doc, or
-   brain.md section, open that doc and verify the claim.
+3. If the proposal references a design doc, authority doc, or any
+   other project doc, open that doc and verify the claim.
 4. If the proposal says "this function exists" or "this pattern
    is used N lines later," confirm it. If it does not exist or
    the pattern differs, say so.
-5. If the round includes human messages with new content (design
+5. If the round includes operator messages with new content (design
    statements, revised steps, corrections), verify every new
-   claim against the code independently. The human's instructions
+   claim against the code independently. The operator's instructions
    are authoritative, but the proposal's interpretation of them
    still needs checking.
 
 Your review must name what you verified and what you found. "I
-checked factory_work.rs:881 and confirmed the connector layout
+checked the file and line the proposal names and confirmed the case
 is handled there" is a review. "The proposal looks correct" is
 not.
 
@@ -158,33 +172,49 @@ VERDICT: reject.
 
 ## turn flow
 
-Messages arrive as `<cross-session-message>` blocks. When you receive
-one, read it, do your research, and respond. No polling needed.
+Messages arrive as `<cross-session-message from="...">` blocks. When
+you receive one, read it, do your research, and respond. To reply,
+copy its `from` attribute as your `to`. No polling needed.
 
 If you need to wait for a response, use notify_when_idle: true on
-your SendMessage call. You will receive a notification when the other
-session finishes processing.
+your SendMessage call. One `[Cross-session idle notice]` arrives when
+the other session next finishes its turn; if it never does, the
+notice says the subscription expired instead. Never poll ListAgents
+or send "are you done?" messages.
 
-## human intervention
+A sent message reached the other session, not necessarily its Claude:
+a session in a different permission mode holds cross-session messages
+for its operator's approval, may let them expire, or may refuse them
+(a `[Cross-session delivery notice]` says so). Silence is never
+agreement. With no answer, tell the operator which session is holding
+your message.
 
-The human can participate at any time by telling their session what
-to say. The session sends it via SendMessage. Human messages take
-priority: incorporate them, do not argue with them.
+## operator intervention
 
-The human can end the debate by saying "done" or "stop". When told
+The operator can participate at any time by telling their session
+what to say. The session sends it via SendMessage. The operator's
+messages take priority: incorporate them, do not argue with them.
+
+The operator can end the debate by saying "done" or "stop". When told
 to stop, send a final PHASE: done message to the peer and report
-the outcome to the user.
+the outcome to the operator.
 
 ## saving results
 
-When a debate reaches consensus or is marked done, save the concrete
-steps to a file in the repo under `docs/debates/`. Include the date,
-goal, root cause, design alignment, and every concrete implementation
-step. This is the permanent record of what was decided.
+When a debate reaches consensus or is marked done, the proposer
+records it the way the `onelog` skill records all work:
+
+- every concrete implementation step becomes a todo row on the
+  project's onelog page (`todo_add`, by the onelog skill's Todo
+  rules), in order;
+- the root cause and the decision go in the project's design or
+  authority doc, the doc that owns that subject;
+- today's daily page gets a bullet under the project's heading: the
+  goal, what was decided, and where it is recorded.
 
 ## rules
 
-- do not argue with human messages. incorporate them
+- do not argue with the operator's messages. incorporate them
 - do not propose the same rejected thing without changes
 - keep proposals and reviews concise. a few paragraphs, not an essay
 - when you disagree, say what would be better, not just what is wrong
@@ -201,7 +231,7 @@ step. This is the permanent record of what was decided.
   and why it aligns with the project's docs and authority. a root
   cause without a fix is half the job
 - write proposals and reviews in plain English. use the project's
-  own terms (Factorio terms, the terminology doc, the design doc).
+  own terms (the game's words, the terminology doc, the design doc).
   do not use code variable names, struct names, or type names in
   the proposal text. name the file and the line when pointing at
   code, but describe what it does in words the operator understands.
