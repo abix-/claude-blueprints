@@ -97,6 +97,11 @@ if ($s -and $s.Status -eq 'Running') {
 }
 ```
 
+**Do not disable** TokenBroker (Web Account Manager) or ClickToRunSvc (Office
+Click-to-Run): with them off, OneNote cannot sign in and will not open (error
+7q6ca, which is 0x80070422, service disabled; and 0x426). Both were disabled
+in the 2026-09 debloat and turned back on 2026-10-07.
+
 **Known safe-to-disable services:**
 - DiagTrack (telemetry)
 - jhi_service, LMS, WMIRegistrationService (Intel ME)
@@ -126,13 +131,11 @@ if ($s -and $s.Status -eq 'Running') {
 - SysMain (Superfetch. Debatable on SSD, re-enable if cold starts slow)
 - LanmanServer (SMB sharing. Unless sharing folders)
 - ShellHWDetection (autoplay)
-- TokenBroker (web account manager for Store apps)
 - WinHttpAutoProxySvc (WPAD proxy detection)
 - seclogon (secondary logon / runas)
 - WebClient (WebDAV)
 - QWAVE (QoS streaming)
 - RasMan, SstpSvc (VPN client. Unless using Windows VPN)
-- ClickToRunSvc (Office updates)
 - InstallService (Store app installs)
 - OptionsPlusUpdaterService (Logi updater)
 - MDCoreSvc (Defender core, once Defender is off by policy)
