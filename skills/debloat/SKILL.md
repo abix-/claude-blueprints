@@ -13,44 +13,30 @@ Audit and remove Windows bloat. Run as admin PowerShell via scripts (bash mangle
 3. **Confirm**. Get approval before disabling
 4. **Verify**. Confirm each target is dead
 
-## Whitelist
+## Whitelist and blacklist
 
-Only items the operator has explicitly approved go here. Anything running,
-scheduled, or set to start that is not on this list gets reviewed.
+The approved and rejected items live in one place: the onelog notebook's
+`kb/debloat` list page (Category, Item, Verdict, Reason), read and written
+through onelog's MCP tools (`read_markdown`, `write_markdown`). Verdict is
+`approved`, `blacklisted` (rejected; if one comes back, disable it again and
+note how it came back, with its revert in Reason), or `zombie when orphaned`
+(a helper program such as `tail.exe` or `bash.exe` that is a leftover once
+the program that started it has exited). Item is the service's Name, the
+startup entry's name, the scheduled task's path, or the process's file
+name. Only items the operator has explicitly approved go there; anything
+running, scheduled, or set to start that is not approved gets reviewed.
 
-| Category | Item | Reason |
-|---|---|---|
-| Service | LSM (Local Session Manager) | Core Windows sign-in sessions; Microsoft: disabling causes system instability |
-| Service | NVDisplay.ContainerLocalSystem (NVIDIA Display Container LS) | Operator keeps it (NVIDIA Control Panel and driver plugins) |
-| Service | Appinfo (Application Information) | UAC; without it nothing can run as administrator, including installers and the elevated debloat scripts |
-| Service | AudioEndpointBuilder (Windows Audio Endpoint Builder) | Builds the audio devices; Audiosrv depends on it, no sound or mic without it |
-| Service | Audiosrv (Windows Audio) | Windows sound engine; no sound or mic in any program without it |
-| Service | BFE (Base Filtering Engine) | Holds the network filter rules; the firewall cannot run without it |
-| Service | BrokerInfrastructure (Background Tasks Infrastructure Service) | Microsoft: required for a stable Start menu; cannot be stopped while Windows runs |
-| Service | camsvc (Capability Access Manager Service) | Enforces Privacy switches; forum reports mic and webcam access fail without it |
-| Service | CoreMessagingRegistrar (CoreMessaging) | CoreUI registrar over ALPC; explorer, Start menu, TextInputHost, Terminal, browsers use it to pass UI messages. No network |
-| Service | CryptSvc (Cryptographic Services) | File signature catalog (catroot2) and trusted root certs; Microsoft: updates and program installs fail without it |
-| Service | DcomLaunch (DCOM Server Process Launcher) | Starts COM servers; failure action is reboot the PC after 60 s |
-| Service | Dhcp (DHCP Client) | Gets Ethernet 3's IP from the router; netprofm and NlaSvc depend on it |
-| Service | Dnscache (DNS Client) | Shared DNS cache for all programs; without it every lookup goes out uncached |
-| Service | EventLog (Windows Event Log) | All Windows logs; netprofm and NlaSvc depend on it |
-| Service | EventSystem (COM+ Event System) | Delivers logon, logoff and network events; SENS depends on it |
-| Service | FontCache (Windows Font Cache Service) | Shared font cache; Microsoft: disabling degrades application performance |
-| Service | gpsvc (Group Policy Client) | Nothing to apply on this PC, but Winlogon calls it at sign-in (Control\Winlogon\Notifications\Components\GPClient); lockout risk outweighs the gain |
-| Service | hns (Host Network Service) | Builds the WSL2 virtual network (NAT, DNS, DHCP); k3s needs it. Manual, starts on demand |
-| Service | HvHost (HV Host Service) | Hyper-V per-VM performance counters; Microsoft: do not disable. Manual, starts with the hypervisor |
-| Service | KeyIso (CNG Key Isolation) | Private key isolation inside lsass.exe; no own process, nothing to save by disabling |
-| Service | LanmanWorkstation (Workstation) | SMB client for network shares and drives; operator keeps it |
+## The Debloat dashboard
 
-## Blacklist
-
-Items the operator rejected. They stay disabled or removed; if one comes
-back, disable it again and note how it came back.
-
-| Category | Item | Reason | Revert |
-|---|---|---|---|
-| Service | Intel(R) TPM Provisioning Service | Fetches Intel PTT endorsement key certs from iasbroker.intel.com; corporate attestation only | `sc.exe config "Intel(R) TPM Provisioning Service" start= auto` |
-| Service | edgeupdate, edgeupdatem (Microsoft Edge Update) | Edge, WebView2, Copilot updater. Re-enabled itself 2026-09-20 03:48 when updater 1.3.271.7 installed | `sc.exe config edgeupdate start= delayed-auto; sc.exe config edgeupdatem start= demand` |
+onelog's Debloat dashboard audits this PC against `kb/debloat`: every
+process, every service running or set to start on its own, every startup
+entry, every scheduled task not disabled. It lists the zombies, the
+blacklisted items that are back, and everything not reviewed by category.
+`dashboard {"name": "debloat"}` gives it as text; `kill_zombies` ends the
+zombies. A helper counts as a zombie only after 6 hours: Git Bash runs
+pipelines through short-lived in-between processes, so a running pipeline's
+Windows parent has often exited already. Start every audit there instead of
+the PowerShell below; use the PowerShell for the changes.
 
 ## PowerShell via Bash
 
