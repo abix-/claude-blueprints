@@ -28,7 +28,8 @@ specifics live in the repo's docs/eufy-solocam-s220.md, not here.
 ## Run
 
     npx eufy-security-server -c config.json -H 127.0.0.1
-    ./target/debug/eufy-capture.exe --ui --zone "<label>:x,y,w,h" ...
+    k3sc cargo-lock build --release -p eufy-capture --bin eufy-capture
+    ./target/release/eufy-capture.exe --ui --zone "<label>:x,y,w,h" ...
 
 - Bind 127.0.0.1 EXPLICITLY: default "localhost" binds IPv6-only.
 - ffmpeg on PATH is required (remux, clips, thumbnails, detection

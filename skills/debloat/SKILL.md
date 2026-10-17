@@ -410,7 +410,7 @@ cat shows spaced characters).
 |---|---|
 | iphlpsvc, MapsBroker, stisvc: registry Start=4, stopped | Start=2 under `HKLM:\SYSTEM\CurrentControlSet\Services\<name>`, Start-Service |
 | TrkWks: `sc.exe config TrkWks start= disabled` (registry key refuses admin like DPS) | `sc.exe config TrkWks start= auto` |
-| eufy-viewer.lnk deleted from user Startup folder | recreate shortcut to `C:\code\eufy\target\debug\eufy-capture.exe --ui --out C:/code/eufy/recordings` |
+| eufy-viewer.lnk deleted from user Startup folder | recreate shortcut to `C:\code\eufy\target\release\eufy-capture.exe --ui --out C:/code/eufy/recordings` |
 | TokenBroker, BTAGService, BthAvctpSvc, bthserv: registry Start=4, stopped. Bluetooth is off until reverted | Start=2 (TokenBroker Start=3), Start-Service |
 | SystemApps renamed to .disabled (Remove-AppxPackage gave 0x80073CFA): XBox.TCUI.exe, WpcUapApp.exe (ParentalControls), BioEnrollmentHost.exe, PeopleExperienceHost.exe. MicrosoftEdgeDevToolsClient has no exe, nothing to rename | rename each back under `C:\Windows\SystemApps\<pkg>\` |
 
