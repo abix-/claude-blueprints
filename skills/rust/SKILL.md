@@ -262,11 +262,21 @@ target/<mod> --release`) honors that path.
 
 ### Release: the build that runs
 
-Every binary is built and run as release (`target/release`), the
-build the onelog task manager starts; debug only when asked. Tests
-stay debug. A debug run and a release run are not comparable
-(onelog 2026-10-17: a profile of the debug build could not be set
-against one of the release build).
+**Why release, not debug.** Every binary is built and run as release
+(`target/release`), the build the onelog task manager starts; debug
+only when asked. Tests stay debug (they are not what runs).
+
+- What we run is what we measure. A debug build is unoptimized, often
+  several times slower, so a profile of it shows costs the real
+  program does not have. On 2026-10-17 a debug profile of onelog
+  could not be compared with a release one, so the chart fix's gain
+  could not be measured cleanly.
+- One build everywhere. The task manager, the scripts (`jbotctl swap`,
+  topside `build.ps1`) and Claude all start the same exe, so a fix
+  tested by one is the fix the others run.
+
+**Why this profile.** The release build is rebuilt all day, so it must
+be fast to rebuild as well as fast to run:
 
 ```toml
 [profile.release]
@@ -274,14 +284,19 @@ panic = "abort"
 opt-level = 3
 ```
 
-Cargo's own release defaults (no cross-crate LTO, 16 codegen units
-on every core, incremental off) plus:
+| Setting | What it does | Why |
+|---|---|---|
+| `opt-level = 3` (Cargo's default) | full inlining, vectorizing, loop unrolling | the speed release exists for; `s` / `z` only when binary size is the product |
+| `panic = "abort"` | no unwinding tables | smaller, faster hot paths; dev keeps `unwind` for backtraces (below) |
+| no `lto` (Cargo's default: within each crate only) | `lto = "thin"` / `"fat"` re-optimize the whole program together at link time | that link runs on EVERY rebuild and was most of the time: onelog 196 s rebuild, 29 s of it compiling onelog, the rest the LTO link. It buys a few percent of runtime speed at most (not measured on onelog), paid every edit |
+| no `codegen-units = 1` (Cargo's default: 16) | `1` makes each crate one unit on one thread | the other cores sit idle; the default splits each crate across cores |
+| no `strip` | `strip` deletes the function names from the exe | profilers (ETW, dbghelp, the onelog Profiler) then guess names from the nearest export (`core::fmt::num::impl$36::fmt`, `_xgetbv`), so a profile of the running program is unreadable |
 
-- `panic = "abort"`: no unwinding tables, smaller hot paths,
-  better icache.
-- `opt-level = 3`: full auto-vectorization, inlining, loop
-  unrolling. Don't drop to `s` / `z` unless binary size is the
-  product goal.
+When fat LTO + `codegen-units = 1` + `strip` ARE right: a program
+built once and handed to others (a release download, a shipped mod),
+where a few percent of speed or size matters more than build time.
+Measure what they buy at runtime first; never on the build that is
+rebuilt all day.
 
 Measured on onelog (iced + wgpu + rustls + rusqlite, ~540 crates),
 `k3sc cargo-lock build --release`, 2026-10-17:
@@ -292,21 +307,13 @@ Measured on onelog (iced + wgpu + rustls + rusqlite, ~540 crates),
 | `lto = "thin"` | 5m 26s | 3 to 7 min |
 | Cargo defaults (above) | 5m 33s | **52 s** |
 
-- **LTO is the link, not the compile.** `cargo build --timings`
-  showed onelog's own crate compiling in 29 s; with thin LTO the
-  rest of the 196 s rebuild was the whole-program link. Thin LTO
-  saves nothing over fat on a rebuild; only no LTO does.
-- **`codegen-units = 1`** puts each crate's optimization on one
-  thread, so the cores sit idle.
-- **Never `strip = "symbols"` on a build that runs.** ETW / dbghelp
-  profilers then name onelog's own code by the nearest export
-  (`core::fmt::num::impl$36::fmt`, `_xgetbv`), which is noise.
-- A full build (~5.5 min) only happens when the profile or a
-  dependency changes; that is the price of every profile edit.
-- Fat LTO + `codegen-units = 1` + `strip` are for a shipped
-  artifact, built once, after measuring what they buy at runtime
-  (not measured on onelog). Not for the build that is rebuilt all
-  day.
+- Thin LTO is no cure: it still re-links the whole program on every
+  rebuild; only no LTO makes the rebuild fast.
+- A full build (~5.5 min) still happens once whenever the profile or a
+  dependency changes; every profile edit costs that once.
+- To see where a build's time goes: `cargo build --release --timings`
+  writes `target/cargo-timings/cargo-timing-*.html` with each crate's
+  time.
 
 ### Dev: optimize for debuggability
 
