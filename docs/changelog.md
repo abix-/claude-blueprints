@@ -28,6 +28,7 @@ These rules govern `docs/changelog.md`. Follow them exactly.
 |---|---|---|
 | skills/rust | [x] Release is the build that runs; release profile is Cargo's defaults plus panic abort and opt-level 3, with the measured build times | onelog one-file release rebuild 52 s without LTO against 7m 22s with thin LTO, recorded in the skill's Build profiles table |
 | skills/rust | [x] Say why release is the build that runs and why each release setting is set or left out (opt-level 3, panic abort, no LTO, no codegen-units 1, no strip), when the slow settings are right, and cargo build --timings | the skill's Build profiles section has the Why release paragraph and the Setting, What it does, Why table; ~/.claude/skills/rust/SKILL.md is the same file (cmp) (78e3e17) |
+| skills/rust | [x] Say how to do a fast build and a release build for handing out: one fast release profile, the slow settings switched on for one command with CARGO_PROFILE_RELEASE_* into target/ship | the Build profiles section has the How to do each table with both commands; ~/.claude/skills/rust/SKILL.md is the same file (cmp) |
 | skills/eufy, skills/debloat | [x] Point at the release eufy-capture build | both skills name target\release\eufy-capture.exe |
 
 ## 2026-10-11

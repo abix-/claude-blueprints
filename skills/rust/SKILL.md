@@ -298,6 +298,22 @@ where a few percent of speed or size matters more than build time.
 Measure what they buy at runtime first; never on the build that is
 rebuilt all day.
 
+**How to do each.** There is one `[profile.release]` in Cargo.toml,
+the fast one above. The slow build for handing out is the same
+profile with the three settings switched on for one command through
+Cargo's own `CARGO_PROFILE_RELEASE_*` overrides, so no second profile
+is kept.
+
+| Build | When | Command |
+|---|---|---|
+| Fast build | every day, everything we run (task manager, `jbotctl swap`, `build.ps1`) | `k3sc cargo-lock build --release` |
+| Release build for handing out | once, for a program given to others | `CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 CARGO_PROFILE_RELEASE_STRIP=symbols k3sc cargo-lock build --release --target-dir target/ship` |
+
+`--target-dir target/ship` keeps the handing-out build apart: changed
+profile settings rebuild every crate, and in `target/` that would throw
+away the fast build's work, so the next everyday rebuild would take the
+full ~5.5 min again. The handed-out exe is `target/ship/release/`.
+
 Measured on onelog (iced + wgpu + rustls + rusqlite, ~540 crates),
 `k3sc cargo-lock build --release`, 2026-10-17:
 
