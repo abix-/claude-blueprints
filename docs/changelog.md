@@ -22,6 +22,13 @@ These rules govern `docs/changelog.md`. Follow them exactly.
 - Use plain terms. Do not use vague descriptions, invented language, or design
   essays.
 
+## 2026-10-17
+
+| System | Item | Done when |
+|---|---|---|
+| skills/rust | [x] Release is the build that runs; release profile is Cargo's defaults plus panic abort and opt-level 3, with the measured build times | onelog one-file release rebuild 52 s without LTO against 7m 22s with thin LTO, recorded in the skill's Build profiles table |
+| skills/eufy, skills/debloat | [x] Point at the release eufy-capture build | both skills name target\release\eufy-capture.exe |
+
 ## 2026-10-11
 
 | System | Item | Done when |
