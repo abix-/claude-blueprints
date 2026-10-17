@@ -1,7 +1,10 @@
 {
   "cleanupPeriodDays": 36500,
   "env": {
-    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
+    "CLAUDE_CODE_CLIENT_CERT": "C:/onelog/identity.cert.pem",
+    "CLAUDE_CODE_CLIENT_KEY": "C:/onelog/identity.key.pem",
+    "NODE_EXTRA_CA_CERTS": "C:/onelog/identity.cert.pem"
   },
   "permissions": {
     "allow": [
