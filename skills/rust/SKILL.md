@@ -260,28 +260,53 @@ target/<mod> --release`) honors that path.
 
 ## Build profiles
 
-### Release: optimize for runtime
+### Release: the build that runs
+
+Every binary is built and run as release (`target/release`), the
+build the onelog task manager starts; debug only when asked. Tests
+stay debug. A debug run and a release run are not comparable
+(onelog 2026-10-17: a profile of the debug build could not be set
+against one of the release build).
 
 ```toml
 [profile.release]
-lto = "fat"
-codegen-units = 1
 panic = "abort"
 opt-level = 3
-strip = "symbols"
 ```
 
-- `lto = "fat"`: whole-program optimization across the crate
-  graph. Big win for inlining + dead-code elim.
-- `codegen-units = 1`: one LLVM unit so the inliner can
-  reason across the whole crate. Supersedes `incremental=false`
-  for runtime perf (different angles on the same thing).
+Cargo's own release defaults (no cross-crate LTO, 16 codegen units
+on every core, incremental off) plus:
+
 - `panic = "abort"`: no unwinding tables, smaller hot paths,
   better icache.
 - `opt-level = 3`: full auto-vectorization, inlining, loop
   unrolling. Don't drop to `s` / `z` unless binary size is the
   product goal.
-- `strip = "symbols"`: smaller binary, better icache.
+
+Measured on onelog (iced + wgpu + rustls + rusqlite, ~540 crates),
+`k3sc cargo-lock build --release`, 2026-10-17:
+
+| Profile | Full build | Rebuild after one file changes |
+|---|---|---|
+| `lto = "fat"`, `codegen-units = 1`, `strip = "symbols"` | ~5.5 min | not measured |
+| `lto = "thin"` | 5m 26s | 3 to 7 min |
+| Cargo defaults (above) | 5m 33s | **52 s** |
+
+- **LTO is the link, not the compile.** `cargo build --timings`
+  showed onelog's own crate compiling in 29 s; with thin LTO the
+  rest of the 196 s rebuild was the whole-program link. Thin LTO
+  saves nothing over fat on a rebuild; only no LTO does.
+- **`codegen-units = 1`** puts each crate's optimization on one
+  thread, so the cores sit idle.
+- **Never `strip = "symbols"` on a build that runs.** ETW / dbghelp
+  profilers then name onelog's own code by the nearest export
+  (`core::fmt::num::impl$36::fmt`, `_xgetbv`), which is noise.
+- A full build (~5.5 min) only happens when the profile or a
+  dependency changes; that is the price of every profile edit.
+- Fat LTO + `codegen-units = 1` + `strip` are for a shipped
+  artifact, built once, after measuring what they buy at runtime
+  (not measured on onelog). Not for the build that is rebuilt all
+  day.
 
 ### Dev: optimize for debuggability
 
@@ -485,8 +510,8 @@ Same surface as compile-time registries (`def(key)`,
   functionality (that's a different crate / shape). Default
   feature set is what `cargo build` users get; document the
   trade.
-- `--release` for benchmarks and perf testing; debug for
-  iteration.
+- `--release` for every binary that runs, benchmarks and perf
+  testing; debug for tests (see Build profiles).
 
 ## Crate preferences (updated)
 
