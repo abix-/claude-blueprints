@@ -22,6 +22,12 @@ These rules govern `docs/changelog.md`. Follow them exactly.
 - Use plain terms. Do not use vague descriptions, invented language, or design
   essays.
 
+## 2026-10-18
+
+| System | Item | Done when |
+|---|---|---|
+| claude/settings.json | [x] Turn off idle compaction (compacting a long conversation while the terminal is idle) with idleCompaction false | claude/settings.json and ~/.claude/settings.json both parse and read idleCompaction false; claude --version 2.1.302, the key needs 2.1.290 or later |
+
 ## 2026-10-17
 
 | System | Item | Done when |

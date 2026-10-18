@@ -97,5 +97,6 @@
   },
   "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
-  "ENABLE_LSP_TOOL": "1"
+  "ENABLE_LSP_TOOL": "1",
+  "idleCompaction": false
 }
