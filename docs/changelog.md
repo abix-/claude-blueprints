@@ -27,6 +27,7 @@ These rules govern `docs/changelog.md`. Follow them exactly.
 | System | Item | Done when |
 |---|---|---|
 | claude/settings.json | [x] Turn off idle compaction (compacting a long conversation while the terminal is idle) with idleCompaction false | claude/settings.json and ~/.claude/settings.json both parse and read idleCompaction false; claude --version 2.1.302, the key needs 2.1.290 or later |
+| daily/2026-10-18 | [x] Add claude-blueprints to the 2026-10-18 daily page's projects list | read_page daily 2026-10-18 shows projects: ["social", "onelog", "claude-blueprints"] |
 
 ## 2026-10-17
 
