@@ -38,8 +38,7 @@ there, onelog is not running: say so and ask the operator to open it.
 | search every page | `search` |
 | a project's features table | `features`, `set_feature`, `remove_feature` |
 | a project's todo, or every project's | `todo`, `todo_add`, `todo_change`, `todo_check`, `todo_finish` (see Todo) |
-| a project's rank | `set_rank` |
-| file a page under a page section in its section's page list | `set_page_section` |
+| set one field of a page: its title, page_section, rank or status | `set_field`: `section`, `page`, `field`, `value` (left out clears it) |
 | open a page in the window | `open_page` |
 
 A page is named by its section and its name: `read_page` with section
@@ -88,7 +87,7 @@ A box with no `width` fills the page's width.
 Any page may have `page_section` (after `tags`): the page section it is
 listed under in its section's page list, lowercase letters, digits and
 hyphens. The lotj section's page sections are stats, skills, planets and
-characters. Set it with `set_page_section`.
+characters. Set it with `set_field` (field `page_section`).
 
 Page types and their extra fields:
 
@@ -261,7 +260,7 @@ ask the operator to open it.
 | change a row | `todo_change`: `project`, `todo` (the row as it is), then any of `priority`, `system`, `new_todo`, `done_when` |
 | check a row once its Done when test passes | `todo_check`: `project`, `todo` (`done: false` unchecks it) |
 | take a checked row off | `todo_finish`: `project`, `todo` (refuses an unchecked row) |
-| order the projects | `set_rank`: `project`, `rank` (1 first) |
+| order the projects | `set_field`: section `projects`, `page`, field `rank`, `value` (1 first) |
 
 The project is its project page's name (`list_projects`): the repo name
 lowercased, or a modforge mod's folder name. A row is named by its Todo text,
