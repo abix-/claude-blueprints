@@ -165,6 +165,24 @@ If no project fits, create the project page first. Add every project with a
 heading to `projects` (`read_page`, change the field, `write_page`). `today`
 makes the day's page from the template when missing.
 
+The daily page always says what happened that day, and the full story lives
+on the page it belongs to (a ride on its `bike-rides` page, a project's work
+on its project page). Done the way Logseq and Roam Research journals do it,
+and Zettelkasten's fleeting notes and the Bullet Journal's migration:
+
+- When the page it belongs on is obvious, write the full story there from
+  the start. The daily bullet is one sentence of what happened, then the
+  link: `Biked to the Downtown Dunedin Craft Festival, met Molly:
+  [[2026-10-11-downtown-dunedin-craft-festival-met-molly]]`.
+- When it is not obvious, write it on the daily page as it is. When there
+  is time, sort it: find the page it belongs on (or make it), then MOVE,
+  VERIFY, DELETE as in Cleaning up a todo. Copy it word for word with its
+  `added` and `edited` times, read the copy back and check every line, then
+  replace the daily bullets with the one sentence and link.
+- A daily bullet is never a bare link. Reading only the daily page still
+  tells what happened that day.
+- Back up the notebook before writing a daily page back whole.
+
 ## When onelog is updated
 
 onelog is updated when work starts and again when it is done, so it shows

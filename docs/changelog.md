@@ -28,6 +28,7 @@ These rules govern `docs/changelog.md`. Follow them exactly.
 |---|---|---|
 | claude/settings.json | [x] Turn off idle compaction (compacting a long conversation while the terminal is idle) with idleCompaction false | claude/settings.json and ~/.claude/settings.json both parse and read idleCompaction false; claude --version 2.1.302, the key needs 2.1.290 or later |
 | daily/2026-10-18 | [x] Add claude-blueprints to the 2026-10-18 daily page's projects list | read_page daily 2026-10-18 shows projects: ["social", "onelog", "claude-blueprints"] |
+| skills/onelog | [x] Say in the Daily page section that the daily page always says what happened and links to the page holding the full story, written there from the start when the page is obvious, sorted later by move, verify, delete when not | skills/onelog/SKILL.md and ~/.claude/skills/onelog/SKILL.md are the same file (diff -q) and hold the new rules under Daily page |
 
 ## 2026-10-17
 
