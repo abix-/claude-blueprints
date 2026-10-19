@@ -39,6 +39,7 @@ there, onelog is not running: say so and ask the operator to open it.
 | a project's features table | `features`, `set_feature`, `remove_feature` |
 | a project's todo, or every project's | `todo`, `todo_add`, `todo_change`, `todo_check`, `todo_finish` (see Todo) |
 | a project's rank | `set_rank` |
+| file a page under a page section in its section's page list | `set_page_section` |
 | open a page in the window | `open_page` |
 
 A page is named by its section and its name: `read_page` with section
@@ -83,6 +84,11 @@ boxes:
 ```
 
 A box with no `width` fills the page's width.
+
+Any page may have `page_section` (after `tags`): the page section it is
+listed under in its section's page list, lowercase letters, digits and
+hyphens. The lotj section's page sections are stats, skills, planets and
+characters. Set it with `set_page_section`.
 
 Page types and their extra fields:
 
