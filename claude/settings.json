@@ -1,5 +1,6 @@
 {
   "cleanupPeriodDays": 36500,
+  "autoCompactWindow": 300000,
   "env": {
     "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
     "CLAUDE_CODE_CLIENT_CERT": "C:/onelog/identity.cert.pem",
