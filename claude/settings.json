@@ -61,7 +61,7 @@
       ]
     }
   },
-  "model": "claude-opus-4-6",
+  "model": "opus-5-5",
   "hooks": {
     "SessionStart": [
       {
@@ -88,7 +88,7 @@
     "PostToolUse": []
   },
   "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": false
   },
   "spinnerVerbs": {
     "mode": "replace",
@@ -99,5 +99,8 @@
   "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
   "ENABLE_LSP_TOOL": "1",
-  "idleCompaction": false
+  "idleCompaction": false,
+  "switchModelsOnFlag": false,
+  "agentPushNotifEnabled": false,
+  "disableAgentView": true
 }
